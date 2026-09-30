@@ -1,4 +1,5 @@
-import * as Lark from '@larksuiteoapi/node-sdk';
+for(const method of ['log','info','warn','error','debug','trace'])console[method]=()=>{};
+const Lark=await import('@larksuiteoapi/node-sdk');
 import { createInterface } from 'node:readline';
 import { BotGate } from './filter.mjs';
 // stdout is private IPC to the desktop app, never a file or console log.
@@ -15,7 +16,7 @@ input.on('line',async line=>{
   configured=true;
   try {
     if(line.length>16384) throw new Error('invalid_config');
-    const config=JSON.parse(line); line='';
+    const config=JSON.parse(line.replace(/^\uFEFF/,'')); line='';
     if(typeof config.appId!=='string' || !/^cli_[a-zA-Z0-9]+$/.test(config.appId) || typeof config.appSecret!=='string' || !config.appSecret) throw new Error('invalid_config');
     gate=new BotGate(config.chatIds,Date.now(),config.botIds ?? []);
     client=new Lark.WSClient({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent,autoReconnect:true,
