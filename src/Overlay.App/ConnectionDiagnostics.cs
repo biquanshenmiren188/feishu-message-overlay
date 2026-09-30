@@ -68,6 +68,12 @@ internal static class ConnectionDiagnostics
     {
         var checks=0;
         void Check(bool passed){if(!passed)throw new InvalidOperationException();checks++;}
+        var groupRecord="{\"kind\":\"group_match\",\"target\":\"synthetic group\",\"code\":0,\"complete\":true,\"count\":1,\"chatId\":\"oc_synthetic\",\"secret\":\"synthetic-only\"}";
+        Check(GroupDiscovery.TryProject(groupRecord,"synthetic group",out var match)&&match?.State=="matched"&&match.ChatId=="oc_synthetic");
+        Check(!JsonSerializer.Serialize(match).Contains("synthetic-only"));
+        Check(!GroupDiscovery.TryProject(groupRecord,"other group",out _));
+        Check(GroupDiscovery.TryProject(groupRecord.Replace("\"count\":1","\"count\":2"),"synthetic group",out match)&&match?.State=="ambiguous"&&match.ChatId is null);
+        Check(GroupDiscovery.TryProject(groupRecord.Replace("\"complete\":true","\"complete\":false"),"synthetic group",out match)&&match?.State=="incomplete"&&match.ChatId is null);
         // Reproduce the old kind.GetString() exception without credentials.
         using(var bad=JsonDocument.Parse("{\"kind\":17}")){var reproduced=false;try{_ = bad.RootElement.GetProperty("kind").GetString();}catch(InvalidOperationException){reproduced=true;}Check(reproduced);}
         Check(!TryProject("{\"kind\":17}","cli_synthetic",out _));
