@@ -1,13 +1,17 @@
-# 本地官方长连接适配器（已集成，默认未连接）
+# 本地官方长连接桥接
 
-使用飞书官方 `@larksuiteoapi/node-sdk` 1.74.0，依赖版本和完整性在 package-lock.json 中固定。需要 Node 22 或兼容运行时；当前便携包含WPF和桥接依赖；Node22需本机现有安装，不会自动安装或改变系统配置。此适配器已经连接到 UI，用户在本机受保护输入界面提交已授权应用和指定群后才能建立真实连接。
+主界面已集成飞书官方 `@larksuiteoapi/node-sdk` 1.74.0，版本由package-lock.json固定。默认未连接。目标电脑需Node22或更新兼容运行时；程序不自动安装运行时。
 
-`main.mjs` 仅通过父进程匿名 stdin 管道接收 appId/appSecret 和一至五个核验过的 chat_id。不得从终端直接传密钥、不得写配置文件、不得将 stdout 重定向到日志。stdout 是私有进程间协议；SDK 所有日志被关闭。没有发送消息 API，也没有公开监听端口。
+`main.mjs`通过父进程私有stdin接收应用凭证、一至五个指定群ID及可选机器人ID。stdout为内部事件协议，不应重定向到日志；SDK日志关闭。凭证不通过命令行参数或环境变量传递。没有发送消息API或公开网络监听端口。
 
-`filter.mjs` 在读取 content 前检查群 ID、group 类型、sender_type=bot、发送者 ID、消息时间。去重记录保留在内存，官方 SDK 重连期间保持同一个 gate，重启/重新启用以当前时间作为新基线。去重窗口30分钟、最多10000条；超限或 IPC 拥堵停止连接而非驱逐近期 ID 导致重复报警。限制消息体最大524288字符。
+`filter.mjs`在正文读取前检查准确群ID、group类型、sender_type=bot、机器人白名单及时间基线。去重记录只留内存，30分钟窗口、最多10000项；过期清理、重连基线及容量/队列保护避免无限增长和历史重复报警。单个事件正文最大524288字符。
 
-`OfficialBotSource.cs` 启动上述进程，凭证不进入命令行/环境变量/文件，队列最多100条，状态使用官方 onReady/onReconnecting/onReconnected/onError。连接成立不代表消息权限已通过。该类已由主界面调用；用户明确提交已授权应用和准确群ID后启动，不默认建立连接。
+`OfficialBotSource.cs`负责子进程、100条有界队列与连接状态。传输就绪不证明消息权限或目标告警源已通过验收。普通成员消息被过滤。`im:message.group_msg.include_bot:read`覆盖机器人消息的应用身份事件；不能以只含用户消息的普通group_msg权限替代任务要求。
 
-纯合成测试：`npm test --prefix bridge`，无需凭证/网络。官方 SDK已下载并静态核对回调 API，真实握手、权限撤回、其他机器人的卡片格式、五群现有机器人（包括自定义webhook机器人）覆盖均未实测。
+`register.mjs`提供官方用户确认流程，Secret仅通过私有IPC进入程序。用户显式选择保存并提交后，应用凭证由当前Windows用户DPAPI加密；源码和包不携带用户凭证。已有应用无需重复创建。
 
-权限依据：[接收消息](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive?lang=zh-CN)。需 `im:message.group_msg.include_bot:read`，接收其他机器人和用户消息，排除监听机器人自己。本软件在本机再次筛选机器人，普通用户不显示/不提醒。不要仅用 `im:message.group_msg` 代替。
+`discover.mjs`现在仅提供bot-only元数据诊断，不枚举群或读取消息。C#对协议做严格字段类型、应用身份、大小与时间限制，并只返回机器人名称、应用ID、启用状态及非敏感状态码。额外字段不会落盘。`diagnostic-fixture.mjs`只用于无凭证契约测试。
+
+合成检查：`npm test --prefix bridge`。构建脚本还运行WPF私有管道测试和25项诊断契约。真实群事件、自定义webhook机器人、卡片解析与声音仍须实际验收。
+
+外部群需要适用认证、对外共享与发布/审核。可入群不证明其他机器人事件必达；普通群成员事件也不满足机器人告警要求。平台规则参考：[接收消息](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive?lang=zh-CN)、[外部群要求](https://open.feishu.cn/document/develop-robots/add-bot-to-external-group)。
