@@ -5,6 +5,7 @@ public partial class App : Application
 {
     private Mutex? instance;
     private EventWaitHandle? restoreSignal;
+    private EventWaitHandle? snapshotSignal;
     private CancellationTokenSource? restoreStop;
     public static bool SmokeMode { get; private set; }
     public static string? SetupReceipt { get; private set; }
@@ -13,6 +14,16 @@ public partial class App : Application
     {
         base.OnStartup(e);
         SmokeMode = e.Args.Contains("--smoke-test");
+        if(e.Args.Contains("--browser-input-fixture"))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            try{await BrowserInputFixture.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
+        }
+        if(e.Args.Contains("--drag-yield-fixture"))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            try{await DragYieldFixture.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
+        }
         if(e.Args.Contains("--audio-check"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -29,6 +40,14 @@ public partial class App : Application
             if(args.Length!=2){Shutdown(2);return;}
             var saved=AlertAudio.IsSupported(args[0]) && (Preferences.Load() with {AudioPath=Path.GetFullPath(args[0])}).Save();
             File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(new{saved}));Shutdown(saved?0:1);return;
+        }
+        if(e.Args.Contains("--configure-default-font"))
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            var output=e.Args.SkipWhile(a=>a!="--configure-default-font").Skip(1).FirstOrDefault();if(output is null){Shutdown(2);return;}
+            var present=System.Windows.Media.Fonts.SystemFontFamilies.Any(f=>f.Source=="Microsoft YaHei");
+            var saved=present && (Preferences.Load() with {Font="Microsoft YaHei"}).Save();
+            File.WriteAllText(output,System.Text.Json.JsonSerializer.Serialize(new{present,saved,font="Microsoft YaHei"}));Shutdown(saved?0:1);return;
         }
         if(e.Args.Contains("--diagnostic-contract-tests"))
         {
@@ -73,11 +92,40 @@ public partial class App : Application
         if(!SmokeMode)
         {
             var name="Local\\FeishuMessageOverlay-"+System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+            snapshotSignal=new EventWaitHandle(false,EventResetMode.AutoReset,name+"-snapshot");
+            var snapshotPath=Path.Combine(Path.GetTempPath(),"FeishuMessageOverlay-diagnostic-"+System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value+".json");
+            if(e.Args.Contains("--export-diagnostics"))
+            {
+                var output=e.Args.SkipWhile(a=>a!="--export-diagnostics").Skip(1).FirstOrDefault();
+                if(output is null){Shutdown(2);return;}
+                var started=DateTime.UtcNow;snapshotSignal.Set();
+                for(var attempt=0;attempt<40;attempt++)
+                {
+                    await Task.Delay(100);
+                    if(File.Exists(snapshotPath)&&File.GetLastWriteTimeUtc(snapshotPath)>=started)
+                    {File.Copy(snapshotPath,output,true);File.Delete(snapshotPath);Shutdown();return;}
+                }
+                Shutdown(1);return;
+            }
             instance=new Mutex(true,name,out var first);
             restoreSignal=new EventWaitHandle(false,EventResetMode.AutoReset,name+"-restore");
             if(!first){restoreSignal.Set();instance.Dispose();instance=null;Shutdown();return;}
             restoreStop=new CancellationTokenSource();var token=restoreStop.Token;
-            _=Task.Run(()=>{while(!token.IsCancellationRequested){if(restoreSignal.WaitOne(500))Dispatcher.BeginInvoke(()=>((MainWindow?)MainWindow)?.Restore());}},token);
+            _=Task.Run(()=>
+            {
+                var handles=new WaitHandle[]{restoreSignal,snapshotSignal,token.WaitHandle};
+                while(!token.IsCancellationRequested)
+                {
+                    var wake=WaitHandle.WaitAny(handles);
+                    if(wake==2)break;
+                    if(wake==0)Dispatcher.BeginInvoke(()=>((MainWindow?)MainWindow)?.Restore());
+                    if(wake==1)Dispatcher.BeginInvoke(async ()=>
+                    {
+                        if(MainWindow is MainWindow running)
+                        {var json=running.DiagnosticSnapshot();await File.WriteAllTextAsync(snapshotPath,json);}
+                    });
+                }
+            },token);
         }
         var window = new MainWindow(); MainWindow = window;
         if(e.Args.Contains("--observe-state"))
@@ -95,10 +143,10 @@ public partial class App : Application
             await window.ShowRegistrationAsync(true); return;
         }
         if (!SmokeMode) {await window.RestoreConfiguredConnectionAsync();return;}
-        var output = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
-        if (string.IsNullOrEmpty(output)) { Shutdown(2); return; }
-        try { await window.RunSmokeAsync(output); File.WriteAllText(Path.Combine(output, "ui-smoke.txt"), "PASS startup, demo rendering, topmost toggle, resize, font changes, clear, pause, bridge process integration, connection/reconnect/error states, sound request deduplication.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
-        catch (Exception ex) { Directory.CreateDirectory(output); File.WriteAllText(Path.Combine(output, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage); Shutdown(1); }
+        var smokeOutput = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
+        if (string.IsNullOrEmpty(smokeOutput)) { Shutdown(2); return; }
+        try { await window.RunSmokeAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS startup, demo rendering, topmost toggle, resize, font changes, clear, pause, bridge process integration, connection/reconnect/error states, sound request deduplication.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
+        catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.StackTrace); Shutdown(1); }
     }
     protected override async void OnSessionEnding(SessionEndingCancelEventArgs e)
     {base.OnSessionEnding(e);if(MainWindow is MainWindow window)await window.ExitAsync();}
