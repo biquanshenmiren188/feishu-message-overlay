@@ -1,4 +1,6 @@
 using Overlay.Core;
+try
+{
 var now = DateTimeOffset.UtcNow;
 var store = new MessageStore(2, TimeSpan.FromMinutes(30));
 var checks = 0;
@@ -42,3 +44,37 @@ Check(refused,"去重满容量触发可恢复保护");
 Check(bounded.Add(Message("after-expiry") with { SentAt=now.AddMinutes(31) },"chosen",now.AddMinutes(31)),"过期清理后可继续运行");
 var restricted=new BotEventFilter(["chosen"],["other-bot"]); Check(restricted.Parse(Event("bot","chosen","text","{\"text\":\"模拟\"}")) is null,"机器人ID白名单");
 Console.WriteLine($"{checks} final checks passed.");
+
+var groupStats=new GroupReceptionStatistics();groupStats.Select(["chosen","second"]);
+var groupStore=new MessageStore();groupStore.Start(now);var groupFilter=new BotEventFilter(["chosen","second"]);
+bool AcceptForStats(string json){var m=groupFilter.Parse(json);return m is not null && groupStats.RecordAccepted(m,groupStore.Add(m,m.SourceId,now.AddSeconds(2)),true,now.AddSeconds(2));}
+Check(AcceptForStats(Event("bot","chosen","text","{\"text\":\"synthetic\"}")),"group statistics first selected event");
+Check(AcceptForStats(Event("bot","second","interactive","{\"elements\":[]}")),"same message ID in distinct group maps independently");
+Check(!AcceptForStats(Event("bot","chosen","text","{\"text\":\"synthetic\"}")),"duplicate event does not increment statistics");
+Check(!AcceptForStats(Event("user","second","text","not read")) && !AcceptForStats(Event("bot","unselected","text","not read")),"person and unselected group do not increment statistics");
+var groupRows=groupStats.Snapshot();Check(groupRows.Count==2 && groupRows.All(r=>r.BotMessages==1) && groupRows.Single(r=>r.ChatId=="second").LastType=="interactive" && groupRows.Single(r=>r.ChatId=="chosen").LastEventAt?.ToUnixTimeMilliseconds()==now.AddSeconds(1).ToUnixTimeMilliseconds(),"group ID, time and type mapping");
+groupStats.RecordSound(["chosen","chosen","second"],true,true);groupStats.RecordSound(["second"],false,null);
+groupRows=groupStats.Snapshot();Check(groupRows.All(r=>r.SoundRequests==1) && groupRows.Single(r=>r.ChatId=="chosen").LastSoundResult=="accepted" && groupRows.Single(r=>r.ChatId=="second").LastSoundResult=="disabled","one sound batch per affected group and disabled result");
+var statsJson=System.Text.Json.JsonSerializer.Serialize(groupRows);Check(!statsJson.Contains("synthetic") && !statsJson.Contains("SenderId") && !statsJson.Contains("MessageId") && !statsJson.Contains("Secret"),"statistics whitelist contains no body, sender or secret");
+Console.WriteLine($"{checks} final checks passed.");
+
+var burstStore=new MessageStore();burstStore.Start(now.AddSeconds(-1));var coalescer=new SoundCoalescer();var alarms=0;
+for(var i=0;i<40;i++)if(burstStore.Add(new IncomingMessage("burst"+i,"demo","synthetic","synthetic",now,SenderKind.Bot),"demo",now) && coalescer.TryRequest(i*25))alarms++;
+Check(burstStore.Items.Count==40 && alarms==1,"burst retains every message and coalesces sound");
+Check(!coalescer.TryRequest(1999) && coalescer.TryRequest(2000),"sound cooldown ends at two seconds without a timer");
+groupStats.RecordSound(["chosen"],false,null,true);Check(groupStats.Snapshot().Single(r=>r.ChatId=="chosen").LastSoundResult=="coalesced","coalesced sound is not reported as disabled or played");
+var reading=new TimedMessageReader();reading.Configure(15,now);reading.Synchronize(["a","b"],now);
+Check(reading.Advance(now.AddSeconds(14),true,false) is null && reading.Advance(now.AddSeconds(15),true,false)=="b","reader waits full dwell before next item");
+Check(reading.DelayUntilNext(now.AddSeconds(16)) is null,"reader tail has no timer");
+reading.Synchronize(["a","b","c"],now.AddSeconds(16));Check(reading.Advance(now.AddSeconds(29),true,false) is null,"new item does not interrupt current dwell");
+reading.Configure(20,now.AddSeconds(20));Check(reading.Advance(now.AddSeconds(39),true,false) is null,"changing seconds restarts deadline without jump");
+Check(reading.Advance(now.AddSeconds(40),false,false) is null && reading.Advance(now.AddSeconds(41),true,true) is null,"disabled or manual/hidden suspended reader never advances");
+reading.Focus("b",now.AddSeconds(42));Check(reading.Advance(now.AddSeconds(62),true,false)=="c" && reading.DelayUntilNext(now.AddSeconds(63)) is null,"reader resumes one item at a time and stops at queue end");
+Console.WriteLine($"{checks} final checks passed.");
+
+}
+catch(Exception error)
+{
+    Console.Error.WriteLine("FAIL "+error);
+    Environment.ExitCode=1;
+}
