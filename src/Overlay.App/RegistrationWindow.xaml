@@ -1,0 +1,13 @@
+<Window x:Class="Overlay.App.RegistrationWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="飞书官方扫码创建专用应用" Width="620" Height="680" MinWidth="440" MinHeight="480" WindowStartupLocation="CenterOwner" FontFamily="Microsoft YaHei UI" FontSize="15" Closing="ClosingHandler">
+ <DockPanel Margin="20"><WrapPanel DockPanel.Dock="Bottom"><Button x:Name="BeginButton" Content="打开官方扫码确认" Click="BeginClick"/><Button x:Name="ContinueButton" Content="继续配置指定群" Click="ContinueClick" IsEnabled="False"/><Button Content="取消" IsCancel="True" Click="CancelClick"/></WrapPanel>
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+  <TextBlock Text="新建专用读取应用" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+  <TextBlock TextWrapping="Wrap" Text="已获准的用途：指定五个群中现有机器人的新消息，在本机显示并响铃。这里通过飞书官方设备授权流程创建专用应用，由你在官方页面扫码确认。不会利用浏览器缓存或现有客户端凭证。" Margin="0,0,0,16"/>
+  <TextBlock Text="请核对官方确认页的范围" FontWeight="SemiBold"/>
+  <TextBlock TextWrapping="Wrap" Text="申请范围为：机器人能力；im:message.group_msg.include_bot:read（其他机器人与成员消息）；im:chat:read（核验群ID）；事件 im.message.receive_v1。监听机器人只加入选定五群。软件只显示机器人消息，不发消息，不读其他业务数据。" Margin="0,8,0,16"/>
+  <TextBlock TextWrapping="Wrap" Foreground="#B91C1C" Text="官方最小权限预设依赖平台支持。如果页面额外要求发消息、通讯录、日历、文档等权限，或超出指定群用途，请取消，不要继续确认。租户可能要求管理员审批；扫码创建成功不等于消息接入验收通过。" Margin="0,0,0,16"/>
+  <TextBlock TextWrapping="Wrap" Text="密钥只通过本机程序私有管道接收，不显示、复制、发到聊天或写入源码。默认只在本次会话使用。可选保存使用 Windows 当前用户 DPAPI 加密；不创建或修改系统通知权限、证书或自启。" Margin="0,0,0,16"/>
+  <CheckBox x:Name="SaveConsent" Content="我同意将此次应用凭证加密保存到本机当前 Windows 用户" Margin="0,0,0,16"/>
+  <TextBlock x:Name="Progress" Text="尚未开始 · 等待你点击打开官方确认页" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+ </StackPanel></ScrollViewer></DockPanel>
+</Window>
