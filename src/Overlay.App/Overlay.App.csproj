@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>disable</ImplicitUsings><ApplicationManifest>app.manifest</ApplicationManifest><AssemblyName>FeishuMessageOverlay</AssemblyName></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Overlay.Core/Overlay.Core.csproj" /></ItemGroup>
+</Project>
