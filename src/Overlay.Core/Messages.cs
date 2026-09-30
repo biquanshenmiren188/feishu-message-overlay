@@ -1,0 +1,65 @@
+namespace Overlay.Core;
+
+public enum SenderKind { Unknown, Person, Bot }
+public sealed class DedupCapacityException : Exception { }
+public record IncomingMessage(string Id, string SourceId, string Sender, string Text, DateTimeOffset SentAt,
+    SenderKind Kind = SenderKind.Unknown, string SenderId = "");
+public interface IMessageSource : IAsyncDisposable
+{
+    string Mode { get; }
+    bool IsRealConnection { get; }
+    Task<IReadOnlyList<IncomingMessage>> ReadAsync(CancellationToken cancellationToken);
+}
+
+// Delivery adapters must restrict authorized group IDs before reading message bodies.
+// This store contains no disk/network/logging code.
+public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
+{
+    private readonly List<IncomingMessage> messages = [];
+    private readonly Dictionary<string, DateTimeOffset> seen = [];
+    private readonly TimeSpan ttl = lifetime ?? TimeSpan.FromMinutes(30);
+    private readonly int limit = Math.Clamp(capacity, 1, 1000);
+    private DateTimeOffset cutoff = DateTimeOffset.MinValue;
+    public IReadOnlyList<IncomingMessage> Items => messages.ToArray();
+    public void Start(DateTimeOffset now) { Clear(now); }
+    public void Clear(DateTimeOffset now) { messages.Clear(); seen.Clear(); cutoff = now; }
+    public void Prune(DateTimeOffset now)
+    {
+        messages.RemoveAll(m => now - m.SentAt >= ttl);
+        foreach (var key in seen.Where(p => now - p.Value >= ttl).Select(p => p.Key).ToArray()) seen.Remove(key);
+    }
+    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now)
+    {
+        Prune(now);
+        if (message.SourceId != selectedSource || message.Kind != SenderKind.Bot || string.IsNullOrWhiteSpace(message.Id) ||
+            message.SentAt <= cutoff || message.SentAt > now.AddMinutes(1) || now - message.SentAt >= ttl) return false;
+        var key = message.SourceId + "\0" + message.Id;
+        if (seen.ContainsKey(key)) return false;
+        // Bound both message history and the deduplication window.
+        // Never evict recent IDs: eviction could replay a duplicated delivery.
+        // Refuse excess traffic until expiry instead of violating bounded deduplication.
+        if (seen.Count >= limit * 10) throw new DedupCapacityException();
+        seen[key] = now;
+        messages.Insert(0, message with { Sender = Bound(message.Sender, 256), Text = Bound(message.Text, 16000) });
+        if (messages.Count > limit) messages.RemoveAt(messages.Count - 1);
+        return true;
+    }
+    private static string Bound(string value, int length) => value.Length <= length ? value : value[..length] + "\n[本软件已限制显示长度]";
+}
+
+public sealed class DemoSource : IMessageSource
+{
+    private int count;
+    public string Mode => "模拟演示（非真实飞书消息）";
+    public bool IsRealConnection => false;
+    public Task<IReadOnlyList<IncomingMessage>> ReadAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var number = ++count;
+        IReadOnlyList<IncomingMessage> result = [new($"demo-{number}", "demo", "演示发送人", number % 3 == 0
+            ? string.Concat(Enumerable.Repeat("这是一条中文长消息，用于检查换行、滚动和字体调整。", 20))
+            : $"模拟消息 {number}：窗口可以拖动、缩放，声音使用系统音量。", DateTimeOffset.UtcNow, SenderKind.Bot, "demo-bot")];
+        return Task.FromResult(result);
+    }
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
