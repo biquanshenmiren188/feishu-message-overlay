@@ -1,11 +1,17 @@
 using System.IO;
 using System.Media;
 using System.Windows.Media;
+using System.Runtime.InteropServices;
 namespace Overlay.App;
 internal sealed class AlertAudio : IDisposable
 {
     private readonly MediaPlayer player=new();
+    [DllImport("winmm.dll",EntryPoint="PlaySoundW",CharSet=CharSet.Unicode)] private static extern bool PlaySound(string? path,nint module,uint flags);
+    [DllImport("winmm.dll")] private static extern uint waveOutGetNumDevs();
+    internal static bool PlayWave(string path)=>IsSupported(path) && PlaySound(System.IO.Path.GetFullPath(path),0,0x20000|1|2);
+    internal static bool HasOutputDevice=>waveOutGetNumDevs()>0;
     public string PathName {get;set;}="";
+    internal bool? LastWaveAccepted {get;private set;}
     public static bool IsSupported(string path)
     {
         try
@@ -21,8 +27,9 @@ internal sealed class AlertAudio : IDisposable
     public void Play()
     {
         if(PathName.Length==0 || !IsSupported(PathName)){SystemSounds.Asterisk.Play();return;}
+        if(System.IO.Path.GetExtension(PathName).Equals(".wav",StringComparison.OrdinalIgnoreCase)){LastWaveAccepted=PlayWave(PathName);if(LastWaveAccepted!=true)SystemSounds.Asterisk.Play();return;}
         try {player.Stop();player.Open(new Uri(System.IO.Path.GetFullPath(PathName)));player.Volume=1;player.Play();}
         catch {SystemSounds.Asterisk.Play();}
     }
-    public void Dispose()=>player.Close();
+    public void Dispose(){PlaySound(null,0,0);player.Close();}
 }
