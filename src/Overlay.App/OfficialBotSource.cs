@@ -20,6 +20,7 @@ public sealed class OfficialBotSource : IMessageSource
     internal static int ActiveChildren => activeChildren;
     public LinkState State => state;
     public string? LastMessageType {get;private set;}
+    public event Action? Activity;
     public string Mode => state switch
     {
         LinkState.Connected => fixture ? "本地契约连接 · 非真实飞书" : "已连接 · 官方长连接",
@@ -68,6 +69,7 @@ public sealed class OfficialBotSource : IMessageSource
                 {
                     state = root.GetProperty("state").GetString() switch { "connected" => LinkState.Connected, "reconnecting" => LinkState.Reconnecting, "protected" => LinkState.Protected, _ => LinkState.Error };
                     if (state != LinkState.Connected) while (queue.Reader.TryRead(out _)) { }
+                    Activity?.Invoke();
                     if (state is LinkState.Error or LinkState.Protected) break;
                 }
                 else if (state == LinkState.Connected)
@@ -75,6 +77,7 @@ public sealed class OfficialBotSource : IMessageSource
                     var message = filter.Parse(root.GetProperty("payload").GetRawText());
                     if(message is not null)LastMessageType=root.GetProperty("payload").GetProperty("event").GetProperty("message").GetProperty("message_type").GetString();
                     if (message is not null && !queue.Writer.TryWrite(message)) { state = LinkState.Protected; break; }
+                    if(message is not null)Activity?.Invoke();
                 }
             }
         }
@@ -82,6 +85,7 @@ public sealed class OfficialBotSource : IMessageSource
         catch (Exception) { state = LinkState.Error; }
         finally
         {
+            Activity?.Invoke();
             queue.Writer.TryComplete(); stop.Cancel();
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
             await stderr;
