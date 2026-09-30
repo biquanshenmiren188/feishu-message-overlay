@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Overlay.Core;
@@ -18,9 +19,10 @@ public sealed class OfficialBotSource : IMessageSource
     private static int activeChildren;
     internal static int ActiveChildren => activeChildren;
     public LinkState State => state;
+    public string? LastMessageType {get;private set;}
     public string Mode => state switch
     {
-        LinkState.Connected => fixture ? "本地契约连接 · 非真实飞书" : "已连接 · 官方长连接（群消息权限待实际验收）",
+        LinkState.Connected => fixture ? "本地契约连接 · 非真实飞书" : "已连接 · 官方长连接",
         LinkState.Reconnecting => "连接中断 · 正在重连，只接收恢复后的新消息",
         LinkState.Protected => "保护暂停 · 去重窗口达到上限，请重新连接",
         LinkState.Error => "连接错误 · 请检查应用权限、密钥和网络后重新连接",
@@ -36,7 +38,7 @@ public sealed class OfficialBotSource : IMessageSource
     {
         if (fixture && !App.SmokeMode) throw new InvalidOperationException("契约测试仅允许测试模式");
         if (selectedChatIds.Count is < 1 or > 5) throw new ArgumentException("必须选择一至五个准确群 ID");
-        var info = new ProcessStartInfo(nodePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(bridgePath)! };
+        var info = new ProcessStartInfo(nodePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(bridgePath)!, StandardInputEncoding=new UTF8Encoding(false), StandardOutputEncoding=new UTF8Encoding(false) };
         info.ArgumentList.Add(bridgePath);
         var child = Process.Start(info) ?? throw new InvalidOperationException("连接器启动失败");
         Interlocked.Increment(ref activeChildren);
@@ -59,6 +61,8 @@ public sealed class OfficialBotSource : IMessageSource
                 var line = await process.StandardOutput.ReadLineAsync(stop.Token);
                 if (line is null) { state = LinkState.Error; break; }
                 if (line.Length > 1_048_576) throw new InvalidOperationException();
+                line=line.TrimStart('\uFEFF',' ','\t');
+                if(!line.StartsWith('{'))continue;
                 using var document = JsonDocument.Parse(line); var root = document.RootElement;
                 if (root.GetProperty("kind").GetString() == "status")
                 {
@@ -69,6 +73,7 @@ public sealed class OfficialBotSource : IMessageSource
                 else if (state == LinkState.Connected)
                 {
                     var message = filter.Parse(root.GetProperty("payload").GetRawText());
+                    if(message is not null)LastMessageType=root.GetProperty("payload").GetProperty("event").GetProperty("message").GetProperty("message_type").GetString();
                     if (message is not null && !queue.Writer.TryWrite(message)) { state = LinkState.Protected; break; }
                 }
             }
