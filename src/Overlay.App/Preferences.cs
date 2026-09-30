@@ -10,9 +10,11 @@ public sealed record Preferences
     public string AudioPath { get; init; } = "";
     public bool Topmost { get; init; } = true;
     public bool Sound { get; init; } = false;
+    public bool AutoScroll { get; init; } = true;
     public string Font { get; init; } = "Microsoft YaHei UI";
     public double FontSize { get; init; } = 14;
-    private static string PathName => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FeishuMessageOverlay", "appearance.json");
+    internal static string? ContractPath {get;set;}
+    private static string PathName => App.SmokeMode && ContractPath is not null?ContractPath:Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FeishuMessageOverlay", "appearance.json");
     public static Preferences Load()
     {
         try { return JsonSerializer.Deserialize<Preferences>(File.ReadAllText(PathName)) ?? new(); }
