@@ -26,8 +26,9 @@ public sealed class BotEventFilter(IEnumerable<string> selectedChatIds, IEnumera
             if (bots.Count > 0 && !bots.Contains(senderId)) return null;
             if (!long.TryParse(Get(message, "create_time"), out var milliseconds)) return null;
             var time = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
-            var text = Extract(Get(message, "message_type"), Get(message, "content"));
-            return new(id, chatId, "机器人 · " + senderId, text, time, SenderKind.Bot, senderId);
+            var type=Get(message,"message_type");
+            var text = Extract(type, Get(message, "content"));
+            return new(id, chatId, "机器人 · " + senderId, text, time, SenderKind.Bot, senderId,type);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException) { return null; }
     }
