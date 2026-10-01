@@ -24,6 +24,8 @@ public sealed class OfficialBotSource : IMessageSource
     internal static int ActiveChildren => activeChildren;
     public LinkState State => state;
     public string? LastMessageType {get;private set;}
+    public CardMetadata? LastCardMetadata {get;private set;}
+    public CardMetadata? LastCardDetailsFailure {get;private set;}
     public event Action? Activity;
     public string Mode => MembershipState=="discovery_failed"?"群发现失败，已暂停群消息接收；稍后自动重试":state switch
     {
@@ -78,6 +80,8 @@ public sealed class OfficialBotSource : IMessageSource
                     {var id=group.GetProperty("chatId").GetString();var name=group.GetProperty("name").GetString();if(id is not null && ids.Contains(id) && name is not null && name.Length<=256)names[id]=name;}
                     JoinedGroupNames=names;JoinedChatIds=ids;filter=new BotEventFilter(ids,botIds);MembershipState=root.GetProperty("state").GetString()??"error";Activity?.Invoke();
                 }
+                else if(root.GetProperty("kind").GetString()=="card_meta")
+                {if(root.TryGetProperty("meta",out var meta) && CardMetadata.Project(meta) is {} safe){LastCardMetadata=safe;if(safe.Detail is "api_rejected" or "identity_mismatch" or "detail_has_no_targets" or "timeout" or "request_failed")LastCardDetailsFailure=safe;}}
                 else if (root.GetProperty("kind").GetString() == "status")
                 {
                     state = root.GetProperty("state").GetString() switch { "connected" => LinkState.Connected, "reconnecting" => LinkState.Reconnecting, "protected" => LinkState.Protected, _ => LinkState.Error };
