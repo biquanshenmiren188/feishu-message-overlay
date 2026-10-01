@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -10,7 +10,7 @@ internal static class WindowAlpha
     // Per-pixel layered HWND is required. An opaque HWND fades content against
     // its own background instead of revealing the desktop behind the window.
     internal static bool Set(Window window,double value)
-    {window.Opacity=1;window.Background=new SolidColorBrush(Color.FromArgb((byte)Math.Round(Math.Clamp(value,.6,1)*255),255,255,255));return window.AllowsTransparency;}
+    {window.Opacity=1;if(window is MainWindow panel)panel.PaintPanelBackground(value);else window.Background=new SolidColorBrush(Color.FromArgb((byte)Math.Round(Math.Clamp(value,.6,1)*255),255,255,255));return window.AllowsTransparency;}
     internal static bool HasNativeLayered(Window window)
     {var handle=new WindowInteropHelper(window).Handle;return handle!=0 && (GetStyle(handle,-20)&0x80000)!=0;}
     internal static byte? Read(Window window)
