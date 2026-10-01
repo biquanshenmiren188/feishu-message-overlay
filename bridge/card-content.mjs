@@ -12,7 +12,13 @@ export function projectCard(content){
  const meta={buttons:0,targets:0,header:false,title:false,callback:false,shapes:[]};
  if(typeof content!=='string'||content.length>524288)return {content,meta};
  try{
-  const root=JSON.parse(content);let count=0;const shapes=new Set();
+  let root=JSON.parse(content);
+  // Official event may include the original card DSL as encoded JSON beside simplified elements.
+  // Decode only this explicit container, once, within the same content size/depth budget.
+  if(typeof root?.user_dsl==='string'&&root.user_dsl.length<=524288){
+   try{const native=JSON.parse(root.user_dsl);if(native&&typeof native==='object'&&!Array.isArray(native)&&(Array.isArray(native.elements)||native.body?.elements))root=native;}catch{}
+  }
+  let count=0;const shapes=new Set();
   meta.header=!!root?.header;meta.title=typeof root?.title==='string'||!!root?.header?.title;
   function walk(node,depth=0){
    if(depth>32||++count>2048||!node||typeof node!=='object')return;
@@ -23,13 +29,13 @@ export function projectCard(content){
     if(node.action?.type==='callback'||(Array.isArray(node.behaviors)&&node.behaviors.some(v=>v?.type==='callback')))meta.callback=true;
     return;
    }
-   for(const key of ['elements','body','content','text','fields','actions'])if(node[key]&&typeof node[key]==='object')walk(node[key],depth+1);
+   for(const key of ['elements','body','content','text','fields','actions','columns'])if(node[key]&&typeof node[key]==='object')walk(node[key],depth+1);
   }
   walk(root);meta.shapes=[...shapes].sort().slice(0,20);return {content:JSON.stringify(root),meta};
  }catch{return {content,meta};}
 }
 export class CardDetails {
- constructor(fetch){this.fetch=fetch;this.disabled=false;this.busy=0;this.noTargets=new Set();}
+ constructor(fetch,audit){this.fetch=fetch;this.audit=audit;this.disabled=false;this.busy=0;this.noTargets=new Set();}
  async resolve(event){
   const message=event.event.message;const original=projectCard(message.content);message.content=original.content;
   const meta={...original.meta,detail:'not_needed',code:null,requiredScopes:[]};
@@ -46,6 +52,7 @@ export class CardDetails {
    if(response?.code!==0){meta.code=Number.isInteger(response?.code)?response.code:null;meta.requiredScopes=scopes(response?.msg);meta.detail='api_rejected';this.disabled=true;return meta;}
    const item=response.data?.items?.find(v=>v.message_id===message.message_id&&v.chat_id===message.chat_id&&v.msg_type==='interactive'&&['app','bot'].includes(v.sender?.sender_type));
    if(!item||typeof item.body?.content!=='string'){meta.detail='identity_mismatch';this.disabled=true;return meta;}
+   if(this.audit){try{await this.audit(message.content,item.body.content);}catch{}this.audit=null;}
    const detail=projectCard(item.body.content);
    if(detail.meta.targets>original.meta.targets){message.content=detail.content;Object.assign(meta,detail.meta);meta.detail='enriched';}
    else{meta.detail='detail_has_no_targets';this.noTargets.add(key);}
