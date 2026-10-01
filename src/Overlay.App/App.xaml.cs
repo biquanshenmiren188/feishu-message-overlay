@@ -186,7 +186,7 @@ public partial class App : Application
         var smokeOutput = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
         if (string.IsNullOrEmpty(smokeOutput)) { Shutdown(2); return; }
         try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, strict three-container reading range and real timer visual progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
-        catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.StackTrace); Shutdown(1); }
+        catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.Message+"\n"+ex.StackTrace); Shutdown(1); }
     }
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
