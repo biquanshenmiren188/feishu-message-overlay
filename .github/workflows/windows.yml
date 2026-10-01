@@ -34,6 +34,17 @@ jobs:
         shell: pwsh
         run: ./scripts/build.ps1 -SelfContained
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WPF-smoke-diagnostics
+          path: |
+            artifacts/verification/ci-smoke/ui-smoke.txt
+            artifacts/verification/ci-smoke/stdout.txt
+            artifacts/verification/ci-smoke/stderr.txt
+            artifacts/verification/ci-smoke/font-fit-runtime.json
+            artifacts/verification/ci-smoke/current-runtime-contract.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
         with:
           name: FeishuMessageOverlay-win-x64
           path: artifacts/FeishuMessageOverlay-win-x64.zip
