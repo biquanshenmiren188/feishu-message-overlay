@@ -1,4 +1,4 @@
-namespace Overlay.Core;
+﻿namespace Overlay.Core;
 
 public enum SenderKind { Unknown, Person, Bot }
 public sealed class DedupCapacityException : Exception { }
@@ -29,7 +29,12 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
         if(messages.RemoveAll(m => now - m.SentAt >= ttl)>0)Revision++;
         foreach (var key in seen.Where(p => now - p.Value >= ttl).Select(p => p.Key).ToArray()) seen.Remove(key);
     }
-    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now)
+    public void KeepLatest(string groupId)
+    {
+        var latest=messages.Where(m=>m.SourceId==groupId).OrderByDescending(m=>m.SentAt).FirstOrDefault();
+        if(latest is not null && messages.RemoveAll(m=>m.SourceId==groupId && m.Id!=latest.Id)>0)Revision++;
+    }
+    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now,bool latestOnly=false)
     {
         Prune(now);
         if (message.SourceId != selectedSource || message.Kind != SenderKind.Bot || string.IsNullOrWhiteSpace(message.Id) ||
@@ -41,6 +46,7 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
         // Refuse excess traffic until expiry instead of violating bounded deduplication.
         if (seen.Count >= limit * 10) throw new DedupCapacityException();
         seen[key] = now;
+        if(latestOnly)messages.RemoveAll(m=>m.SourceId==selectedSource);
         messages.Insert(0, message with { Sender = Bound(message.Sender, 256), Text = Bound(message.Text, 16000) });
         Revision++;
         if (messages.Count > limit) messages.RemoveAt(messages.Count - 1);
