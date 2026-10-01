@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.IO;
 namespace Overlay.App;
 public partial class App : Application
@@ -14,6 +14,28 @@ public partial class App : Application
     {
         base.OnStartup(e);
         SmokeMode = e.Args.Contains("--smoke-test");
+        if(e.Args.Contains("--add-authorized-group"))
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            var args=e.Args.SkipWhile(a=>a!="--add-authorized-group").Skip(1).ToArray();if(args.Length!=2){Shutdown(2);return;}
+            var existing=ConnectionSelection.Load();var credentials=CredentialVault.LoadOnUserRequest();
+            if(existing is null || credentials is null || existing.AppId!=credentials.AppId){if(credentials is not null)credentials.Secret="";Shutdown(1);return;}
+            var match=await GroupDiscovery.FindAsync(credentials,args[0]);var ids=match.State=="matched"?existing.ChatIds.Append(match.ChatId!).Distinct(StringComparer.Ordinal).ToArray():existing.ChatIds;
+            var saved=match.State=="matched" && ids.Length<=5 && ConnectionSelection.Save(new ConnectionSettings{AppId=credentials.AppId,Secret="validation-only",ChatIds=ids,BotIds=existing.BotIds});credentials.Secret="";
+            await File.WriteAllTextAsync(args[1],System.Text.Json.JsonSerializer.Serialize(new{saved,count=ids.Length,state=match.State,chatId=match.ChatId}));Shutdown(saved?0:1);return;
+        }
+        if(e.Args.Contains("--enable-auto-joined"))
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;var prefs=Preferences.Load();var saved=(prefs with{AutoListenJoined=true}).Save();
+            await File.WriteAllTextAsync(e.Args.Last(),System.Text.Json.JsonSerializer.Serialize(new{saved,enabled=saved}));Shutdown(saved?0:1);return;
+        }
+        if(e.Args.Contains("--check-local-state"))
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            var output=e.Args.Last();var prefs=Preferences.Load();var selected=ConnectionSelection.Load();var saved=CredentialVault.LoadOnUserRequest();
+            var result=new{user=Environment.UserName,sid=System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value,appData=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),preferencePath=Preferences.StoragePath,preferenceState=Preferences.LoadState,dwell=prefs.DwellSeconds,sound=prefs.Sound,audioExists=File.Exists(prefs.AudioPath),audioConfigured=prefs.AudioPath.Length>0,selectionLoaded=selected is not null,vaultDecrypted=saved is not null,identityMatches=saved is not null && saved.AppId==selected?.AppId};
+            if(saved is not null)saved.Secret="";await File.WriteAllTextAsync(output,System.Text.Json.JsonSerializer.Serialize(result));Shutdown();return;
+        }
         if(e.Args.Contains("--browser-input-fixture"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -127,6 +149,15 @@ public partial class App : Application
                 }
             },token);
         }
+        if(!SmokeMode)
+        {
+            for(var attempt=0;attempt<6;attempt++)
+            {
+                _=Preferences.Load();
+                if(Preferences.LoadState=="loaded" || Preferences.LoadState=="missing" && !StartupRegistration.IsEnabled())break;
+                await Task.Delay(500);
+            }
+        }
         var window = new MainWindow(); MainWindow = window;
         if(e.Args.Contains("--observe-state"))
         {var receipt=e.Args.SkipWhile(a=>a!="--observe-state").Skip(1).FirstOrDefault();if(receipt is not null)window.ObserveConfiguredState(receipt);}
@@ -145,11 +176,15 @@ public partial class App : Application
         if (!SmokeMode) {await window.RestoreConfiguredConnectionAsync();return;}
         var smokeOutput = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
         if (string.IsNullOrEmpty(smokeOutput)) { Shutdown(2); return; }
-        try { await window.RunSmokeAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS startup, demo rendering, topmost toggle, resize, font changes, clear, pause, bridge process integration, connection/reconnect/error states, sound request deduplication.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
+        try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, strict three-container reading range and real timer visual progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
         catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.StackTrace); Shutdown(1); }
     }
-    protected override async void OnSessionEnding(SessionEndingCancelEventArgs e)
-    {base.OnSessionEnding(e);if(MainWindow is MainWindow window)await window.ExitAsync();}
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        if(MainWindow is MainWindow window && !window.FlushForSessionEnding()){e.Cancel=true;window.Restore();}
+        else if(MainWindow is MainWindow closing)_=closing.ExitAsync();
+        base.OnSessionEnding(e);
+    }
     protected override void OnExit(ExitEventArgs e)
     {
         restoreStop?.Cancel();restoreSignal?.Set();
