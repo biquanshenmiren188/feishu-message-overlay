@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "test": "node --test filter.test.mjs card-content.test.mjs" },
-  "dependencies": { "@larksuiteoapi/node-sdk": "1.74.0" }
+  "scripts": {
+    "test": "node --test filter.test.mjs card-content.test.mjs card-shape-audit.test.mjs"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.74.0"
+  }
 }
