@@ -11,7 +11,8 @@ internal static class CredentialVault
     [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CryptProtectData(ref Blob input, string description, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out Blob output);
     [DllImport("crypt32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CryptUnprotectData(ref Blob input, IntPtr description, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out Blob output);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
-    private static string FileName => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FeishuMessageOverlay", "application.dpapi");
+    private static string FileName => Path.Combine(LocalStorage.DirectoryPath,"application.dpapi");
+    internal static string LoadState {get;private set;}="not_loaded";
     private static byte[] Transform(byte[] data, bool encrypt)
     {
         var input = new Blob { Length = data.Length, Data = Marshal.AllocHGlobal(data.Length) }; Blob output = default;
@@ -33,16 +34,17 @@ internal static class CredentialVault
     {
         if (App.SmokeMode) return false;
         var plain = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { settings.AppId, settings.Secret }));
-        try { var encrypted = Transform(plain, true); Directory.CreateDirectory(Path.GetDirectoryName(FileName)!); File.WriteAllBytes(FileName + ".tmp", encrypted); File.Move(FileName + ".tmp", FileName, true); return true; }
+        try { var encrypted = Transform(plain, true); LocalStorage.AtomicWrite(FileName,encrypted);return true; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException) { return false; }
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
     public static ConnectionSettings? LoadOnUserRequest()
     {
-        if (App.SmokeMode || !File.Exists(FileName)) return null;
+        if (App.SmokeMode) return null;
         byte[]? plain = null;
-        try { plain = Transform(File.ReadAllBytes(FileName), false); var stored = JsonSerializer.Deserialize<ConnectionSettings>(plain); return stored; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException or JsonException) { return null; }
+        try { plain = Transform(File.ReadAllBytes(FileName), false); var stored = JsonSerializer.Deserialize<ConnectionSettings>(plain);LoadState=stored is null?"invalid_configuration":"loaded";return stored; }
+        catch(FileNotFoundException){LoadState="missing";return null;}catch(DirectoryNotFoundException){LoadState="missing";return null;}
+        catch(IOException){LoadState="io_error";return null;}catch(UnauthorizedAccessException){LoadState="access_denied";return null;}catch(CryptographicException){LoadState="decrypt_failed";return null;}catch(JsonException){LoadState="invalid_configuration";return null;}
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }
 }
