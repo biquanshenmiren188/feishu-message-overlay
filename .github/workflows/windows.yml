@@ -43,6 +43,8 @@ jobs:
             artifacts/verification/ci-smoke/stderr.txt
             artifacts/verification/ci-smoke/font-fit-runtime.json
             artifacts/verification/ci-smoke/current-runtime-contract.json
+            artifacts/verification/ci-smoke/card-fit-check.json
+            artifacts/verification/ci-smoke/card-runtime.json
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
