@@ -9,6 +9,8 @@ public partial class MainWindow
 {
     private async Task RunLayoutReadingContractAsync(string output)
     {
+        App.SmokeStage="font_fit";
+        contractFitHeight=Math.Min(720,CurrentWorkArea().Height);
         void Check(bool ok,string why){if(!ok)throw new InvalidOperationException(why);}
         async Task Layout(){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
         var samples=new List<object>();
@@ -16,9 +18,23 @@ public partial class MainWindow
         void Add(string id,string chat,int lines){var now=DateTimeOffset.UtcNow;Check(store.Add(new(id,chat,"hidden",string.Join('\n',Enumerable.Range(0,lines).Select(i=>"Synthetic field "+i+": readable value")),now,SenderKind.Bot),chat,now,chat==pinnedChatId),"fixture add");Render();}
         store.Start(DateTimeOffset.UtcNow);selectedChats=new(["demo","pin"],StringComparer.Ordinal);pinnedChatId="pin";pinnedLatest=null;renderedRevision=-1;
         AutoScroll.IsChecked=false;readingTimer.Stop();readingIdleTimer.Stop();followingPaused=false;
-        Width=360;initialFit=true;verifyContentFit=true;FontScale.Value=13;reader.Configure(5,DateTimeOffset.UtcNow);
-        Add("fit-a","demo",26);Add("fit-b","demo",26);await Layout();var beforeArrival=ActualHeight;
-        Add("fit-c","demo",28);Add("pin-a","pin",3);await Layout();Sample("pin-plus-three-shrink");
+        Width=360;initialFit=true;verifyContentFit=true;FontScale.Value=13;reader.Configure(5,DateTimeOffset.UtcNow);await Layout();
+        // Find a fixture that needs shrinking but can fit at the protected floor.
+        // Fixed 26/26/28 lines only fit our large desktop, not CI's smaller desktop.
+        var fixtureHeight=contractFitHeight.Value;
+        var fixtureWidth=MessageScroll.ViewportWidth>0?MessageScroll.ViewportWidth:ActualWidth-11;
+        double FixtureHeight(int lines,double font)
+        {
+            MessageList.FontSize=font;
+            double Card(int count)=>MeasureCard(new IncomingMessage("measure-only","demo","hidden",string.Join('\n',Enumerable.Range(0,count).Select(i=>"Synthetic field "+i+": readable value")),DateTimeOffset.UtcNow,SenderKind.Bot),fixtureWidth);
+            return Card(lines)*2+Card(lines+2)+Card(3)+40;
+        }
+        var fittingLines=3;
+        while(fittingLines<200 && FixtureHeight(fittingLines,13)<=fixtureHeight)fittingLines++;
+        Check(fittingLines<200 && FixtureHeight(fittingLines,MinimumFitFontSize)<=fixtureHeight,"fixture must require shrink and still fit the available desktop at protected minimum");
+        MessageList.FontSize=13;
+        Add("fit-a","demo",fittingLines);Add("fit-b","demo",fittingLines);await Layout();var beforeArrival=ActualHeight;
+        Add("fit-c","demo",fittingLines+2);Add("pin-a","pin",3);await Layout();Sample("pin-plus-three-shrink");
         Check(displayed.Count==3 && PinnedCard.Content is not null && MessageList.FontSize<13 && MessageList.FontSize>=MinimumFitFontSize && fitStatus=="fully_fitted","pin plus three actual long containers shrink at readable floor");
         Check(MessageScroll.ScrollableHeight<2 && PinnedArea.ScrollableHeight<2 && ActualHeight<=CurrentWorkArea().Height+.5 && ActualHeight>beforeArrival,"new arrival final width remeasure fully shows all four bodies");
         var bmp=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);bmp.Render(this);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));using(var image=File.Create(Path.Combine(output,"font-fit-preview.png")))encoder.Save(image);
@@ -44,6 +60,7 @@ public partial class MainWindow
         await Task.Delay(9100);Check(followingPaused && reader.Current==paused,"manual pause lasts ten seconds");await Task.Delay(1300);await Layout();Check(!followingPaused,"manual idle resumes");var resumed=reader.Current;
         await Task.Delay(5250);await Layout();Check(reader.Current!=resumed && displayed.Count==3,"resume starts full dwell before next message");Sample("short-after-resume");
         readingTimer.Stop();readingIdleTimer.Stop();AutoScroll.IsChecked=false;verifyReadingTimer=false;verifyContentFit=false;initialFit=false;
-        File.WriteAllText(Path.Combine(output,"font-fit-runtime.json"),JsonSerializer.Serialize(new{passed=true,minimumFont=MinimumFitFontSize,maximumMeasurementPasses=9,automaticPaging=false,preferredFontPreserved=true,samples}));
+        contractFitHeight=null;
+        File.WriteAllText(Path.Combine(output,"font-fit-runtime.json"),JsonSerializer.Serialize(new{passed=true,fixtureHeight,fittingLines,minimumFont=MinimumFitFontSize,maximumMeasurementPasses=9,automaticPaging=false,preferredFontPreserved=true,samples}));
     }
 }
