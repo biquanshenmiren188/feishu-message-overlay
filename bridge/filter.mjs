@@ -5,6 +5,10 @@ export class BotGate {
     if(!Array.isArray(botIds) || botIds.length>50 || botIds.some(id=>typeof id!=='string' || !id || id.length>256)) throw new Error('invalid_bots');
     this.botIds=new Set(botIds);
   }
+  replaceChats(ids) {
+    if (!Array.isArray(ids) || ids.length>2000 || ids.some(id=>typeof id!=='string'||!/^oc_[a-zA-Z0-9_-]+$/.test(id)))throw new Error('invalid_membership');
+    this.chatIds=new Set(ids);
+  }
   resume(now = Date.now()) { this.cutoff=now; }
   accept(data, now = Date.now()) {
     const sender = data?.sender, message = data?.message;
