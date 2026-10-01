@@ -13,7 +13,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        SmokeMode = e.Args.Contains("--smoke-test");
+        SmokeMode = e.Args.Contains("--smoke-test") || e.Args.Contains("--measure-current-window");
         if(e.Args.Contains("--add-authorized-group"))
         {
             ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -159,6 +159,15 @@ public partial class App : Application
             }
         }
         var window = new MainWindow(); MainWindow = window;
+        if(e.Args.Contains("--measure-current-window"))
+        {
+            var args=e.Args.SkipWhile(a=>a!="--measure-current-window").Skip(1).ToArray();
+            if(args.Length!=2 || !int.TryParse(args[0],out var pid)){Shutdown(2);return;}
+            window.PrepareFitProbe();window.Show();
+            try{await window.MeasureCurrentWindowAsync(pid,args[1]);await window.ExitAsync();}
+            catch{await File.WriteAllTextAsync(args[1],"{\"state\":\"probe_failed\",\"privateContentSaved\":false}");Shutdown(1);}
+            return;
+        }
         if(e.Args.Contains("--observe-state"))
         {var receipt=e.Args.SkipWhile(a=>a!="--observe-state").Skip(1).FirstOrDefault();if(receipt is not null)window.ObserveConfiguredState(receipt);}
         if(!e.Args.Contains("--background"))window.Show();
