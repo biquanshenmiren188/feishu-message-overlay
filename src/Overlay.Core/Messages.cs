@@ -3,7 +3,7 @@
 public enum SenderKind { Unknown, Person, Bot }
 public sealed class DedupCapacityException : Exception { }
 public record IncomingMessage(string Id, string SourceId, string Sender, string Text, DateTimeOffset SentAt,
-    SenderKind Kind = SenderKind.Unknown, string SenderId = "", string MessageType = "text");
+    SenderKind Kind = SenderKind.Unknown, string SenderId = "", string MessageType = "text", MessageCard? Card = null);
 public interface IMessageSource : IAsyncDisposable
 {
     string Mode { get; }
