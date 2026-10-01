@@ -74,6 +74,7 @@ public partial class MainWindow
         selectedChats.Remove("oc_pin_a");renderedRevision=-1;Render();Check(PinnedCard.Content is null && !readingQueue.Any(m=>m.SourceId=="oc_pin_a"),"departed group content is not displayed");
         File.WriteAllText(Path.Combine(output,"pinned-contract.txt"),"PASS one pinned latest card plus exactly three regular containers; replace retains one without changing ordinary deadline; real regular timer advances; ordinary TTL/clear preserve pinned memory slot; quiet switch/cancel/membership removal; pinned ID saves and reloads in isolated preferences.");
         await RunLayoutReadingContractAsync(output);
+        await RunCardContractAsync(output);
         AutoScroll.IsChecked=false;verifyReadingTimer=false;initialFit=false;
         store.Start(DateTimeOffset.UtcNow);selectedChats=new(["demo"],StringComparer.Ordinal);pinnedChatId="";renderedRevision=-1;Width=360;Height=350;
         now=DateTimeOffset.UtcNow;store.Add(new IncomingMessage("scrollbar-only","demo","hidden",string.Join('\n',Enumerable.Repeat("Synthetic scrolling line",80)),now,SenderKind.Bot),"demo",now);Render();
