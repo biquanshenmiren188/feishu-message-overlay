@@ -1,4 +1,4 @@
-namespace Overlay.Core;
+﻿namespace Overlay.Core;
 // Bounded metadata only: no bodies, sender identities, message IDs or credentials.
 // Call only after the normal source/identity/time/dedup gates have accepted a message.
 public sealed class GroupReceptionStatistics
@@ -20,8 +20,8 @@ public sealed class GroupReceptionStatistics
     public void Select(IEnumerable<string> chatIds)
     {
         var selected=chatIds.Distinct(StringComparer.Ordinal).ToArray();
-        if(selected.Length is <1 or >5)throw new ArgumentException("Select one to five groups");
-        rows=selected.ToDictionary(id=>id,id=>new Row(id),StringComparer.Ordinal);
+        if(selected.Length>2000)throw new ArgumentException("Membership snapshot is too large");
+        rows=selected.ToDictionary(id=>id,id=>rows.TryGetValue(id,out var retained)?retained:new Row(id),StringComparer.Ordinal);
     }
     public bool RecordAccepted(IncomingMessage message,bool accepted,bool readable,DateTimeOffset receivedAt)
     {
