@@ -33,7 +33,7 @@ var filter = new BotEventFilter(["chosen"]);
 Check(filter.Parse(Event("user", "chosen", "text", "{\"text\":\"机器人通知\"}")) is null, "事件用户不提醒");
 Check(filter.Parse(Event("bot", "other", "text", "not even valid body JSON")) is null, "非选定群不解析正文");
 var parsed = filter.Parse(Event("bot", "chosen", "interactive", "{\"header\":{\"title\":{\"tag\":\"plain_text\",\"content\":\"演示标题\"}},\"elements\":[{\"tag\":\"markdown\",\"content\":\"演示卡片正文\"},{\"img_key\":\"secret-attachment-id\"}]}"));
-Check(parsed is not null && parsed.Kind == SenderKind.Bot && parsed.Text.Contains("演示卡片正文") && !parsed.Text.Contains("secret-attachment-id") && parsed.Text.Contains("未读取"), "卡片文字与附件限制");
+Check(parsed is not null && parsed.Kind==SenderKind.Bot && parsed.Text.Contains("演示卡片正文") && !parsed.Text.Contains("secret-attachment-id") && parsed.Card is {Title:"演示标题"} && !parsed.Text.Contains("未读取"),"卡片标题正文保留、附件不读取、不追加正文提示");
 Check(parsed is not null && store.Add(parsed, "chosen", now.AddSeconds(2)) && !store.Add(parsed, "chosen", now.AddSeconds(2)), "事件重复不报警");
 store.Start(now.AddSeconds(3)); Check(parsed is not null && !store.Add(parsed, "chosen", now.AddSeconds(4)), "恢复后历史事件不报警");
 Console.WriteLine($"{checks} total checks passed; event fixtures are synthetic, not live Feishu evidence.");
@@ -72,6 +72,22 @@ Check(reading.Advance(now.AddSeconds(40),false,false) is null && reading.Advance
 reading.Focus("b",now.AddSeconds(42));Check(reading.Advance(now.AddSeconds(62),true,false)=="c" && reading.DelayUntilNext(now.AddSeconds(63)) is null,"reader resumes one item at a time and stops at queue end");
 Console.WriteLine($"{checks} final checks passed.");
 
+var target="https://example.com/radar?combo=DEMO.A.B&details="+new string('x',500)+"&tab=FF&encoded=%E4%B8%AD%E6%96%87";
+var converted=System.Text.Json.JsonSerializer.Serialize(new{title="Synthetic card title",elements=new object[]{new object[]{new{tag="text",text="First paragraph\nSecond paragraph"}},new object[]{new{tag="button",text="View radar",url=target}},new{tag="button",text="Unsafe",url="javascript:alert(1)"},new{script="private-script-must-not-render",data="private-data-must-not-render"}}});
+var convertedMessage=filter.Parse(Event("bot","chosen","interactive",converted));
+Check(convertedMessage?.Card is {Title:"Synthetic card title",Body:"First paragraph\nSecond paragraph"},"converted title and paragraph order preserved without business regex");
+Check(convertedMessage?.Card?.Buttons[0]==new CardLink("View radar",target),"button URL and encoded query parameters preserved completely");
+Check(convertedMessage?.Card?.Buttons[1].Url=="" && !convertedMessage.Text.Contains("private-"),"unsafe button disabled and arbitrary data or script ignored");
+Check(filter.Parse(Event("bot","chosen","text","{\"text\":\"Plain unchanged\"}")) is {Card:null,Text:"Plain unchanged"},"ordinary text stays ordinary without invented title");
+var native=MessageCardParser.Parse("{\"header\":{\"template\":\"red\",\"title\":{\"tag\":\"plain_text\",\"content\":\"Original title\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"tag\":\"lark_md\",\"content\":\"Original paragraph\"}},{\"tag\":\"action\",\"actions\":[{\"tag\":\"button\",\"text\":{\"tag\":\"plain_text\",\"content\":\"Open\"},\"multi_url\":{\"url\":\"https://example.com/?a=1&b=2\"}}]}]}");
+Check(native is {Title:"Original title",HeaderTone:"red",Body:"Original paragraph"} && native.Buttons.Count==1,"native header color and nested action supported when provided");
+Check(!MessageCardParser.SafeUrl("file:///private") && !MessageCardParser.SafeUrl("https://user:password@example.com/"),"file scheme and embedded credentials never open");
+Check(MessageCardParser.Parse("not json") is null,"unknown malformed card falls back safely");
+var openBehavior=MessageCardParser.Parse(System.Text.Json.JsonSerializer.Serialize(new{title="Synthetic",elements=new[]{new{tag="button",text="Open",behaviors=new[]{new{type="open_url",default_url=target}}}}}));
+Check(openBehavior?.Buttons[0].Url==target,"official open_url behavior retains exact target and all parameters");
+var callback=MessageCardParser.Parse(System.Text.Json.JsonSerializer.Serialize(new{title="Synthetic",elements=new[]{new{tag="button",text="Callback",value=new{url=target},behaviors=new[]{new{type="callback",default_url=target}}}}}));
+Check(callback?.Buttons[0].Url=="","callback data never becomes a guessed navigation or financial action");
+Console.WriteLine($"{checks} final checks passed.");
 }
 catch(Exception error)
 {
