@@ -11,6 +11,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
 $bridgeTarget = Join-Path $root (Join-Path $OutputDirectory "bridge")
 New-Item -ItemType Directory -Path $bridgeTarget -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'bridge/main.mjs'),(Join-Path $root 'bridge/register.mjs'),(Join-Path $root 'bridge/discover.mjs'),(Join-Path $root 'bridge/group-discover.mjs'),(Join-Path $root 'bridge/diagnostic-fixture.mjs'),(Join-Path $root 'bridge/filter.mjs'),(Join-Path $root 'bridge/contract-fixture.mjs'),(Join-Path $root 'bridge/package.json') -Destination $bridgeTarget -Force
+Copy-Item -LiteralPath (Join-Path $root 'bridge/card-content.mjs') -Destination $bridgeTarget -Force
+Copy-Item -LiteralPath (Join-Path $root 'bridge/card-shape-audit.mjs') -Destination $bridgeTarget -Force
 Copy-Item -LiteralPath (Join-Path $root 'bridge/node_modules') -Destination $bridgeTarget -Recurse -Force
 # Only prune the owned publish copy, never source dependencies; retain licenses.
 $dependencies=Join-Path $bridgeTarget 'node_modules'
