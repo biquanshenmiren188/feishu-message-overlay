@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -10,7 +10,11 @@ public sealed class OfficialBotSource : IMessageSource
 {
     private readonly Process process;
     private readonly Channel<IncomingMessage> queue = Channel.CreateBounded<IncomingMessage>(100);
-    private readonly BotEventFilter filter;
+    private BotEventFilter filter;
+    private readonly string[] botIds;
+    public IReadOnlyDictionary<string,string> JoinedGroupNames {get;private set;}=new Dictionary<string,string>();
+    public string[] JoinedChatIds {get;private set;}=[];
+    public string MembershipState {get;private set;}="manual";
     private readonly CancellationTokenSource stop = new();
     private readonly Task pump;
     private readonly bool fixture;
@@ -21,7 +25,7 @@ public sealed class OfficialBotSource : IMessageSource
     public LinkState State => state;
     public string? LastMessageType {get;private set;}
     public event Action? Activity;
-    public string Mode => state switch
+    public string Mode => MembershipState=="discovery_failed"?"群发现失败，已暂停群消息接收；稍后自动重试":state switch
     {
         LinkState.Connected => fixture ? "本地契约连接 · 非真实飞书" : "已连接 · 官方长连接",
         LinkState.Reconnecting => "连接中断 · 正在重连，只接收恢复后的新消息",
@@ -33,9 +37,9 @@ public sealed class OfficialBotSource : IMessageSource
     public bool IsRealConnection => !fixture && state == LinkState.Connected;
     private OfficialBotSource(Process process, IReadOnlyList<string> chatIds, IReadOnlyList<string> botIds, bool fixture)
     {
-        this.process = process; this.fixture = fixture; filter = new BotEventFilter(chatIds, botIds); pump = PumpAsync();
+        this.process = process; this.fixture = fixture; this.botIds=botIds.ToArray();JoinedChatIds=chatIds.ToArray();filter = new BotEventFilter(chatIds, botIds); pump = PumpAsync();
     }
-    public static async Task<OfficialBotSource> StartAsync(string nodePath, string bridgePath, string appId, string appSecret, IReadOnlyList<string> selectedChatIds, IReadOnlyList<string> selectedBotIds, CancellationToken cancellationToken, bool fixture = false)
+    public static async Task<OfficialBotSource> StartAsync(string nodePath, string bridgePath, string appId, string appSecret, IReadOnlyList<string> selectedChatIds, IReadOnlyList<string> selectedBotIds, CancellationToken cancellationToken, bool fixture = false,bool autoJoined=false)
     {
         if (fixture && !App.SmokeMode) throw new InvalidOperationException("契约测试仅允许测试模式");
         if (selectedChatIds.Count is < 1 or > 5) throw new ArgumentException("必须选择一至五个准确群 ID");
@@ -46,7 +50,7 @@ public sealed class OfficialBotSource : IMessageSource
         var source = new OfficialBotSource(child, selectedChatIds, selectedBotIds, fixture);
         try
         {
-            await child.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { appId, appSecret, chatIds = selectedChatIds, botIds = selectedBotIds }).AsMemory(), cancellationToken);
+            await child.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { appId, appSecret, chatIds = selectedChatIds, botIds = selectedBotIds,autoJoined }).AsMemory(), cancellationToken);
             await child.StandardInput.FlushAsync(cancellationToken);
             return source;
         }
@@ -65,7 +69,16 @@ public sealed class OfficialBotSource : IMessageSource
                 line=line.TrimStart('\uFEFF',' ','\t');
                 if(!line.StartsWith('{'))continue;
                 using var document = JsonDocument.Parse(line); var root = document.RootElement;
-                if (root.GetProperty("kind").GetString() == "status")
+                if(root.GetProperty("kind").GetString()=="membership")
+                {
+                    var ids=root.GetProperty("chatIds").EnumerateArray().Select(v=>v.GetString()??"").ToArray();
+                    if(ids.Length>2000 || ids.Any(v=>!System.Text.RegularExpressions.Regex.IsMatch(v,"^oc_[a-zA-Z0-9_-]+$")))throw new InvalidOperationException();
+                    var names=new Dictionary<string,string>(StringComparer.Ordinal);
+                    if(root.TryGetProperty("groups",out var groups))foreach(var group in groups.EnumerateArray().Take(2000))
+                    {var id=group.GetProperty("chatId").GetString();var name=group.GetProperty("name").GetString();if(id is not null && ids.Contains(id) && name is not null && name.Length<=256)names[id]=name;}
+                    JoinedGroupNames=names;JoinedChatIds=ids;filter=new BotEventFilter(ids,botIds);MembershipState=root.GetProperty("state").GetString()??"error";Activity?.Invoke();
+                }
+                else if (root.GetProperty("kind").GetString() == "status")
                 {
                     state = root.GetProperty("state").GetString() switch { "connected" => LinkState.Connected, "reconnecting" => LinkState.Reconnecting, "protected" => LinkState.Protected, _ => LinkState.Error };
                     if (state != LinkState.Connected) while (queue.Reader.TryRead(out _)) { }
