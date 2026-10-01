@@ -48,12 +48,15 @@ public partial class MainWindow
     private double fitRequiredHeight,fitAvailableHeight;
     private int fitPasses;
     private string? lastFitKey;
+    // Isolated smoke fixture only; never changes a normal application's work area.
+    private double? contractFitHeight;
     private void MeasureContentHeight()
     {
         var work=CurrentWorkArea();UpdateLayout();
         var width=MessageScroll.ViewportWidth>0?MessageScroll.ViewportWidth:Math.Max(1,ActualWidth-11);
         var pinWidth=Math.Max(1,PinnedArea.ActualWidth>0?PinnedArea.ActualWidth:width);
         var limit=initialFit?work.Height:Math.Max(MinHeight,ActualHeight);
+        if(App.SmokeMode && contractFitHeight is {} contractHeight)limit=Math.Min(limit,contractHeight);
         var preferred=FontScale.Value;fitPasses=0;
         var key=string.Join("|",displayed.Select(m=>m.Id))+"|"+pinnedLatest?.Id+"|"+width.ToString("F2")+"|"+pinWidth.ToString("F2")+"|"+preferred+"|"+MessageList.FontFamily.Source+"|"+limit+"|"+initialFit;
         if(key==lastFitKey)return;
