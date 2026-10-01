@@ -2,9 +2,10 @@ for(const method of ['log','info','warn','error','debug','trace'])console[method
 const Lark=await import('@larksuiteoapi/node-sdk');
 import { createInterface } from 'node:readline';
 import { BotGate } from './filter.mjs';
+import { CardDetails } from './card-content.mjs';
 // stdout is private IPC to the desktop app, never a file or console log.
 const silent = {error(){},warn(){},info(){},debug(){},trace(){}};
-let client, gate, configured=false, blocked=false, membershipTimer, rest, membershipBusy, autoJoined=false, membershipDelay=60000;
+let client, gate, configured=false, blocked=false, membershipTimer, rest, membershipBusy, autoJoined=false, membershipDelay=60000,cardDetails;
 async function refreshMembership(){
  if(membershipBusy)return membershipBusy;
  membershipBusy=(async()=>{
@@ -38,7 +39,9 @@ input.on('line',async line=>{
     if(typeof config.appId!=='string' || !/^cli_[a-zA-Z0-9]+$/.test(config.appId) || typeof config.appSecret!=='string' || !config.appSecret) throw new Error('invalid_config');
     gate=new BotGate(config.chatIds,Date.now(),config.botIds ?? []);
     autoJoined=config.autoJoined===true;
-    if(autoJoined){gate.replaceChats([]);rest=new Lark.Client({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent});await refreshMembership();}
+    rest=new Lark.Client({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent});
+    cardDetails=new CardDetails(id=>rest.im.message.get({path:{message_id:id}}));
+    if(autoJoined){gate.replaceChats([]);await refreshMembership();}
     client=new Lark.WSClient({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent,autoReconnect:true,
       handshakeTimeoutMs:15000,
       onReady:()=>emit({kind:'status',state:'connected'}),
@@ -48,7 +51,7 @@ input.on('line',async line=>{
     config.appSecret='';
     await client.start({eventDispatcher:new Lark.EventDispatcher({logger:silent}).register({
       'im.message.receive_v1':async data=>{
-        try {const event=gate.accept(data); if(event && !emit({kind:'event',payload:event})) fail();}
+        try {const event=gate.accept(data); if(event){if(event.event.message.message_type==='interactive'){const meta=await cardDetails.resolve(event);if(!gate.chatIds.has(event.event.message.chat_id))return;emit({kind:'card_meta',meta});}if(!emit({kind:'event',payload:event}))fail();}}
         catch(error) { fail(error?.message==='dedup_capacity'?'dedup_capacity':'connection_failed'); }
       }
     })});
