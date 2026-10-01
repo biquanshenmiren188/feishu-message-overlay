@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Controls.Primitives;
@@ -29,6 +29,11 @@ public partial class MainWindow : Window
     private ScrollViewer MessageScroll {get{MessageList.ApplyTemplate();return scrollView??=(ScrollViewer)MessageList.Template.FindName("PART_MessageScroll",MessageList);}}
 
     private readonly ObservableCollection<IncomingMessage> displayed = [];
+    private IncomingMessage[] readingQueue=[];
+    private string? rangeStart;
+    private string pinnedChatId="";private bool updatingPinnedChoice;
+    private IncomingMessage? pinnedLatest;
+    private HashSet<string> pinnedHoldChats=[];
     private bool followingPaused, synchronizingScroll;
     private bool verifyReadingTimer, initialFit=true, fittingWindow;
     private readonly DispatcherTimer scrollIdle = new() { Interval = TimeSpan.FromSeconds(1.4) };
@@ -61,7 +66,7 @@ public partial class MainWindow : Window
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
         Height = double.IsFinite(prefs.Height) ? Math.Clamp(prefs.Height, 120, 1200) : 460;
-        MessageList.ItemsSource=displayed; AutoScroll.IsChecked=prefs.AutoScroll;
+        MessageList.ItemsSource=displayed; AutoScroll.IsChecked=prefs.AutoScroll;AutoJoined.IsChecked=prefs.AutoListenJoined;pinnedChatId=prefs.PinnedChatId;
         Pin.IsChecked = prefs.Topmost; Topmost = prefs.Topmost; Sound.IsChecked = prefs.Sound;
         FontChoice.ItemsSource = Fonts.SystemFontFamilies.OrderBy(f => f.Source).ToArray();
         FontChoice.SelectedItem = Fonts.SystemFontFamilies.FirstOrDefault(f => f.Source == prefs.Font) ?? Fonts.SystemFontFamilies.FirstOrDefault(f=>f.Source=="Segoe UI") ?? Fonts.SystemFontFamilies.First();
@@ -74,21 +79,23 @@ public partial class MainWindow : Window
         CreateTray();
         PreviewMouseDown+=(_,_)=>dragYield?.OwnInput();PreviewKeyDown+=(_,_)=>dragYield?.OwnInput();PreviewMouseWheel+=(_,_)=>dragYield?.OwnInput();
         timer.Tick += async (_, _) => await ReadAsync();
-        Loaded += (_, _) => {if(!App.SmokeMode)FitThreeMessages();else PlaceTopRight();WindowAlpha.Set(this,OpacityScale.Value/100);};
+        Loaded += (_, _) => {if(!App.SmokeMode)FitThreeMessages();PlaceTopRight();WindowAlpha.Set(this,OpacityScale.Value/100);};
         scrollIdle.Tick+=(_,_)=> {if(MessageBar.IsMouseOver || Mouse.Captured is Thumb)return;scrollIdle.Stop();MessageBar.BeginAnimation(OpacityProperty,new DoubleAnimation(0,TimeSpan.FromMilliseconds(180)));MessageBar.IsHitTestVisible=false;};
-        SizeChanged += (_, _) => { if(ready && !fittingWindow && Mouse.LeftButton==MouseButtonState.Pressed){initialFit=false;SavePreferences();} };
+        SizeChanged += (_, e) => { if(ready && !fittingWindow && (e.WidthChanged || e.HeightChanged))RequestContentLayout(); if(ready)WindowAlpha.Set(this,OpacityScale.Value/100);if(ready && !fittingWindow && Mouse.LeftButton==MouseButtonState.Pressed){initialFit=false;SavePreferences();} };
         MessageBar.SetBinding(System.Windows.Controls.Primitives.RangeBase.MaximumProperty,new System.Windows.Data.Binding("ScrollableHeight"){Source=MessageScroll});
         MessageBar.SetBinding(System.Windows.Controls.Primitives.ScrollBar.ViewportSizeProperty,new System.Windows.Data.Binding("ViewportHeight"){Source=MessageScroll});
-        readingTimer.Tick+=(_,_)=>{readingTimer.Stop();var id=reader.Advance(DateTimeOffset.UtcNow,AutoScroll.IsChecked==true,followingPaused || !IsVisible);if(id is not null)ShowReadingMessage(id);ScheduleReading();};
+        readingTimer.Tick+=(_,_)=>ReadingTick();
         readingIdleTimer.Tick+=(_,_)=>{readingIdleTimer.Stop();if(!IsVisible || AutoScroll.IsChecked!=true || exiting)return;if(Mouse.Captured is Thumb){readingIdleTimer.Start();return;}followingPaused=false;FocusVisibleReading();ScheduleReading();};
         IsVisibleChanged+=(_,_)=>{readingIdleTimer.Stop();followingPaused=false;FocusVisibleReading();ScheduleReading();};
         preferenceTimer.Tick+=async(_,_)=>await FlushPreferencesAsync();
         expiryTimer.Tick+=(_,_)=>{store.Prune(DateTimeOffset.UtcNow);Render();};
+        PinnedArea.SizeChanged+=(_,_)=>WindowAlpha.Set(this,OpacityScale.Value/100);
         ready = true;
     }
     private async Task StopAsync(string status)
     {
         generation++; timer.Stop(); var old = source; source = null;
+        pinnedHoldChats=!exiting && old is OfficialBotSource {State:LinkState.Connected or LinkState.Reconnecting}?new(selectedChats,StringComparer.Ordinal):[];
         selectedChats.Clear(); previousLinkState = null;
         store.Clear(DateTimeOffset.UtcNow); Render(); SetStatus(status);
         if (old is not null) await old.DisposeAsync();
@@ -118,13 +125,14 @@ public partial class MainWindow : Window
                 }
                 SetStatus(link.Mode);
             }
+            if(current is OfficialBotSource membership && AutoJoined.IsChecked==true && !selectedChats.SetEquals(membership.JoinedChatIds)){selectedChats=new(membership.JoinedChatIds,StringComparer.Ordinal);reception.Select(selectedChats);renderedRevision=-1;UpdatePinnedChoices();}
             var messages = await current.ReadAsync(shutdown.Token);
             if (version != generation || source != current || shutdown.IsCancellationRequested) return;
             var added = false;var acceptedGroups=new HashSet<string>(StringComparer.Ordinal);
             foreach (var message in messages)
             {
                 try {
-                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow))
+                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow,latestOnly:message.SourceId==pinnedChatId))
                     {
                         added=true;acceptedGroups.Add(message.SourceId);
                         if(current.IsRealConnection){realMessages++;lastMessageChatId=message.SourceId;lastAcceptedType=message.MessageType;lastReadable=message.Text.Length>0 && !message.Text.StartsWith("[该消息类型") && !message.Text.StartsWith("[正文格式") && !message.Text.StartsWith("[接口未提供");reception.RecordAccepted(message,true,lastReadable,DateTimeOffset.UtcNow);}
@@ -142,41 +150,50 @@ public partial class MainWindow : Window
         catch (Exception) { await StopAsync(current is OfficialBotSource failed ? failed.Mode : "读取失败 · 已停止并清空，未记录消息内容"); }
         finally { busy = false; }
     }
+    internal void PaintPanelBackground(double value)
+    {
+        var alpha=(byte)Math.Round(Math.Clamp(value,.6,1)*255);var white=Color.FromArgb(alpha,255,255,255);
+        if(PinnedArea.Visibility!=Visibility.Visible || PinnedArea.ActualHeight<=0){Background=new SolidColorBrush(white);return;}
+        var height=Math.Max(1,ActualHeight>0?ActualHeight:Height);var top=Math.Clamp(28/height,0,1);var bottom=Math.Clamp((28+PinnedArea.ActualHeight)/height,top,1);
+        var gray=Color.FromArgb(alpha,231,231,232);
+        var fill=new LinearGradientBrush{StartPoint=new Point(0,0),EndPoint=new Point(0,1)};
+        foreach(var stop in new[]{new GradientStop(white,0),new GradientStop(white,top),new GradientStop(gray,top),new GradientStop(gray,bottom),new GradientStop(white,bottom),new GradientStop(white,1)})fill.GradientStops.Add(stop);
+        fill.Freeze();Background=fill;
+    }
     private void Render()
     {
         if(renderedRevision==store.Revision)return;renderedRevision=store.Revision;
-        var target=store.Items.OrderBy(m=>m.SentAt).ToArray();
-        var ids=target.Select(m=>m.Id).ToHashSet(StringComparer.Ordinal);
-        (string Id,double Y)? anchor=null;
-        if(displayed.Count>0)
-        {
-            foreach(var item in displayed)
-            {
-                if(!ids.Contains(item.Id) || MessageList.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement element)continue;
-                var y=element.TranslatePoint(new Point(0,0),MessageScroll).Y;
-                if(y+element.ActualHeight>0 && y<MessageScroll.ViewportHeight){anchor=(item.Id,y);break;}
-            }
-        }
-        var changed=false;
+        var items=store.Items;
+        var pinnedAuthorized=selectedChats.Contains(pinnedChatId) || source is null && pinnedHoldChats.Contains(pinnedChatId);
+        if(pinnedLatest?.SourceId!=pinnedChatId || !pinnedAuthorized)pinnedLatest=null;
+        var candidate=items.Where(m=>m.SourceId==pinnedChatId).OrderByDescending(m=>m.SentAt).FirstOrDefault();
+        if(pinnedAuthorized && candidate is not null && (pinnedLatest is null || candidate.SentAt>=pinnedLatest.SentAt))pinnedLatest=candidate;
+        var pinned=pinnedLatest;
+        if(PinnedCard.Content is not IncomingMessage shown || shown.Id!=pinned?.Id)PinnedCard.Content=pinned;
+        PinnedArea.Visibility=pinned is null?Visibility.Collapsed:Visibility.Visible;
+        WindowAlpha.Set(this,OpacityScale.Value/100);
+        
+        PinnedStatus.Text=pinnedChatId.Length==0?"未选择置顶群":!pinnedAuthorized?"该群当前不在已核实的监听列表，已暂停展示":pinned is null?"等待该群新消息（不读取历史）":"顶部仅保留该群最新一条";
+        readingQueue=items.Where(m=>m.SourceId!=pinnedChatId && selectedChats.Contains(m.SourceId)).OrderBy(m=>m.SentAt).ToArray();
+        reader.Synchronize(readingQueue.Select(m=>m.Id),DateTimeOffset.UtcNow);
+        if(rangeStart is null || !readingQueue.Any(m=>m.Id==rangeStart))rangeStart=reader.Current;
+        DisplayRange(rangeStart,false);ScheduleReading();
+        RequestContentLayout();
+        if(!App.SmokeMode){if(readingQueue.Length>0)expiryTimer.Start();else expiryTimer.Stop();}
+    }
+    private void DisplayRange(string? id,bool resetScroll)
+    {
+        var start=Array.FindIndex(readingQueue,m=>m.Id==id);start=Math.Clamp(start,0,Math.Max(0,readingQueue.Length-3));
+        rangeStart=readingQueue.ElementAtOrDefault(start)?.Id;
+        var target=readingQueue.Skip(start).Take(3).ToArray();
+        if(displayed.Select(m=>m.Id).SequenceEqual(target.Select(m=>m.Id)))return;
         synchronizingScroll=true;
-        for(var i=displayed.Count-1;i>=0;i--)if(!ids.Contains(displayed[i].Id)){displayed.RemoveAt(i);changed=true;}
-        var oldIds=displayed.Select(m=>m.Id).ToHashSet(StringComparer.Ordinal);
-        foreach(var message in target)if(!oldIds.Contains(message.Id)){displayed.Add(message);changed=true;}
+        for(var i=displayed.Count-1;i>=0;i--)if(!target.Any(m=>m.Id==displayed[i].Id))displayed.RemoveAt(i);
+        for(var i=0;i<target.Length;i++)if(i>=displayed.Count || displayed[i].Id!=target[i].Id)displayed.Insert(i,target[i]);
+        while(displayed.Count>3)displayed.RemoveAt(displayed.Count-1);
         EmptyHint.Visibility=displayed.Count==0?Visibility.Visible:Visibility.Collapsed;
-        if(changed && anchor is {} retained)
-            Dispatcher.BeginInvoke(()=>{
-                var item=displayed.FirstOrDefault(m=>m.Id==retained.Id);
-                if(item is null)return;
-                if(MessageList.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement)MessageList.ScrollIntoView(item);
-                Dispatcher.BeginInvoke(()=>
-                {
-                    if(MessageList.ItemContainerGenerator.ContainerFromItem(item) is FrameworkElement element)
-                    {synchronizingScroll=true;MessageScroll.ScrollToVerticalOffset(Math.Clamp(MessageScroll.VerticalOffset+element.TranslatePoint(new Point(0,0),MessageScroll).Y-retained.Y,0,MessageScroll.ScrollableHeight));synchronizingScroll=false;}
-                },DispatcherPriority.Loaded);
-            },DispatcherPriority.Loaded);
-        reader.Synchronize(displayed.Select(m=>m.Id),DateTimeOffset.UtcNow);ScheduleReading();
-        if(initialFit && !App.SmokeMode && displayed.Count>0)Dispatcher.BeginInvoke(()=>{FitThreeMessages();if(displayed.Count>=3)initialFit=false;},DispatcherPriority.Loaded);
-        if(!App.SmokeMode){if(displayed.Count>0)expiryTimer.Start();else expiryTimer.Stop();}
+        if(resetScroll)MessageScroll.ScrollToVerticalOffset(0);
+        RequestContentLayout();
         synchronizingScroll=false;
     }
     private void AutoScrollClick(object sender,RoutedEventArgs e)
@@ -191,15 +208,11 @@ public partial class MainWindow : Window
     }
     private void ScheduleReading()
     {
-        readingTimer.Stop();if((App.SmokeMode && !verifyReadingTimer) || !ready || !IsVisible || followingPaused || AutoScroll.IsChecked!=true)return;
-        if(reader.DelayUntilNext(DateTimeOffset.UtcNow) is {} delay){readingTimer.Interval=TimeSpan.FromMilliseconds(Math.Max(50,delay.TotalMilliseconds));readingTimer.Start();}
+        readingTimer.Stop();if(contentLayoutPending)return;if((App.SmokeMode && !verifyReadingTimer) || !ready || !IsVisible || followingPaused || AutoScroll.IsChecked!=true)return;
+        if((reader.DelayUntilNext(DateTimeOffset.UtcNow)) is {} delay){readingTimer.Interval=TimeSpan.FromMilliseconds(Math.Max(50,delay.TotalMilliseconds));readingTimer.Start();}
     }
     private void ShowReadingMessage(string id)
-    {
-        var item=displayed.FirstOrDefault(m=>m.Id==id);if(item is null)return;
-        synchronizingScroll=true;MessageList.ScrollIntoView(item);
-        Dispatcher.BeginInvoke(()=>{if(MessageList.ItemContainerGenerator.ContainerFromItem(item) is FrameworkElement el)MessageScroll.ScrollToVerticalOffset(MessageScroll.VerticalOffset+el.TranslatePoint(new Point(0,0),MessageScroll).Y);synchronizingScroll=false;},DispatcherPriority.Loaded);
-    }
+    {DisplayRange(id,false);RequestContentLayout(id);}
     private void PauseReading()
     {
         if(AutoScroll.IsChecked!=true || !IsVisible || exiting)return;
@@ -214,13 +227,17 @@ public partial class MainWindow : Window
     private void ShowScrollbar()
     {MessageBar.BeginAnimation(OpacityProperty,null);MessageBar.Opacity=1;MessageBar.IsHitTestVisible=MessageScroll.ScrollableHeight>0;scrollIdle.Stop();scrollIdle.Start();}
     private void MessageWheel(object sender,MouseWheelEventArgs e)
-    {PauseReading();ShowScrollbar();}
+    {PauseReading();ShowScrollbar();
+        var start=Array.FindIndex(readingQueue,m=>m.Id==rangeStart);
+        var step=e.Delta<0?1:-1;
+        if(start>=0 && ((step>0 && MessageScroll.VerticalOffset>=MessageScroll.ScrollableHeight-.5) || (step<0 && MessageScroll.VerticalOffset<=.5)) && start+step>=0 && start+step<readingQueue.Length){DisplayRange(readingQueue[start+step].Id,true);reader.Focus(rangeStart,DateTimeOffset.UtcNow);e.Handled=true;}
+    }
     private void MessageKey(object sender,KeyEventArgs e)
     {if(e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End){PauseReading();ShowScrollbar();}}
     private void MessageMouseMove(object sender,MouseEventArgs e)
     {if(e.GetPosition(MessageArea).X>=MessageArea.ActualWidth-18)ShowScrollbar();}
     private void BarChanged(object sender,RoutedPropertyChangedEventArgs<double> e)
-    {if(!ready || synchronizingScroll || !(MessageBar.IsMouseOver && Mouse.LeftButton==MouseButtonState.Pressed))return;ShowScrollbar();PauseReading();MessageScroll.ScrollToVerticalOffset(e.NewValue);}
+    {if(!ready || synchronizingScroll || !((MessageBar.IsMouseOver && Mouse.LeftButton==MouseButtonState.Pressed) || (Mouse.Captured is Thumb captured && MessageBar.IsAncestorOf(captured))))return;ShowScrollbar();PauseReading();MessageScroll.ScrollToVerticalOffset(e.NewValue);}
     private void MessageScrolled(object sender,ScrollChangedEventArgs e)
     {
         var prior=synchronizingScroll;synchronizingScroll=true;MessageBar.Value=MessageScroll.VerticalOffset;synchronizingScroll=prior;
@@ -241,16 +258,19 @@ public partial class MainWindow : Window
             await StopAsync("连接中 · 正在启动官方连接器");
             var bridge = Path.Combine(AppContext.BaseDirectory, "bridge", "main.mjs");
             if (!File.Exists(bridge)) throw new FileNotFoundException();
-            selectedChats = new(settings.ChatIds, StringComparer.Ordinal);reception.Select(settings.ChatIds); store.Start(DateTimeOffset.UtcNow);
-            source = await OfficialBotSource.StartAsync(ConnectionSettings.FindNode(), bridge, settings.AppId, settings.Secret, settings.ChatIds, settings.BotIds, shutdown.Token);
+            selectedChats = new(settings.ChatIds, StringComparer.Ordinal);reception.Select(settings.ChatIds);UpdatePinnedChoices(); store.Start(DateTimeOffset.UtcNow);
+            source = await OfficialBotSource.StartAsync(ConnectionSettings.FindNode(), bridge, settings.AppId, settings.Secret, settings.ChatIds, settings.BotIds, shutdown.Token,autoJoined:AutoJoined.IsChecked==true);
             if(!ConnectionSelection.Save(settings))SetStatus("连接已启动 · 群选择保存失败，重启需重新配置");
             ((OfficialBotSource)source).Activity+=ScheduleRead;await ReadAsync();
         }
         catch (Exception) { await StopAsync("连接错误 · 请检查 Node运行时、桥接文件、应用配置及权限后重试"); }
         finally { settings.Secret = ""; }
     }
+    private async void AutoJoinedClick(object sender,RoutedEventArgs e)
+    {SavePreferences();await FlushPreferencesAsync();await RestoreConfiguredConnectionAsync();}
     private void SetStatus(string status)
     {
+        if(Preferences.LoadState is not ("loaded" or "missing" or "not_loaded"))status+="；设置读取失败（"+Preferences.LoadState+"），原文件已保护";
         if(Status.Text==status)return;Status.Text=status;Title="飞书消息小窗";
         var link=source as OfficialBotSource;
         var color=link is {IsRealConnection:true,State:LinkState.Connected} && selectedChats.Count>0?"#07C983":
@@ -269,8 +289,8 @@ public partial class MainWindow : Window
         credentials.Secret = "";
     }
     private void PreferenceChanged(object sender, RoutedEventArgs e) { if (!ready) return; Topmost = Pin.IsChecked == true; dragYield?.IntentChanged();SavePreferences(); }
-    private void FontChanged(object sender, SelectionChangedEventArgs e) { if (!ready) return; if (FontChoice.SelectedItem is FontFamily family) MessageList.FontFamily = family; SavePreferences(); }
-    private void SizeChangedHandler(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!ready) return; MessageList.FontSize = FontScale.Value; SavePreferences(); }
+    private void FontChanged(object sender, SelectionChangedEventArgs e) { if (!ready) return; if (FontChoice.SelectedItem is FontFamily family) MessageList.FontFamily = family; RequestContentLayout();SavePreferences(); }
+    private void SizeChangedHandler(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!ready) return; MessageList.FontSize = FontScale.Value;RequestContentLayout(); SavePreferences(); }
     private void SoundClick(object sender, RoutedEventArgs e) => audio.Play();
     private void PositionClick(object sender, RoutedEventArgs e) => PlaceTopRight();
     private Rect CurrentWorkArea()
@@ -283,25 +303,11 @@ public partial class MainWindow : Window
     }
     private void HomeClick(object sender,RoutedEventArgs e)
     {
-        initialFit=false;var work=CurrentWorkArea();fittingWindow=true;
+        initialFit=true;var work=CurrentWorkArea();fittingWindow=true;
         Width=Math.Clamp(Width,300,Math.Max(300,Math.Min(680,work.Width-16)));fittingWindow=false;
         Dispatcher.BeginInvoke(()=>{FitThreeMessages();PlaceTopRight();SavePreferences();},DispatcherPriority.Loaded);
     }
-    private void FitThreeMessages()
-    {
-        var work=CurrentWorkArea();var current=displayed.ToList().FindIndex(m=>m.Id==reader.Current);
-        var start=Math.Clamp(current,0,Math.Max(0,displayed.Count-3));
-        var selected=displayed.Skip(start).Take(3).ToArray();var measured=0d;
-        foreach(var item in selected)
-        {
-            var presenter=new ContentPresenter{Content=item,ContentTemplate=MessageList.ItemTemplate};
-            presenter.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty,MessageList.FontFamily);
-            presenter.SetValue(System.Windows.Documents.TextElement.FontSizeProperty,MessageList.FontSize);
-            presenter.Measure(new Size(Math.Max(250,Width-13),double.PositiveInfinity));measured+=presenter.DesiredSize.Height;
-        }
-        fittingWindow=true;Height=Math.Clamp(measured+36,120,Math.Max(120,work.Height-16));fittingWindow=false;
-        PlaceTopRight();
-    }
+    private void FitThreeMessages() => MeasureContentHeight();
     private void PlaceTopRight()
     {
         var work=CurrentWorkArea();fittingWindow=true;Width=Math.Min(Width,Math.Max(MinWidth,work.Width-16));Height=Math.Min(Height,Math.Max(MinHeight,work.Height-16));fittingWindow=false;
@@ -310,7 +316,8 @@ public partial class MainWindow : Window
     private void SavePreferences()
     {
         if(App.SmokeMode && Preferences.ContractPath is null)return;
-        var next=new Preferences{Width=Width,Height=Height,Topmost=Pin.IsChecked==true,Sound=Sound.IsChecked==true,Font=MessageList.FontFamily.Source,FontSize=MessageList.FontSize,Opacity=OpacityScale.Value/100,AutoScroll=AutoScroll.IsChecked==true,DwellSeconds=reader.Seconds,AudioPath=audio.PathName};
+        if(Preferences.LoadState is not ("loaded" or "missing" or "not_loaded")){Status.Text=$"设置读取失败（{Preferences.LoadState}），原文件已保留；暂停保存";return;}
+        var next=new Preferences{Width=Width,Height=Height,Topmost=Pin.IsChecked==true,Sound=Sound.IsChecked==true,Font=MessageList.FontFamily.Source,FontSize=FontScale.Value,Opacity=OpacityScale.Value/100,AutoScroll=AutoScroll.IsChecked==true,DwellSeconds=reader.Seconds,AudioPath=audio.PathName,AutoListenJoined=AutoJoined.IsChecked==true,PinnedChatId=pinnedChatId};
         if(next==lastPersisted && pendingPreferences is null)return;
         if(App.SmokeMode){if(next.Save())lastPersisted=next;return;}
         pendingPreferences=next;preferenceTimer.Stop();preferenceTimer.Start();
@@ -318,8 +325,15 @@ public partial class MainWindow : Window
     private async Task FlushPreferencesAsync()
     {
         preferenceTimer.Stop();var next=pendingPreferences;pendingPreferences=null;if(next is null)return;
-        await preferenceSave;var saving=Task.Run(next.Save);preferenceSave=saving;
-        if(await saving)lastPersisted=next;else Status.Text="界面设置保存失败";
+        var previous=preferenceSave;var saving=Task.Run(async()=>{await previous;return next.Save();});preferenceSave=saving;
+        if(await saving)lastPersisted=next;else {pendingPreferences??=next;Status.Text="设置保存失败，原文件已保留；请检查本机配置目录访问权限";}
+    }
+    internal bool FlushForSessionEnding()
+    {
+        SavePreferences();preferenceTimer.Stop();preferenceSave.GetAwaiter().GetResult();
+        var next=pendingPreferences;if(next is null)return true;
+        if(!next.Save()){Status.Text="设置保存失败，已阻止退出；原文件已保留";return false;}
+        pendingPreferences=null;lastPersisted=next;return true;
     }
     internal async Task RunSmokeAsync(string output)
     {
@@ -631,14 +645,24 @@ public partial class MainWindow : Window
     }
     internal async Task RestoreConfiguredConnectionAsync()
     {
-        var selected=ConnectionSelection.Load();if(selected is null)return;
-        var credentials=CredentialVault.LoadOnUserRequest();if(credentials is null||credentials.AppId!=selected.AppId){if(credentials is not null)credentials.Secret="";SetStatus("已保存群选择，但应用凭证不匹配或不可用");return;}
+        ConnectionSelection? selected=null;ConnectionSettings? credentials=null;
+        for(var attempt=0;attempt<6;attempt++)
+        {
+            selected=ConnectionSelection.Load();credentials=CredentialVault.LoadOnUserRequest();
+            if(selected is not null && credentials is not null)break;
+            if(credentials is not null){credentials.Secret="";credentials=null;}
+            if(ConnectionSelection.LoadState=="missing" && CredentialVault.LoadState=="missing" && !StartupRegistration.IsEnabled())break;
+            await Task.Delay(500);
+        }
+        if(selected is null){SetStatus($"启动读取群配置失败（{ConnectionSelection.LoadState}）；原配置已保留，可稍后重新加载");return;}
+        if(credentials is null||credentials.AppId!=selected.AppId){if(credentials is not null)credentials.Secret="";SetStatus($"启动读取安全凭证失败（{CredentialVault.LoadState}）；无需重建应用，请重新加载已保存配置");return;}
+        if(Preferences.LoadState is not ("loaded" or "missing")){credentials.Secret="";SetStatus($"设置读取失败（{Preferences.LoadState}），原文件已保留并暂停保存；请重新启动重试");return;}
         await ConnectSettingsAsync(new ConnectionSettings{AppId=credentials.AppId,Secret=credentials.Secret,ChatIds=selected.ChatIds,BotIds=selected.BotIds});credentials.Secret="";
     }
     internal void ObserveConfiguredState(string receipt)
     {trialReceipt=receipt;trialChat=ConnectionSelection.Load()?.ChatIds.FirstOrDefault();WriteTrialReceipt();}
     private void WriteTrialReceipt(){ } // Legacy startup option never writes a periodic receipt.
-    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{state=(source as OfficialBotSource)?.State.ToString()??"NotConnected",configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=displayed.ToList().FindIndex(m=>m.Id==reader.Current),messageCount=displayed.Count,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,checkedAt=DateTimeOffset.UtcNow});
+    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{state=(source as OfficialBotSource)?.State.ToString()??"NotConnected",configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),messageCount=readingQueue.Length,visibleContainers=displayed.Count,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,checkedAt=DateTimeOffset.UtcNow});
     private void CreateTray(bool verify=false)
     {
         if(App.SmokeMode && !verify)return;
@@ -657,9 +681,22 @@ public partial class MainWindow : Window
     private void HideClick(object sender,RoutedEventArgs e)=>Hide();
     private void TitleDrag(object sender,System.Windows.Input.MouseButtonEventArgs e)
     { if(e.OriginalSource is TextBlock && e.LeftButton==System.Windows.Input.MouseButtonState.Pressed)DragMove(); }
+    private void UpdatePinnedChoices()
+    {
+        updatingPinnedChoice=true;
+        var names=(source as OfficialBotSource)?.JoinedGroupNames;
+        var choices=new List<KeyValuePair<string,string>>{new("","不置顶群消息")};
+        choices.AddRange(selectedChats.Order(StringComparer.Ordinal).Select(id=>new KeyValuePair<string,string>(id,names is not null && names.TryGetValue(id,out var name)?name:id)));
+        PinnedGroup.ItemsSource=choices;PinnedGroup.SelectedValue=selectedChats.Contains(pinnedChatId)?pinnedChatId:"";updatingPinnedChoice=false;
+    }
+    private void PinnedGroupChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(!ready || updatingPinnedChoice || PinnedGroup.SelectedValue is not string id)return;
+        pinnedChatId=id;pinnedLatest=null;if(id.Length>0)store.KeepLatest(id);renderedRevision=-1;Render();SavePreferences();
+    }
     private void SettingsClick(object sender,RoutedEventArgs e)
     {
-        if(settingsWindow is not null){settingsWindow.Show();settingsWindow.Activate();return;}
+        UpdatePinnedChoices();if(settingsWindow is not null){settingsWindow.Show();settingsWindow.Activate();return;}
         SettingsReading.SetBinding(ToggleButton.IsCheckedProperty,new System.Windows.Data.Binding("IsChecked"){Source=AutoScroll,Mode=System.Windows.Data.BindingMode.TwoWay});SettingsSound.SetBinding(ToggleButton.IsCheckedProperty,new System.Windows.Data.Binding("IsChecked"){Source=Sound,Mode=System.Windows.Data.BindingMode.TwoWay});SettingsPanel.Resources=Resources;Root.Children.Remove(SettingsPanel);SettingsPanel.Visibility=Visibility.Visible;
         settingsWindow=new Window{Title="飞书消息 · 设置",Width=420,Height=690,MinWidth=380,MinHeight=440,ShowInTaskbar=false,Topmost=true,Background=new SolidColorBrush(Color.FromRgb(255,255,255)),Foreground=Brushes.Black,Content=new ScrollViewer{Content=SettingsPanel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}};
         settingsWindow.Closing+=(_,args)=>{if(!exiting){args.Cancel=true;settingsWindow.Hide();}};
@@ -689,7 +726,9 @@ public partial class MainWindow : Window
     }
     internal async Task ExitAsync()
     {
-        if(exiting)return;exiting=true;dragYield?.Dispose();shutdown.Cancel();SavePreferences();await FlushPreferencesAsync();await StopAsync("已退出");
+        if(exiting)return;SavePreferences();await FlushPreferencesAsync();
+        if(pendingPreferences is not null){SetStatus("设置保存失败，原文件已保留；请重试退出");Restore();return;}
+        exiting=true;dragYield?.Dispose();shutdown.Cancel();await StopAsync("已退出");
         readingTimer.Stop();readingIdleTimer.Stop();expiryTimer.Stop();preferenceTimer.Stop();scrollIdle.Stop();settingsWindow?.Close();audio.Dispose();tray?.ContextMenuStrip?.Dispose();tray?.Dispose();tray=null;
         shutdown.Dispose();Close();Application.Current.Shutdown();
     }
