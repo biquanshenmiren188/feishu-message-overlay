@@ -40,7 +40,13 @@ input.on('line',async line=>{
     gate=new BotGate(config.chatIds,Date.now(),config.botIds ?? []);
     autoJoined=config.autoJoined===true;
     rest=new Lark.Client({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent});
-    cardDetails=new CardDetails(id=>rest.im.message.get({path:{message_id:id}}));
+    let audit;
+    if(process.env.FEISHU_CARD_SHAPE_OUTPUT){
+      const output=process.env.FEISHU_CARD_SHAPE_OUTPUT;delete process.env.FEISHU_CARD_SHAPE_OUTPUT;
+      const {auditCard}=await import('./card-shape-audit.mjs');const {writeFile}=await import('node:fs/promises');
+      audit=async(event,detail)=>writeFile(output,JSON.stringify({checkedAt:new Date().toISOString(),event:auditCard(event),detail:auditCard(detail)}),{flag:'wx'});
+    }
+    cardDetails=new CardDetails(id=>rest.im.message.get({path:{message_id:id}}),audit);
     if(autoJoined){gate.replaceChats([]);await refreshMembership();}
     client=new Lark.WSClient({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent,autoReconnect:true,
       handshakeTimeoutMs:15000,
