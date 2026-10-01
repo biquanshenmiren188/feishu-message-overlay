@@ -9,6 +9,7 @@ public sealed class TimedMessageReader
     public string? Current=>current;
     public TimeSpan? DelayUntilNext(DateTimeOffset now)
     {var index=Array.IndexOf(ids,current);return index<0 || index+1>=ids.Length?null:due>now?due-now:TimeSpan.Zero;}
+    public TimeSpan? DelayForCurrent(DateTimeOffset now)=>current is null?null:due>now?due-now:TimeSpan.Zero;
     public void Configure(int seconds,DateTimeOffset now)
     {Seconds=Math.Clamp(seconds,1,300);due=now.AddSeconds(Seconds);}
     public void Synchronize(IEnumerable<string> messageIds,DateTimeOffset now)
