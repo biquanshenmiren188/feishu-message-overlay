@@ -12,7 +12,7 @@ files = [root / name for name in ('Directory.Build.props', '.gitignore', 'README
 for directory in roots:
     for file in directory.rglob('*'):
         relative = file.relative_to(root)
-        if file.is_file() and not excluded.intersection(relative.parts) and file.suffix in allowed:
+        if file.is_file() and "wpftmp" not in file.name and not excluded.intersection(relative.parts) and file.suffix in allowed:
             if any(word in file.name.lower() for word in ('secret', 'credential.dpapi', 'appearance.json')):
                 raise RuntimeError('Unexpected sensitive file in source selection')
             files.append(file)
