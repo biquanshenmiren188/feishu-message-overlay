@@ -12,39 +12,38 @@ public partial class MainWindow
         void Check(bool ok,string why){if(!ok)throw new InvalidOperationException(why);}
         async Task Layout(){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
         var samples=new List<object>();
-        void Sample(string stage)=>samples.Add(new{stage,at=DateTimeOffset.UtcNow,current=reader.Current,ids=displayed.Select(m=>m.Id).ToArray(),height=ActualHeight,viewport=MessageScroll.ViewportHeight,extent=MessageScroll.ExtentHeight,offset=MessageScroll.VerticalOffset,bottomRemaining=CurrentBottomRemaining(),paused=followingPaused,timer=readingTimer.IsEnabled});
-        void Add(string id,string chat,string text){var now=DateTimeOffset.UtcNow;Check(store.Add(new(id,chat,"hidden",text,now,SenderKind.Bot),chat,now,chat==pinnedChatId),"fixture add");Render();}
+        void Sample(string stage)=>samples.Add(new{stage,at=DateTimeOffset.UtcNow,current=reader.Current,preferred=FontScale.Value,effective=MessageList.FontSize,fitStatus,fitPasses,total=fitRequiredHeight,available=fitAvailableHeight,height=ActualHeight,viewport=MessageScroll.ViewportHeight,extent=MessageScroll.ExtentHeight,offset=MessageScroll.VerticalOffset,regular=displayed.Count,pinned= PinnedCard.Content is not null});
+        void Add(string id,string chat,int lines){var now=DateTimeOffset.UtcNow;Check(store.Add(new(id,chat,"hidden",string.Join('\n',Enumerable.Range(0,lines).Select(i=>"Synthetic field "+i+": readable value")),now,SenderKind.Bot),chat,now,chat==pinnedChatId),"fixture add");Render();}
         store.Start(DateTimeOffset.UtcNow);selectedChats=new(["demo","pin"],StringComparer.Ordinal);pinnedChatId="pin";pinnedLatest=null;renderedRevision=-1;
         AutoScroll.IsChecked=false;readingTimer.Stop();readingIdleTimer.Stop();followingPaused=false;
-        Width=360;initialFit=true;verifyContentFit=true;reader.Configure(5,DateTimeOffset.UtcNow);
-        Add("fit-a","demo","Short first\nSecond line");Add("fit-b","demo","Short second\nSecond line");await Layout();var shortHeight=ActualHeight;
-        Add("fit-c","demo",string.Join('\n',Enumerable.Repeat("Readable synthetic longer line https://example.com/safe?a=1",10)));await Layout();
-        Sample("new-third-long-fitted");Check(ActualHeight>shortHeight+100 && MessageScroll.ScrollableHeight<3,"new long arrival remeasures real final width and fully fits three bodies");
-        Add("pin-a","pin","Pinned synthetic\nSecond line");await Layout();Sample("pinned-plus-three");var bmp=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);bmp.Render(this);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));using(var image=File.Create(Path.Combine(output,"actual-fit-preview.png")))encoder.Save(image);Check(displayed.Count==3 && PinnedArea.Visibility==Visibility.Visible && MessageScroll.ScrollableHeight<3,"pin plus actual three bodies fit without bottom clipping");
-        Width=520;RequestContentLayout();await Layout();Sample("width-remeasured");Check(MessageScroll.ScrollableHeight<3,"width change remeasures final text wrapping");
-        // Manual-size mode: a single long body takes several pages; timer must show its bottom first.
-        store.Start(DateTimeOffset.UtcNow);pinnedChatId="";pinnedLatest=null;renderedRevision=-1;initialFit=false;Width=360;Height=420;
-        Add("page-a","demo",string.Join('\n',Enumerable.Range(0,27).Select(i=>"Synthetic readable line "+i)));
-        Add("page-b","demo","Short second body");Add("page-c","demo","Third complete body");Add("page-d","demo","Fourth body");
-        await Layout();reader.Focus("page-a",DateTimeOffset.UtcNow);ShowReadingMessage("page-a");await Layout();
-        AutoScroll.IsChecked=true;verifyReadingTimer=true;ScheduleReading();Sample("long-start");var offset=MessageScroll.VerticalOffset;
-        await Task.Delay(5250);await Layout();Sample("long-first-page");Check(reader.Current=="page-a" && MessageScroll.VerticalOffset>offset+20,"first real five-second tick scrolls within long body without skipping ID");
-        Check(CurrentBottomRemaining()<2,"long body's bottom actually shown before next dwell");
-        await Task.Delay(5250);await Layout();Sample("long-next-message");Check(reader.Current=="page-b","only after complete bottom page dwell advances ID");
-        await Task.Delay(5250);await Layout();Sample("next-third");Check(reader.Current=="page-c" && displayed.Count==3,"second real visual cycle retains three at tail");
-        AutoScroll.IsChecked=false;AutoScrollClick(this,new());var held=reader.Current;await Task.Delay(550);Check(reader.Current==held && !readingTimer.IsEnabled,"off no timer");
-        AutoScroll.IsChecked=true;reader.Focus("page-b",DateTimeOffset.UtcNow);ShowReadingMessage("page-b");await Layout();ScheduleReading();
-        MessageWheel(this,new(Mouse.PrimaryDevice,0,120){RoutedEvent=Mouse.MouseWheelEvent});Sample("manual-pause");var pausedId=reader.Current;await Layout();var resumeId=displayed.FirstOrDefault(item=>MessageList.ItemContainerGenerator.ContainerFromItem(item) is FrameworkElement el && el.TranslatePoint(new Point(),MessageScroll).Y+el.ActualHeight>0)?.Id;
-        await Task.Delay(9100);await Layout();Check(followingPaused && reader.Current==pausedId,"manual pause does not resume before ten seconds");
-        await Task.Delay(1300);await Layout();Sample("ten-second-resume");File.WriteAllText(Path.Combine(output,"resume-debug.json"),JsonSerializer.Serialize(new{pausedId,resumeId,current=reader.Current,followingPaused,idleEnabled=readingIdleTimer.IsEnabled,visible=IsVisible,automatic=AutoScroll.IsChecked,samples}));Check(!followingPaused && reader.Current==resumeId,"ten-second recovery begins full dwell from visible item");
-        await Task.Delay(5250);await Layout();Sample("resumed-full-dwell");Check(reader.Current==resumeId && MessageScroll.VerticalOffset>20 && CurrentBottomRemaining()<2,"resumed full five-second dwell advances to unread bottom page before ID");
-        await Task.Delay(5250);await Layout();Sample("resumed-next-id");Check(reader.Current!=resumeId,"resumed long body advances only after bottom page dwell");
+        Width=360;initialFit=true;verifyContentFit=true;FontScale.Value=13;reader.Configure(5,DateTimeOffset.UtcNow);
+        Add("fit-a","demo",26);Add("fit-b","demo",26);await Layout();var beforeArrival=ActualHeight;
+        Add("fit-c","demo",28);Add("pin-a","pin",3);await Layout();Sample("pin-plus-three-shrink");
+        Check(displayed.Count==3 && PinnedCard.Content is not null && MessageList.FontSize<13 && MessageList.FontSize>=MinimumFitFontSize && fitStatus=="fully_fitted","pin plus three actual long containers shrink at readable floor");
+        Check(MessageScroll.ScrollableHeight<2 && PinnedArea.ScrollableHeight<2 && ActualHeight<=CurrentWorkArea().Height+.5 && ActualHeight>beforeArrival,"new arrival final width remeasure fully shows all four bodies");
+        var bmp=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);bmp.Render(this);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));using(var image=File.Create(Path.Combine(output,"font-fit-preview.png")))encoder.Save(image);
+        var path=Path.Combine(output,"fit-preference.json");Preferences.ContractPath=path;_=Preferences.Load();SavePreferences();Check(Preferences.Load().FontSize==13 && MessageList.FontSize<13,"effective fitted size never overwrites preferred persisted size");Preferences.ContractPath=null;
+        Width=520;RequestContentLayout();await Layout();Sample("wider-restores-font");Check(fitStatus=="fully_fitted" && MessageScroll.ScrollableHeight<2 && MessageList.FontSize<=13,"width change refits without clipping");
+        initialFit=false;Height=500;RequestContentLayout();await Layout();Sample("manual-small-window");Check(fitStatus=="manual_overflow_at_minimum" && MessageList.FontSize==MinimumFitFontSize,"too-small window has explicit readable floor rather than microscopic fit");
+        // Explicitly reject automatic paging even when multiple extreme bodies cannot fit.
+        store.Start(DateTimeOffset.UtcNow);pinnedLatest=null;pinnedChatId="";renderedRevision=-1;Width=360;Height=400;initialFit=false;
+        Add("extreme-a","demo",200);Add("extreme-b","demo",200);Add("extreme-c","demo",200);await Layout();
+        reader.Focus("extreme-a",DateTimeOffset.UtcNow);ShowReadingMessage("extreme-a");await Layout();AutoScroll.IsChecked=true;verifyReadingTimer=true;ScheduleReading();Sample("extreme-start");
+        Check(fitStatus=="manual_overflow_at_minimum" && MessageList.FontSize==MinimumFitFontSize && fitPasses<=9,"extreme input remains bounded and explicitly cannot fit readably");
+        var offset=MessageScroll.VerticalOffset;await Task.Delay(2200);await Layout();Check(reader.Current=="extreme-a" && Math.Abs(MessageScroll.VerticalOffset-offset)<.5,"no intra-message page movement before dwell");
+        await Task.Delay(3050);await Layout();Sample("extreme-next-ID-only");Check(reader.Current=="extreme-b","five-second timer advances only to next message, never a page within same message");
+        reader.Focus("extreme-c",DateTimeOffset.UtcNow);ShowReadingMessage("extreme-c");await Layout();ScheduleReading();offset=MessageScroll.VerticalOffset;
+        Check(!readingTimer.IsEnabled,"last extreme message has no page timer");await Task.Delay(600);Check(Math.Abs(MessageScroll.VerticalOffset-offset)<.5,"tail never auto-pages");
+        MessageScroll.ScrollToEnd();await Layout();Check(CurrentBottomRemaining()<2,"manual scroll still reaches complete extreme body");
         readingTimer.Stop();AutoScroll.IsChecked=false;verifyReadingTimer=false;
-        // Overscreen arrival remains readable at work-area clamp; tail keeps three containers.
-        initialFit=true;Width=360;Add("huge-arrival","demo",string.Join('\n',Enumerable.Repeat("Long synthetic body",100)));reader.Focus("huge-arrival",DateTimeOffset.UtcNow);ShowReadingMessage("huge-arrival");await Layout();
-        Sample("overscreen-tail");Check(ActualHeight<=CurrentWorkArea().Height+.5 && displayed.Count==3 && MessageScroll.ScrollableHeight>0,"overscreen content clamps height but remains scrollable with last three");
-        MessageScroll.ScrollToEnd();await Layout();Check(CurrentBottomRemaining()<2,"overscreen last body can be read fully to bottom");
-        File.WriteAllText(Path.Combine(output,"layout-reading-runtime.json"),JsonSerializer.Serialize(new{passed=true,samples,realDispatcherTimer=true,seconds=5,newArrivalMeasured=true,pinnedAndRegularMeasured=true,manualIdleSeconds=10}));
-        verifyContentFit=false;initialFit=false;readingIdleTimer.Stop();
+        // Short ordinary queue, real dwell and manual ten-second recovery retained.
+        store.Start(DateTimeOffset.UtcNow);renderedRevision=-1;initialFit=true;Width=360;
+        for(var i=0;i<5;i++)Add("short-"+i,"demo",2);await Layout();reader.Focus("short-0",DateTimeOffset.UtcNow);ShowReadingMessage("short-0");await Layout();AutoScroll.IsChecked=true;verifyReadingTimer=true;ScheduleReading();
+        await Task.Delay(5250);await Layout();Check(reader.Current=="short-1" && displayed.Count==3,"real dwell advances regular range");
+        MessageWheel(this,new(Mouse.PrimaryDevice,0,120){RoutedEvent=Mouse.MouseWheelEvent});await Layout();var paused=reader.Current;
+        await Task.Delay(9100);Check(followingPaused && reader.Current==paused,"manual pause lasts ten seconds");await Task.Delay(1300);await Layout();Check(!followingPaused,"manual idle resumes");var resumed=reader.Current;
+        await Task.Delay(5250);await Layout();Check(reader.Current!=resumed && displayed.Count==3,"resume starts full dwell before next message");Sample("short-after-resume");
+        readingTimer.Stop();readingIdleTimer.Stop();AutoScroll.IsChecked=false;verifyReadingTimer=false;verifyContentFit=false;initialFit=false;
+        File.WriteAllText(Path.Combine(output,"font-fit-runtime.json"),JsonSerializer.Serialize(new{passed=true,minimumFont=MinimumFitFontSize,maximumMeasurementPasses=9,automaticPaging=false,preferredFontPreserved=true,samples}));
     }
 }
