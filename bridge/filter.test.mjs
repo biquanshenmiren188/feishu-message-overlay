@@ -34,3 +34,11 @@ test('bot allowlist is identity based and checked before content',()=>{
   Object.defineProperty(data.message,'content',{get(){throw new Error('do not access rejected bot body')}});assert.equal(gate.accept(data,now+2),null);
 });
 test('recovery advances baseline so replay cannot alarm',()=>{const gate=new BotGate(['oc_selected'],now);gate.resume(now+10);assert.equal(gate.accept(fixture(),now+11),null);});
+
+test('verified membership replacement adds new joined group and removes departed group before content',()=>{
+ const gate=new BotGate(['oc_selected'],now);gate.replaceChats(['oc_new']);
+ const old=fixture();Object.defineProperty(old.message,'content',{get(){throw new Error('not authorized')}});assert.equal(gate.accept(old,now+2),null);
+ const added=fixture();added.message.chat_id='oc_new';assert.ok(gate.accept(added,now+2));
+ gate.replaceChats([]);const removed=fixture();removed.message.chat_id='oc_new';Object.defineProperty(removed.message,'content',{get(){throw new Error('not authorized')}});assert.equal(gate.accept(removed,now+3),null);
+ assert.throws(()=>gate.replaceChats(['invalid']));
+});
