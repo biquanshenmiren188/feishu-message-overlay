@@ -23,8 +23,20 @@ if($sdkPackage.main -eq './lib/index.js'){
   if(Test-Path -LiteralPath $unused){Remove-Item -LiteralPath $unused -Recurse -Force}
  }
 }
-$process = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--smoke-test', ('"' + (Join-Path $root 'artifacts/verification') + '"')) -WindowStyle Hidden -PassThru -Wait
-if ($process.ExitCode -ne 0) { throw 'WPF runtime smoke failed' }
+$smokeDirectory=Join-Path $root 'artifacts/verification/ci-smoke'
+New-Item -ItemType Directory -Path $smokeDirectory -Force | Out-Null
+$smokeReport=Join-Path $smokeDirectory 'ui-smoke.txt'
+# Do not mistake a stale passing report for this process's result.
+if(Test-Path -LiteralPath $smokeReport){Remove-Item -LiteralPath $smokeReport}
+$process = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--smoke-test', ('"' + $smokeDirectory + '"')) -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput (Join-Path $smokeDirectory 'stdout.txt') -RedirectStandardError (Join-Path $smokeDirectory 'stderr.txt')
+if ($process.ExitCode -ne 0) {
+ foreach($report in @('ui-smoke.txt','stderr.txt','stdout.txt')){
+  $reportPath=Join-Path $smokeDirectory $report
+  if(Test-Path -LiteralPath $reportPath){Write-Output $report;Get-Content -LiteralPath $reportPath}
+ }
+ throw "WPF runtime smoke failed (exit $($process.ExitCode)); see artifacts/verification/ci-smoke"
+}
+if(!(Test-Path -LiteralPath $smokeReport) -or !(Get-Content -LiteralPath $smokeReport -Raw).StartsWith('PASS ')){throw 'WPF smoke did not produce its passing report'}
 $diagnostic = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--diagnostic-contract-tests', ('"' + (Join-Path $root 'artifacts/verification/diagnostic-contract.txt') + '"')) -WindowStyle Hidden -PassThru -Wait
 if ($diagnostic.ExitCode -ne 0) { throw 'Diagnostic contracts failed' }
 # No installation, signing, certificate trust, startup registration, or system permissions.
