@@ -18,7 +18,7 @@ public partial class MainWindow
             try
             {
                 UpdateLayout();
-                if(initialFit && (!App.SmokeMode || verifyContentFit))MeasureContentHeight();
+                if(!App.SmokeMode || verifyContentFit)MeasureContentHeight();
                 UpdateLayout();
                 if(alignAfterLayout is {} id)
                 {
@@ -43,19 +43,54 @@ public partial class MainWindow
         presenter.Measure(new Size(Math.Max(1,width),double.PositiveInfinity));
         return presenter.DesiredSize.Height;
     }
+    private const double MinimumFitFontSize=10.5;
+    private string fitStatus="empty";
+    private double fitRequiredHeight,fitAvailableHeight;
+    private int fitPasses;
+    private string? lastFitKey;
     private void MeasureContentHeight()
     {
         var work=CurrentWorkArea();UpdateLayout();
         var width=MessageScroll.ViewportWidth>0?MessageScroll.ViewportWidth:Math.Max(1,ActualWidth-11);
-        var ordinary=displayed.Sum(item=>MeasureCard(item,width));
-        var pin=pinnedLatest is null || PinnedArea.Visibility!=Visibility.Visible?0:MeasureCard(pinnedLatest,Math.Max(1,PinnedArea.ActualWidth));
-        // Extremely long pinned content has its own scroll viewport; never compress ordinary text.
-        var pinLimit=Math.Max(32,(work.Height-36)*.4);
-        PinnedArea.MaxHeight=Math.Min(pin,pinLimit);
-        var desired=ordinary+Math.Min(pin,pinLimit)+35+(pin>0?4:0);
-        fittingWindow=true;
-        try{Height=Math.Clamp(desired,MinHeight,Math.Max(MinHeight,work.Height));}
-        finally{fittingWindow=false;}
+        var pinWidth=Math.Max(1,PinnedArea.ActualWidth>0?PinnedArea.ActualWidth:width);
+        var limit=initialFit?work.Height:Math.Max(MinHeight,ActualHeight);
+        var preferred=FontScale.Value;fitPasses=0;
+        var key=string.Join("|",displayed.Select(m=>m.Id))+"|"+pinnedLatest?.Id+"|"+width.ToString("F2")+"|"+pinWidth.ToString("F2")+"|"+preferred+"|"+MessageList.FontFamily.Source+"|"+limit+"|"+initialFit;
+        if(key==lastFitKey)return;
+        lastFitKey=key;
+        (double regular,double pinned,double total) Measure(double size)
+        {
+            MessageList.FontSize=size;fitPasses++;
+            var regular=displayed.Sum(item=>MeasureCard(item,width));
+            var pinned=pinnedLatest is null || PinnedArea.Visibility!=Visibility.Visible?0:MeasureCard(pinnedLatest,pinWidth);
+            return(regular,pinned,regular+pinned+36+(pinned>0?4:0));
+        }
+        var measured=Measure(preferred);
+        if(measured.total>limit+.5 && displayed.Count+(pinnedLatest is null?0:1)>0)
+        {
+            var lower=Math.Min(MinimumFitFontSize,preferred);var upper=preferred;
+            measured=Measure(lower);
+            if(measured.total<=limit+.5)
+            {
+                for(var pass=0;pass<6;pass++)
+                {
+                    var middle=(lower+upper)/2;var trial=Measure(middle);
+                    if(trial.total<=limit+.5)lower=middle;else upper=middle;
+                }
+                measured=Measure(lower);
+            }
+        }
+        fitRequiredHeight=measured.total;fitAvailableHeight=limit;
+        fitStatus=displayed.Count==0 && pinnedLatest is null?"empty":measured.total<=limit+.5?"fully_fitted":"manual_overflow_at_minimum";
+        var pinLimit=fitStatus=="manual_overflow_at_minimum"?Math.Max(32,(limit-40)*.4):Math.Max(1,measured.pinned);
+        PinnedArea.MaxHeight=Math.Min(measured.pinned,pinLimit);
+        if(initialFit)
+        {
+            fittingWindow=true;
+            try{Height=Math.Clamp(measured.total,MinHeight,Math.Max(MinHeight,work.Height));}
+            finally{fittingWindow=false;}
+        }
+        FontScale.ToolTip=$"设定字号 {preferred:0.#}，当前显示 {MessageList.FontSize:0.##}；最低 {MinimumFitFontSize}"+(fitStatus=="manual_overflow_at_minimum"?"。内容超出屏幕，请手动查看；不会自动分段翻页。":"。按当前内容自动缩小显示，设定字号保留。");
     }
     private double CurrentBottomRemaining()
     {
@@ -67,19 +102,8 @@ public partial class MainWindow
     {
         readingTimer.Stop();
         if(contentLayoutPending || followingPaused || !IsVisible || AutoScroll.IsChecked!=true){ScheduleReading();return;}
-        UpdateLayout();var remaining=CurrentBottomRemaining();var now=DateTimeOffset.UtcNow;
-        if(remaining>1 && MessageScroll.VerticalOffset<MessageScroll.ScrollableHeight-.5)
-        {
-            // Read each viewport of a long body for a full dwell interval before advancing its ID.
-            synchronizingScroll=true;
-            MessageScroll.ScrollToVerticalOffset(MessageScroll.VerticalOffset+Math.Min(remaining,Math.Max(20,MessageScroll.ViewportHeight-40)));
-            UpdateLayout();synchronizingScroll=false;reader.Focus(reader.Current,now);
-        }
-        else
-        {
-            var id=reader.Advance(now,true,false);
-            if(id is not null)ShowReadingMessage(id);
-        }
+        var id=reader.Advance(DateTimeOffset.UtcNow,true,false);
+        if(id is not null)ShowReadingMessage(id);
         ScheduleReading();
     }
 }
