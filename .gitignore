@@ -9,3 +9,8 @@ artifacts/
 node_modules/
 .npm-cache/
 .library-helper*/
+.library-*/
+__pycache__/
+*.py[cod]
+*.dpapi
+storage-location.json

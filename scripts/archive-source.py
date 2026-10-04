@@ -5,14 +5,14 @@ import json
 import zipfile
 
 root = Path(__file__).resolve().parent.parent
-roots = [root / name for name in ('src', 'tests', 'scripts', 'bridge', '.github')]
-allowed = {'.cs', '.csproj', '.xaml', '.manifest', '.ps1', '.py', '.mjs', '.json', '.yml', '.md'}
+roots = [root / name for name in ('src', 'tests', 'scripts', 'bridge', '.github', 'weixin', 'web')]
+allowed = {'.cs', '.csproj', '.xaml', '.manifest', '.ps1', '.py', '.mjs', '.js', '.html', '.css', '.json', '.yml', '.md', '.sh', '.service', '.conf'}
 excluded = {'bin', 'obj', 'node_modules', '.npm-cache', '__pycache__'}
 files = [root / name for name in ('Directory.Build.props', '.gitignore', 'README.md', 'SOURCE-VALIDATION.md')]
 for directory in roots:
     for file in directory.rglob('*'):
         relative = file.relative_to(root)
-        if file.is_file() and not excluded.intersection(relative.parts) and file.suffix in allowed:
+        if file.is_file() and "wpftmp" not in file.name and not excluded.intersection(relative.parts) and file.suffix in allowed:
             if any(word in file.name.lower() for word in ('secret', 'credential.dpapi', 'appearance.json')):
                 raise RuntimeError('Unexpected sensitive file in source selection')
             files.append(file)

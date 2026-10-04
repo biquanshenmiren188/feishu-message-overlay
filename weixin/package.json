@@ -1,0 +1,9 @@
+{
+  "name": "feishu-weixin-isolated-preparation",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "openclaw": "2026.8.1",
+    "@tencent-weixin/openclaw-weixin": "2.4.9"
+  }
+}

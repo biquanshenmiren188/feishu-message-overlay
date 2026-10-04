@@ -1,0 +1,6 @@
+import fs from 'node:fs';import path from 'node:path';import net from 'node:net';
+const root=process.argv[2],output=process.argv[3],action=process.argv[4]||'status';
+let result={reachable:false};
+try{const config=JSON.parse(fs.readFileSync(path.join(root,'gateway.json'),'utf8'));const reply=await fetch('http://127.0.0.1:18882/'+action,{method:action==='status'?'GET':'POST',headers:{Authorization:'Bearer '+config.gateway.auth.token},signal:AbortSignal.timeout(4000)});const body=await reply.json();result={reachable:reply.ok};for(const key of ['bound','contextReady','echoReplies','forwarded','failed','enabled','channelConnected','lastPollAt'])if(typeof body[key]==='boolean'||typeof body[key]==='number')result[key]=body[key];result.gatewayPortListening=await new Promise(resolve=>{const s=net.connect({host:'127.0.0.1',port:18881});s.setTimeout(1500);s.once('connect',()=>{s.destroy();resolve(true)});s.once('error',()=>resolve(false));s.once('timeout',()=>{s.destroy();resolve(false)});});}catch{result={reachable:false};}
+if(action==='enable'&&result.reachable&&result.enabled===true)fs.writeFileSync(path.join(root,'forwarding.json'),JSON.stringify({enabled:true,echoVerified:true}),{mode:0o600});
+fs.writeFileSync(output,JSON.stringify(result));

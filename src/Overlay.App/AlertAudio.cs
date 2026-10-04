@@ -10,7 +10,8 @@ internal sealed class AlertAudio : IDisposable
     [DllImport("winmm.dll")] private static extern uint waveOutGetNumDevs();
     internal static bool PlayWave(string path)=>IsSupported(path) && PlaySound(System.IO.Path.GetFullPath(path),0,0x20000|1|2);
     internal static bool HasOutputDevice=>waveOutGetNumDevs()>0;
-    public string PathName {get;set;}="";
+    private string pathName="";
+    public string PathName {get=>pathName;set=>pathName=LocalStorage.ResolveExistingFile(value);}
     internal bool? LastWaveAccepted {get;private set;}
     public static bool IsSupported(string path)
     {

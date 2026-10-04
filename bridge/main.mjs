@@ -2,15 +2,34 @@ for(const method of ['log','info','warn','error','debug','trace'])console[method
 const Lark=await import('@larksuiteoapi/node-sdk');
 import { createInterface } from 'node:readline';
 import { BotGate } from './filter.mjs';
+import { CardDetails } from './card-content.mjs';
 // stdout is private IPC to the desktop app, never a file or console log.
 const silent = {error(){},warn(){},info(){},debug(){},trace(){}};
-let client, gate, configured=false, blocked=false;
+let client, gate, configured=false, blocked=false, membershipTimer, rest, membershipBusy, autoJoined=false, membershipDelay=60000,cardDetails;
+async function refreshMembership(){
+ if(membershipBusy)return membershipBusy;
+ membershipBusy=(async()=>{
+  try{
+   let token,complete=false;const ids=[],groups=[];
+   for(let page=0;page<20;page++){
+    const response=await rest.im.chat.list({params:{page_size:100,...(token?{page_token:token}:{})}});
+    if(response.code!==0)throw new Error();
+    for(const item of response.data?.items??[])if(typeof item.chat_id==='string' && /^oc_[a-zA-Z0-9_-]+$/.test(item.chat_id)){ids.push(item.chat_id);groups.push({chatId:item.chat_id,name:typeof item.name==='string'?item.name.slice(0,256):item.chat_id});}
+    if(!response.data?.has_more){complete=true;break;}token=response.data.page_token;if(!token)break;
+   }
+   if(!complete)throw new Error();gate.replaceChats([...new Set(ids)]);membershipDelay=60000;
+   emit({kind:'membership',state:'verified',chatIds:[...gate.chatIds],groups});
+  }catch{gate.replaceChats([]);membershipDelay=Math.min(300000,membershipDelay*2);emit({kind:'membership',state:'discovery_failed',chatIds:[]});}
+ })();
+ try{await membershipBusy;}finally{membershipBusy=null;clearTimeout(membershipTimer);membershipTimer=setTimeout(refreshMembership,membershipDelay);}
+}
+
 function emit(record) { if(blocked) return false; blocked=!process.stdout.write(JSON.stringify(record)+'\n'); return true; }
 process.stdout.on('drain',()=>{blocked=false;});
 function fail(reason='connection_failed'){ emit({kind:'status',state:reason==='dedup_capacity'?'protected':'failed'}); client?.close({force:true}); process.exitCode=1; setTimeout(()=>process.exit(1),100); }
 process.on('uncaughtException',fail); process.on('unhandledRejection',fail);
 const input=createInterface({input:process.stdin,crlfDelay:Infinity});
-input.on('close',()=>{client?.close();process.exit(0);});
+input.on('close',()=>{clearTimeout(membershipTimer);client?.close();process.exit(0);});
 input.on('line',async line=>{
   if(configured){ if(line==='stop'){client?.close();process.exit(0);} return; }
   configured=true;
@@ -19,6 +38,16 @@ input.on('line',async line=>{
     const config=JSON.parse(line.replace(/^\uFEFF/,'')); line='';
     if(typeof config.appId!=='string' || !/^cli_[a-zA-Z0-9]+$/.test(config.appId) || typeof config.appSecret!=='string' || !config.appSecret) throw new Error('invalid_config');
     gate=new BotGate(config.chatIds,Date.now(),config.botIds ?? []);
+    autoJoined=config.autoJoined===true;
+    rest=new Lark.Client({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent});
+    let audit;
+    if(process.env.FEISHU_CARD_SHAPE_OUTPUT){
+      const output=process.env.FEISHU_CARD_SHAPE_OUTPUT;delete process.env.FEISHU_CARD_SHAPE_OUTPUT;
+      const {auditCard}=await import('./card-shape-audit.mjs');const {writeFile}=await import('node:fs/promises');
+      audit=async(event,detail)=>writeFile(output,JSON.stringify({checkedAt:new Date().toISOString(),event:auditCard(event),detail:auditCard(detail)}),{flag:'wx'});
+    }
+    cardDetails=new CardDetails(id=>rest.im.message.get({path:{message_id:id}}),audit);
+    if(autoJoined){gate.replaceChats([]);await refreshMembership();}
     client=new Lark.WSClient({appId:config.appId,appSecret:config.appSecret,domain:Lark.Domain.Feishu,logger:silent,autoReconnect:true,
       handshakeTimeoutMs:15000,
       onReady:()=>emit({kind:'status',state:'connected'}),
@@ -28,7 +57,7 @@ input.on('line',async line=>{
     config.appSecret='';
     await client.start({eventDispatcher:new Lark.EventDispatcher({logger:silent}).register({
       'im.message.receive_v1':async data=>{
-        try {const event=gate.accept(data); if(event && !emit({kind:'event',payload:event})) fail();}
+        try {const event=gate.accept(data); if(event){if(event.event.message.message_type==='interactive'){const meta=await cardDetails.resolve(event);if(!gate.chatIds.has(event.event.message.chat_id))return;emit({kind:'card_meta',meta});}if(!emit({kind:'event',payload:event}))fail();}}
         catch(error) { fail(error?.message==='dedup_capacity'?'dedup_capacity':'connection_failed'); }
       }
     })});

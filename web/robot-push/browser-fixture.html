@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Robot push isolated fixture</title>
+<style>body{margin:0;background:#eef1f4;font:13px monospace;display:flex;gap:16px;padding:8px}iframe{width:390px;height:844px;border:0;flex:none}pre{white-space:pre-wrap;width:440px;overflow-wrap:anywhere}</style>
+<iframe id="app" src="./index.html?mode=demo" title="390px synthetic mobile preview"></iframe><pre id="result">running</pre>
+<script>
+const expectedWidth=Number(new URLSearchParams(location.search).get('width'))||390;
+document.getElementById('app').style.width=expectedWidth+'px';
+const results={fixture:'synthetic-browser-virtual-clock',expectedWidth,samples:[],checks:[]};
+const check=(name,ok)=>results.checks.push({name,passed:!!ok});
+function report(){document.getElementById('result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=results.checks.every(c=>c.passed)?'true':'false';}
+document.getElementById('app').addEventListener('load',()=>{
+ const frame=document.getElementById('app'),win=frame.contentWindow,doc=frame.contentDocument,board=doc.getElementById('board'),pin=doc.getElementById('pinned'),auto=doc.getElementById('auto');
+ const sample=label=>{const top=board.getBoundingClientRect().top+pin.offsetHeight;const item=[...doc.querySelectorAll('#feed .message')].find(e=>e.getBoundingClientRect().bottom>top+3);const value={label,offset:Math.round(board.scrollTop),visibleId:item?.dataset.id,titleY:Math.round((item?.getBoundingClientRect().top??0)-top),extent:board.scrollHeight,viewport:board.clientHeight};results.samples.push(value);report();return value;};
+ check('exactRequestedViewport',win.innerWidth===expectedWidth);check('noHorizontalOverflow',doc.documentElement.scrollWidth<=expectedWidth);check('eightOrdinaryAndOnePin',doc.querySelectorAll('#feed .message').length===8&&pin.children.length===1);check('safeUnchangedLink',doc.querySelector('.actions a').getAttribute('href')==='https://example.invalid/radar/?combo=SF.DEMO.A.B&q=%E6%BC%94%E7%A4%BA&tab=SF');
+ auto.checked=false;auto.dispatchEvent(new win.Event('change'));const a=sample('off0');
+ setTimeout(()=>{const b=sample('off1s');check('offDoesNotScroll',a.offset===b.offset);auto.checked=true;auto.dispatchEvent(new win.Event('change'));},1000);
+ setTimeout(()=>{const b=sample('on5s');check('firstTimerVisualAdvance',b.offset>a.offset&&b.visibleId!=='fictional-1');check('firstHeadingNotOvershot',b.titleY>=-4);},6200);
+ setTimeout(()=>{const b=sample('on10s');const previous=results.samples.find(x=>x.label==='on5s');check('secondTimerVisualAdvance',b.offset>previous.offset&&b.visibleId!==previous.visibleId);check('secondHeadingNotOvershot',b.titleY>=-4);board.dispatchEvent(new win.WheelEvent('wheel',{deltaY:40,bubbles:true}));},11200);
+ setTimeout(()=>{const b=sample('manual9s');const previous=results.samples.find(x=>x.label==='on10s');check('manualNineSecondsDoesNotAdvance',b.offset===previous.offset);},20200);
+ setTimeout(()=>sample('manual10sResumeFullDwell'),21400);
+ setTimeout(()=>{const b=sample('manualThenFullFiveSeconds');const previous=results.samples.find(x=>x.label==='on10s');check('manualTenThenFullDwellAdvances',b.offset>previous.offset);auto.checked=false;auto.dispatchEvent(new win.Event('change'));win.prompt=()=> '7';doc.getElementById('seconds').click();check('secondsChangedViaControl',doc.getElementById('seconds').textContent==='7s');frame.addEventListener('load',()=>{check('settingsReloadSeconds',frame.contentDocument.getElementById('seconds').textContent==='7s');check('settingsReloadAutoOff',!frame.contentDocument.getElementById('auto').checked);report();},{once:true});frame.src='./index.html?mode=demo';report();},26700);
+},{once:true});
+</script>

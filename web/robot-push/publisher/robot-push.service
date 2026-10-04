@@ -1,0 +1,27 @@
+[Unit]
+Description=Authenticated robot message publisher
+After=network.target
+
+[Service]
+Type=simple
+User=robot-push
+Group=robot-push
+ExecStart=/usr/bin/python3 /opt/robot-push/server.py
+Restart=on-failure
+RestartSec=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/robot-push
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+MemoryMax=96M
+TasksMax=8
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

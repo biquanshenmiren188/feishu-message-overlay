@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {ForwardOutbox} from './forward-outbox.mjs';
+const q=new ForwardOutbox();const now=1000000;
+const m={id:'fictional-1',sourceId:'fictional-group',senderKind:'bot',sentAt:now+1,text:'虚构测试'};
+assert.equal(q.offer(m,now+2),'filtered');assert.equal(q.count,0);
+q.configure({enabled:true,groups:['fictional-group']},now);
+assert.equal(q.offer({...m,sourceId:'unapproved'},now+2),'filtered');
+assert.equal(q.offer({...m,senderKind:'person'},now+2),'filtered');
+assert.equal(q.offer({...m,sentAt:now-1},now+2),'stale');
+assert.equal(q.offer(m,now+2),'queued');assert.equal(q.offer(m,now+3),'duplicate');
+for(let i=2;i<=64;i++)assert.equal(q.offer({...m,id:`fictional-${i}`},now+3),'queued');
+assert.equal(q.count,64);assert.equal(q.offer({...m,id:'overflow'},now+3),'full');
+assert.equal(q.take(now+4).id,'fictional-1');
+assert.equal(q.take(now+120002),null);
+q.configure({enabled:true,groups:[]},now+120002);assert.equal(q.offer({...m,sentAt:now+120003},now+120004),'filtered');
+q.stop();assert.equal(q.count,0);
+console.log(JSON.stringify({defaultOff:true,scopeBeforeBody:true,duplicateFiltered:true,capacity:64,ttlSeconds:120,membershipRemovalClears:true,networkRequests:0,productionHookInstalled:false}));

@@ -1,9 +1,9 @@
-namespace Overlay.Core;
+﻿namespace Overlay.Core;
 
 public enum SenderKind { Unknown, Person, Bot }
 public sealed class DedupCapacityException : Exception { }
 public record IncomingMessage(string Id, string SourceId, string Sender, string Text, DateTimeOffset SentAt,
-    SenderKind Kind = SenderKind.Unknown, string SenderId = "");
+    SenderKind Kind = SenderKind.Unknown, string SenderId = "", string MessageType = "text", MessageCard? Card = null);
 public interface IMessageSource : IAsyncDisposable
 {
     string Mode { get; }
@@ -20,15 +20,21 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
     private readonly TimeSpan ttl = lifetime ?? TimeSpan.FromMinutes(30);
     private readonly int limit = Math.Clamp(capacity, 1, 1000);
     private DateTimeOffset cutoff = DateTimeOffset.MinValue;
+    public long Revision {get;private set;}
     public IReadOnlyList<IncomingMessage> Items => messages.ToArray();
     public void Start(DateTimeOffset now) { Clear(now); }
-    public void Clear(DateTimeOffset now) { messages.Clear(); seen.Clear(); cutoff = now; }
+    public void Clear(DateTimeOffset now) { messages.Clear(); seen.Clear(); cutoff = now; Revision++; }
     public void Prune(DateTimeOffset now)
     {
-        messages.RemoveAll(m => now - m.SentAt >= ttl);
+        if(messages.RemoveAll(m => now - m.SentAt >= ttl)>0)Revision++;
         foreach (var key in seen.Where(p => now - p.Value >= ttl).Select(p => p.Key).ToArray()) seen.Remove(key);
     }
-    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now)
+    public void KeepLatest(string groupId)
+    {
+        var latest=messages.Where(m=>m.SourceId==groupId).OrderByDescending(m=>m.SentAt).FirstOrDefault();
+        if(latest is not null && messages.RemoveAll(m=>m.SourceId==groupId && m.Id!=latest.Id)>0)Revision++;
+    }
+    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now,bool latestOnly=false)
     {
         Prune(now);
         if (message.SourceId != selectedSource || message.Kind != SenderKind.Bot || string.IsNullOrWhiteSpace(message.Id) ||
@@ -40,7 +46,9 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
         // Refuse excess traffic until expiry instead of violating bounded deduplication.
         if (seen.Count >= limit * 10) throw new DedupCapacityException();
         seen[key] = now;
+        if(latestOnly)messages.RemoveAll(m=>m.SourceId==selectedSource);
         messages.Insert(0, message with { Sender = Bound(message.Sender, 256), Text = Bound(message.Text, 16000) });
+        Revision++;
         if (messages.Count > limit) messages.RemoveAt(messages.Count - 1);
         return true;
     }

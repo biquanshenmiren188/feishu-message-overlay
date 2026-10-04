@@ -26,8 +26,11 @@ public sealed class BotEventFilter(IEnumerable<string> selectedChatIds, IEnumera
             if (bots.Count > 0 && !bots.Contains(senderId)) return null;
             if (!long.TryParse(Get(message, "create_time"), out var milliseconds)) return null;
             var time = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
-            var text = Extract(Get(message, "message_type"), Get(message, "content"));
-            return new(id, chatId, "机器人 · " + senderId, text, time, SenderKind.Bot, senderId);
+            var type=Get(message,"message_type");
+            var content=Get(message,"content");
+            var card=type=="interactive"?MessageCardParser.Parse(content):null;
+            var text=card is null?Extract(type,content):string.Join('\n',new[]{card.Title,card.Body,string.Join('\n',card.Buttons.Select(b=>b.Label+(b.Url.Length>0?" "+b.Url:"")))}.Where(s=>s.Length>0));
+            return new(id, chatId, "机器人 · " + senderId, text, time, SenderKind.Bot, senderId,type,card);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException) { return null; }
     }
@@ -60,7 +63,6 @@ public sealed class BotEventFilter(IEnumerable<string> selectedChatIds, IEnumera
             Visit(document.RootElement);
             var result = string.Join("\n", lines);
             if (length >= 16000) result += "\n[本软件已限制显示长度]";
-            if (type == "interactive") result += "\n[卡片仅显示接口提供的文字；附件、图片和交互组件未读取]";
             return string.IsNullOrWhiteSpace(result) ? "[接口未提供可读文字]" : result;
         }
         catch (JsonException) { return "[正文格式无法解析；未读取附件]"; }
