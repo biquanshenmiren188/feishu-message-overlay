@@ -10,7 +10,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 URL = 'https://basispulse.yielding.pro/openapi/v1/opportunities'
-INTERVAL = 3.5
+INTERVAL = 5
 MAX_BYTES = 4 * 1024 * 1024
 CARD_KEYS = ('id longMarketKey shortMarketKey spanId asset pair strategy trigger longMarket shortMarket rawBps residualBps indexBps entryNetBps funding8hBps enteredAt updatedAt validUntil evaluation radarUrl radarExact').split()
 DETAIL_KEYS = ('early windowSeconds windowEnd validSeconds okSeconds longestUnknown netBps marketBps p75Bps indexBps spotIndex transferText').split()
@@ -109,7 +109,7 @@ def main():
                 status = 'reconnecting'
                 delay = retry_delay(failures)
             write_cache(path, {'status': status, 'receivedAt': received, 'snapshot': snapshot})
-            time.sleep(delay)  # One process, no bursts; at most 18 requests in any minute.
+            time.sleep(delay)  # One process, no bursts; at most 12 requests in any minute.
 
 
 if __name__ == '__main__':

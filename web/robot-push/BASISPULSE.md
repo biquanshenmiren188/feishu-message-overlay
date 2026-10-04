@@ -4,7 +4,7 @@
 
 ## 数据链路
 
-独立 `basispulse.service` 使用提供方批准的 `https://basispulse.yielding.pro/openapi/v1/opportunities`，每次请求结束后等待 3.5 秒，上限 18 次/分钟，低于提供方 20 次/分钟限制。`flock` 防止重复进程。全部访客读取同一份原子缓存，不会触发额外上游请求。
+独立 `basispulse.service` 使用提供方批准的 `https://basispulse.yielding.pro/openapi/v1/opportunities`，每次请求结束后等待 5 秒，上限 12 次/分钟，低于提供方 20 次/分钟限制。`flock` 防止重复进程。全部访客读取同一份原子缓存，不会触发额外上游请求。
 
 Cloudflare 服务令牌只放 `/etc/robot-push/basispulse.json`，root:robot-push、0640；没有写进仓库、网页、URL 或响应。HTTP 重定向不跟随，避免把鉴权头转发到其他目的地。前端读取同源 `/radar/robot-push/basispulse.json`，仍受网站原有 Cloudflare Access 保护；没有新增绕过规则。缓存采用字段白名单，不转发鉴权头或原始错误响应。
 
@@ -18,7 +18,7 @@ Cloudflare 服务令牌只放 `/etc/robot-push/basispulse.json`，root:robot-pus
 - 币种、方向、两边资金费及周期、成交额、持仓、净收益/盘口差/P75/指数差、充提原文和源更新时间均来自接口。bps 转百分比除以 100；资金费小数转百分比乘以 100，保留四位小数。未知显示横杠，现货不显示合约持仓。
 - 手机完整展开，无卡片分页或折叠。可搜索币种/交易所，跳转真实雷达链接。
 - 同步的是接口数据和卡片生命周期，不是嵌入源站。源站专用 Astro/GC 交易复制协议不在提供接口中，没有自行生成交易指令；可由“查看原站”使用原站功能。
-- 源站 SSE 每秒更新；此授权接口按 3.5 秒拉取，网页每秒读缓存，正常情况下可能相差约一个到两个刷新周期，不承诺逐秒一致。
+- 源站 SSE 每秒更新；此授权接口按 5 秒拉取，网页每秒读缓存，正常情况下可能相差约一个到两个刷新周期，不承诺逐秒一致。
 
 ## 验证与发布
 
