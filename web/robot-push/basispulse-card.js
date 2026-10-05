@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005nospot1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005nospot1';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005nospot2';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005nospot2';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -43,7 +43,7 @@ export function cardNode(c, matrix) {
   card.append(notice);
   const transfer=el('section','bp-transfer'), heading=el('div','bp-transfer-heading');
   heading.append(el('strong','','现货充提'),el('span','','充 / 提 · ✓开 ×关 ?未知 —无数据'));
-  const noSpot=matrix.rows.filter(r=>r.noSpot).map(r=>r.exchange).join(' / ');if(noSpot)heading.append(el('span','',`${noSpot} 无现货`));
+  const noSpot=matrix.rows.filter(r=>r.noSpot).map(r=>r.exchange).join(' / ');if(noSpot)heading.append(el('span','','无现货'));
   transfer.append(heading);const table=el('table','bp-transfer-table');table.setAttribute('aria-label','链与充提状态');
   const thead=el('thead'),tr=el('tr');tr.append(el('th','','链'));for(const chain of matrix.chains)tr.append(el('th','',chain));thead.append(tr);table.append(thead);
   const tbody=el('tbody'),symbols={open:'✓',closed:'×',unknown:'?',none:'—',supported:'支持',delayed:'延迟',congested:'拥堵',restricted:'受限'},labels={open:'开放',closed:'关闭',unknown:'未知',none:'无现货',supported:'仅支持，未确认开放',delayed:'延迟',congested:'拥堵',restricted:'受限'};

@@ -1,6 +1,6 @@
-import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005nospot1';
-import { cardNode } from './basispulse-card.js?v=20261005nospot1';
-import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005nospot1';
+import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005nospot2';
+import { cardNode } from './basispulse-card.js?v=20261005nospot2';
+import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005nospot2';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
