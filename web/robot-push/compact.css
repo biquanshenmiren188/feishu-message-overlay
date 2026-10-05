@@ -197,3 +197,29 @@
  .split-mode .bp-leg .bp-leg-stats,.split-mode .bp-spot-leg .bp-leg-stats{padding-top:3px;gap:2px}
  .split-mode .bp-leg .bp-leg-stats .bp-metric,.split-mode .bp-spot-leg .bp-leg-stats .bp-metric{line-height:1.05}
 }
+/* Consistent desktop section tracks, including browsers without CSS subgrid. */
+@media(min-width:901px){
+ .split-mode .bp-board{grid-auto-rows:auto;row-gap:8px;align-items:stretch}
+ .split-mode .bp-card{display:grid;grid-template-rows:auto 56px minmax(58px,auto) 26px 1fr auto;grid-row:auto;row-gap:6px;align-content:start}
+ .split-mode .bp-card-head{margin:0}
+ .split-mode .bp-legs{margin:0;padding:2px 0;align-self:start;min-height:56px}
+ .split-mode .bp-metrics{margin:0;align-self:stretch;min-height:58px}
+ .split-mode .bp-metrics strong{white-space:nowrap;font-size:clamp(10px,4.1cqi,15px);letter-spacing:-.3px}
+ .split-mode .bp-period-warning,.split-mode .bp-warning-space{margin:0;min-height:0;align-self:start}
+ .split-mode .bp-period-warning{min-height:26px}
+ .split-mode .bp-warning-space{padding:0;height:0}
+ .split-mode .bp-transfer{align-self:start;min-width:0}
+ .split-mode .bp-transfer-heading{margin:0 0 3px}
+ .split-mode .bp-card-foot{margin:0;padding-top:6px;align-self:end}
+ @container(max-width:270px){.split-mode .bp-metrics strong{font-size:12px}}
+}
+
+/* Source residual tiers; expired cards retain their tier per product preference. */
+@media(min-width:901px){
+ .split-mode .bp-card[data-tone="grey"],.split-mode .bp-card.bp-expired[data-tone="grey"]{--rank:#8b95a5!important;--badge:#596271}
+ .split-mode .bp-card[data-tone="blue"],.split-mode .bp-card.bp-expired[data-tone="blue"]{--rank:#4085df!important;--badge:#245b9e}
+ .split-mode .bp-card[data-tone="yellow"],.split-mode .bp-card.bp-expired[data-tone="yellow"]{--rank:#c49500!important;--badge:#866400}
+ .split-mode .bp-card[data-tone="orange"],.split-mode .bp-card.bp-expired[data-tone="orange"]{--rank:#e47c23!important;--badge:#9c490c}
+ .split-mode .bp-card[data-tone="red"],.split-mode .bp-card.bp-expired[data-tone="red"]{--rank:#e3444e!important;--badge:#b72136}
+ .split-mode .bp-level{color:var(--badge);background:#f7f9fb}
+}

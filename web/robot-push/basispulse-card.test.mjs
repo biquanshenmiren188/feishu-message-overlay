@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
-import {strategyCopy,periodWarning,fundingWarnings} from './basispulse-card-model.js';
+import {strategyCopy,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
 const now=1791162796000;
 test('period warning excludes spot, missing and equal periods',()=>{
  assert.equal(periodWarning([{spot:false,hours:4},{spot:false,hours:1}]),'周期 4h/1h');
@@ -29,4 +29,8 @@ test('Bybit hourly warning independent of period mismatch and excludes spot',()=
  assert.deepEqual(fundingWarnings([{exchange:'binance',spot:false,hours:1},{exchange:'bybit',spot:false,hours:1}]),['Bybit 1h 计算不同']);
  assert.deepEqual(fundingWarnings([{exchange:'gate',spot:false,hours:4},{exchange:'bybit',spot:false,hours:1}]),['周期 4h/1h','Bybit 1h 计算不同']);
  assert.deepEqual(fundingWarnings([{exchange:'bybit',spot:true,hours:1}]),[]);
+});
+
+test('source residual color boundaries preserve all five tiers',()=>{
+ for(const [level,tone] of [[null,'grey'],[NaN,'grey'],[0,'grey'],[1,'grey'],[2,'blue'],[3,'blue'],[4,'yellow'],[5,'yellow'],[6,'orange'],[9,'orange'],[10,'red'],[81,'red']])assert.equal(residualTone(level),tone);
 });

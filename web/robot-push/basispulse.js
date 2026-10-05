@@ -1,5 +1,5 @@
-import { Opportunities, assetName } from './basispulse-model.js?v=20261005aligned1';
-import { cardNode } from './basispulse-card.js?v=20261005aligned1';
+import { Opportunities, assetName } from './basispulse-model.js?v=20261005colors1';
+import { cardNode } from './basispulse-card.js?v=20261005colors1';
 import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005b';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');

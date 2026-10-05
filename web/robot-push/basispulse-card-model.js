@@ -26,3 +26,12 @@ export function fundingWarnings(legs) {
  if(legs?.some(l=>l.spot===false && String(l.exchange).toLowerCase()==='bybit' && l.hours===1)) warnings.push('Bybit 1h 计算不同');
  return warnings;
 }
+
+// Same residual-level thresholds as the source trader cards.
+export function residualTone(level) {
+ if(!Number.isFinite(level)||level<2)return 'grey';
+ if(level<4)return 'blue';
+ if(level<6)return 'yellow';
+ if(level<10)return 'orange';
+ return 'red';
+}
