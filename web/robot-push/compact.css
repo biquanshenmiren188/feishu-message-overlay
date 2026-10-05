@@ -1,0 +1,44 @@
+.split-mode .bp-tools{margin-bottom:6px}
+.split-mode .bp-board{gap:8px}
+.split-mode .bp-card{padding:5px 8px;border-left-width:4px;font-size:12px;line-height:1.2}
+.split-mode .bp-card-head{padding-bottom:4px;gap:6px;flex-wrap:nowrap}
+.split-mode .bp-card h2{font-size:17px;letter-spacing:0}
+.split-mode .bp-live{order:0;width:auto;gap:2px;font-size:11px}
+.split-mode .bp-age{font-size:11px}
+.split-mode .bp-window{padding:2px 0}
+.split-mode .bp-level{font-size:12px;padding:3px 5px}
+.split-mode .bp-strategy{font-size:10px;padding:2px 4px}
+.split-mode .bp-legs{padding:5px 0;gap:12px}
+.split-mode .bp-leg{gap:4px}
+.split-mode .bp-leg h3{font-size:12px;margin:0 0 2px;gap:4px}
+.split-mode .bp-side{padding:1px 3px}
+.split-mode .bp-rate{justify-content:flex-start;gap:4px}
+.split-mode .bp-rate strong{font-size:16px}
+.split-mode .bp-period{font-size:11px;padding:0 3px}
+.split-mode .bp-leg-stats .bp-metric{flex-direction:row;gap:4px;justify-content:flex-end;margin:0 0 3px;font-size:12px}
+.split-mode .bp-metrics{min-height:0;margin-bottom:5px;border-radius:2px}
+.split-mode .bp-metrics .bp-metric{padding:4px 2px;gap:2px}
+.split-mode .bp-metrics span{font-size:12px}
+.split-mode .bp-metrics strong{font-size:17px;white-space:normal}
+.split-mode .bp-metrics small{font-size:10px;line-height:1}
+.split-mode .bp-transfer-heading{font-size:11px;gap:8px;margin-bottom:2px}
+.split-mode .bp-transfer-heading strong{font-size:12px}
+.split-mode .bp-transfer-table{font-size:11px}
+.split-mode .bp-transfer-table th,.split-mode .bp-transfer-table td{padding:1px 3px}
+.split-mode .bp-transfer-pair{font-size:13px;line-height:1.05}
+.split-mode .bp-card-foot{padding-top:3px;margin-top:3px;gap:6px}
+.split-mode .bp-card-foot button,.split-mode .bp-card-foot a{min-height:24px;padding:3px 8px;font-size:12px}
+.split-mode .bp-card-foot .bp-source{border:0;background:none;padding:3px 4px}
+.split-mode .bp-card-foot .bp-radar{box-shadow:none}
+.split-mode .bp-card-foot .bp-more{font-size:16px;padding:0 8px}
+@media(max-width:640px){
+ .split-mode .bp-card-head{flex-wrap:wrap;gap:3px}
+ .split-mode .bp-live{order:3;width:100%}
+ .split-mode .bp-legs{gap:6px;padding:4px 0}
+ .split-mode .bp-leg{flex-wrap:wrap}
+ .split-mode .bp-leg-stats{display:flex;gap:6px;text-align:left}
+ .split-mode .bp-leg-stats .bp-metric{font-size:11px;gap:2px;margin:0}
+ .split-mode .bp-metrics span{font-size:10px}
+ .split-mode .bp-metrics strong{font-size:14px}
+ .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{min-height:36px}
+}
