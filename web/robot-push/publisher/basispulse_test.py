@@ -20,6 +20,13 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual(retry_delay(1,'180'),180)
         self.assertEqual(retry_delay(1,'n/a'),5)
         self.assertEqual(retry_delay(1,'Sun, 04 Oct 2026 00:01:00 GMT',1791072000),60)
+    def test_null_timestamp_does_not_drop_valid_cards(self):
+        value=self.sample()
+        value['active'].append(dict(value['active'][0],id='bad',validUntil=None))
+        result=normalize(value)
+        self.assertEqual([c['id'] for c in result['active']],['a'])
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['invalidCards'],1)
     def test_no_redirects(self):
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.test'))
 

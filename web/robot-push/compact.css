@@ -122,3 +122,21 @@
 .split-mode .bp-tools .bp-heading-link{min-height:24px;color:inherit;font-size:16px;line-height:24px;font-weight:700;text-decoration:none}
 .split-mode .bp-tools .bp-heading-link:hover{color:#00876a;text-decoration:underline;text-underline-offset:3px}
 .split-mode .bp-count{padding:2px 7px;line-height:20px}
+@media(min-width:901px){
+ .split-mode .bp-card-head{grid-template-columns:auto minmax(0,1fr) auto;gap:4px}
+ .split-mode .bp-name{grid-column:1;grid-row:1;flex-wrap:nowrap;gap:3px}
+ .split-mode .bp-live{grid-column:2;grid-row:1;justify-self:center;gap:1px;min-width:0}
+ .split-mode .bp-level{grid-column:3;grid-row:1;justify-self:end}
+ .split-mode .bp-card h2{font-size:14px;overflow-wrap:normal}
+ .split-mode .bp-age{font-size:8px}
+ .split-mode .bp-window{font-size:7px}
+ .split-mode .bp-strategy{font-size:8px;padding:2px}
+ @container(max-width:270px){
+  .split-mode .bp-card h2{font-size:10px}
+  .split-mode .bp-strategy{font-size:7px;padding:1px}
+  .split-mode .bp-age{font-size:6px}
+  .split-mode .bp-window{font-size:6px}
+  .split-mode .bp-level{font-size:8px;padding:2px}
+  .split-mode .bp-card-head{gap:2px}
+ }
+}

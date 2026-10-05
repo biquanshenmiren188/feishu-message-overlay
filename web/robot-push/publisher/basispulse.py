@@ -33,12 +33,18 @@ def normalize(data):
     datetime.fromisoformat(data['sampledAt'].replace('Z', '+00:00'))
     cards = []
     ids = set()
+    invalid_cards = 0
     for raw in data['active']:
         if not isinstance(raw, dict) or not isinstance(raw.get('id'), str) or not raw['id'] or raw['id'] in ids:
             raise ValueError('card_id')
-        for key in ('enteredAt', 'updatedAt', 'validUntil'):
-            if datetime.fromisoformat(raw[key].replace('Z', '+00:00')).tzinfo is None:
-                raise ValueError('timezone')
+        try:
+            for key in ('enteredAt', 'updatedAt', 'validUntil'):
+                value = raw.get(key)
+                if not isinstance(value, str) or datetime.fromisoformat(value.replace('Z', '+00:00')).tzinfo is None:
+                    raise ValueError('timestamp')
+        except (ValueError, TypeError):
+            invalid_cards += 1
+            continue
         ids.add(raw['id'])
         card = pick(raw, CARD_KEYS)
         card['v2Residual'] = pick(raw.get('v2Residual'), ('bps', 'level', 'windowSeconds'))
@@ -47,7 +53,7 @@ def normalize(data):
         card['details']['legs'] = [pick(leg, ('exchange', 'market', 'symbol', 'spot', 'rate', 'hours', 'volume', 'oi')) for leg in details.get('legs', [])[:2]]
         card['details']['transferWallets'] = [pick(wallet, ('key', 'text', 'checkedAt', 'expiresAt', 'refreshFailed')) for wallet in details.get('transferWallets', [])[:20]]
         cards.append(card)
-    return {**pick(data, ('sampledAt', 'complete', 'freshShards', 'totalShards')), 'active': cards}
+    return {**pick(data, ('sampledAt', 'complete', 'freshShards', 'totalShards')), 'active': cards, 'complete': data['complete'] and invalid_cards == 0, 'invalidCards': invalid_cards}
 
 
 def retry_delay(failures, retry_after=None, now=None):
@@ -98,13 +104,17 @@ def main():
                     if len(body) > MAX_BYTES:
                         raise ValueError('body_limit')
                     snapshot = normalize(json.loads(body, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite'))))
+                if snapshot.get('invalidCards'):
+                    print('source invalid timestamps:', snapshot['invalidCards'], flush=True)
                 received = datetime.now(timezone.utc).isoformat()
                 failures = 0
             except HTTPError as error:
+                print('upstream HTTP', error.code, flush=True)
                 failures += 1
                 status = 'auth_required' if error.code in (301, 302, 303, 307, 308, 401, 403) else 'reconnecting'
                 delay = retry_delay(failures, error.headers.get('Retry-After'))
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+                print('upstream failure', type(error).__name__, flush=True)
                 failures += 1
                 status = 'reconnecting'
                 delay = retry_delay(failures)
