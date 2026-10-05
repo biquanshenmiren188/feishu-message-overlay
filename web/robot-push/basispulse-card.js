@@ -30,6 +30,7 @@ export function cardNode(c, matrix) {
     if(!leg.spot)rate.append(el('span','bp-period',number(leg.hours)?`${leg.hours}h`:'—'));
     primary.append(rate);const stats=el('div','bp-leg-stats');stats.append(metric('24H',numeric(leg.volume)));
     if(!leg.spot)stats.append(metric('OI',numeric(leg.oi)));
+    row.classList.toggle('bp-spot-leg',leg.spot===true);
     row.append(primary,stats);legGrid.append(row);
   }card.append(legGrid);
   const metrics=el('div','bp-metrics');

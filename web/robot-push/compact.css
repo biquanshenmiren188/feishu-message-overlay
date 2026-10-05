@@ -31,6 +31,14 @@
 .split-mode .bp-card-foot .bp-source{border:0;background:none;padding:3px 4px}
 .split-mode .bp-card-foot .bp-radar{box-shadow:none}
 .split-mode .bp-card-foot .bp-more{font-size:16px;padding:0 8px}
+@media(min-width:901px){
+ .split-mode .bp-spot-leg{display:grid;grid-template-columns:minmax(0,1fr) auto;align-content:start;align-items:center;column-gap:3px;row-gap:2px}
+ .split-mode .bp-spot-leg .bp-leg-main{display:contents}
+ .split-mode .bp-spot-leg h3{grid-column:1 / -1}
+ .split-mode .bp-spot-leg .bp-rate{grid-column:1;flex-wrap:nowrap;min-width:0}
+ .split-mode .bp-spot-leg .bp-leg-stats{grid-column:2;display:block;min-width:0;max-width:none;margin:0;text-align:right}
+ .split-mode .bp-spot-leg .bp-leg-stats .bp-metric{display:flex;flex-direction:column;align-items:flex-end;gap:0;margin:0;font-size:11px}
+}
 .split-mode .bp-card{container-type:inline-size}
 .split-mode .bp-card.bp-expired{background:#faf9f6;color:#182126;--rank:#4c7a6b!important}
 .split-mode .bp-card.bp-expired[data-rank="2"]{--rank:#3c7cd8!important}
