@@ -1,6 +1,6 @@
-import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005frame1';
-import { cardNode } from './basispulse-card.js?v=20261005frame1';
-import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005frame1';
+import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005nospot1';
+import { cardNode } from './basispulse-card.js?v=20261005nospot1';
+import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005nospot1';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
@@ -24,7 +24,7 @@ function render() {
     const id=c.data.id, state=opportunityState(c,healthy,now), live=state==='active';
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
-    const matrix=radarMatrix(c.data.details?.legs || [],transfers.get,now);
+    const matrix=radarMatrix(c.data.details?.legs || [],transfers.get,now,c.data.details?.transferWallets || []);
     if(!node || node.stamp!==JSON.stringify([c.data,matrix])) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
       const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);

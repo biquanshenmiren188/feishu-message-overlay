@@ -3,12 +3,20 @@ export function transferCoin(leg) {
   const symbol=String(leg?.symbol || '').toUpperCase();
   return /^([\p{L}\p{N}_]{1,40})(?:\/|_)?USDT$/u.exec(symbol)?.[1]?.replace(/_$/,'') || null;
 }
-export function radarMatrix(legs, lookup, now=Date.now()) {
+export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
   const chains=[], descriptions=[];
   const rows=legs.map(leg=>{
     const coin=transferCoin(leg), result=coin?lookup(coin):null;
     const data=result?.items?.find(x=>x.exchange===leg.exchange && x.coin===coin);
     const fresh=!!data&&!data.error&&Number.isFinite(data.checkedAt)&&now-data.checkedAt<=120000&&data.checkedAt<=now+30000;
+    // Source catalog evidence is explicit, coin-scoped and time-bounded.
+    // An empty radar response alone never means that spot is unavailable.
+    const wallet=wallets.find(w=>w.key===`${leg.exchange}:${coin}`);
+    const checked=Date.parse(wallet?.checkedAt), expires=Date.parse(wallet?.expiresAt);
+    const noSpot=!leg.spot && !!wallet && wallet.refreshFailed===false
+      && Number.isFinite(checked) && checked<=now+30000 && Number.isFinite(expires) && expires>now
+      && expires-checked<=7200001 && /[｜|]无现货[｜|】]/.test(wallet.text || '')
+      && /该平台无现货/.test(wallet.text || '') && !(fresh && data.chains?.length);
     const states=new Map();
     for(const c of data?.chains || []) {
       // Match the radar's retired Binance Beacon-chain exclusion.
@@ -28,10 +36,10 @@ export function radarMatrix(legs, lookup, now=Date.now()) {
       `查询时间：${at(data.checkedAt)} · UTC+8\n${fresh?'':'状态已过期或查询失败，当前按未知显示\n'}${data.warning || ''}\n`+
       (data.chains?.length?data.chains.map(c=>`${c.chain}：充 ${c.deposit} / 提 ${c.withdraw}\n  充值来源：${source(c.depositEvidence)} · ${at(c.depositEvidence?.at ?? data.checkedAt)}\n  提现来源：${source(c.withdrawEvidence)} · ${at(c.withdrawEvidence?.at ?? data.checkedAt)}`).join('\n'):'未取得分链状态，当前显示未知')+
       `\n来源页面：${data.sourceUrl || '未提供'}`:'雷达充提数据正在查询，失败后自动重试'));
-    return {exchange:String(leg.exchange).toUpperCase(),noSpot:false,states};
+    return {exchange:String(leg.exchange).toUpperCase(),noSpot,states};
   });
   if(!chains.length)chains.push('状态');
-  return {text:'数据来源：资金费雷达 /api/transfers/query\n\n'+descriptions.join('\n\n'),chains,rows:rows.map(r=>({...r,cells:chains.map(c=>r.states.get(c)||['unknown','unknown'])}))};
+  return {text:'数据来源：资金费雷达 /api/transfers/query\n\n'+descriptions.join('\n\n'),chains,rows:rows.map(r=>({...r,cells:chains.map(c=>r.noSpot?['none','none']:(r.states.get(c)||['unknown','unknown']))}))};
 }
 export function createRadarTransfers(onChange, fetcher=fetch, clock=Date.now) {
   const entries=new Map();let running=false;

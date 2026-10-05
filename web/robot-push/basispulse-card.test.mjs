@@ -52,3 +52,11 @@ test('Base display case does not split one network into two columns',()=>{
  const m=matrix([data([{chain:'Base',deposit:'可用',withdraw:'可用'},{chain:'BASE',deposit:'可用',withdraw:'可用'}])]);
  assert.deepEqual(m.chains,['BASE']);assert.deepEqual(m.rows[0].cells,[['open','open']]);
 });
+
+test('no spot requires current matching explicit catalog evidence, not missing data',()=>{
+ const w={key:'binance:ABC',text:'Binance【无数据｜无现货｜现货目录】：该平台无现货',checkedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString(),refreshFailed:false};
+ const build=(wallets,items=[])=>radarMatrix(legs,()=>({items}),now,wallets).rows[1];
+ assert.equal(build([w]).noSpot,true);assert.deepEqual(build([w]).cells,[['none','none']]);
+ for(const patch of [{key:'binance:OTHER'},{refreshFailed:true},{expiresAt:new Date(now-1).toISOString()},{text:'状态未知'},{checkedAt:new Date(now+60000).toISOString()}])assert.equal(build([{...w,...patch}]).noSpot,false);
+ assert.equal(build([w],[data([{chain:'ETH',deposit:'可用',withdraw:'可用'}],{exchange:'binance'})]).noSpot,false);
+});

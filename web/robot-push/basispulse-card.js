@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005frame1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005frame1';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005nospot1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005nospot1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
