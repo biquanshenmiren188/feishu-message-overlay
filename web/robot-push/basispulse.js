@@ -10,7 +10,10 @@ const board=el('section','bp-board'); board.setAttribute('aria-label','BasisPuls
 const empty=el('p','bp-empty','正在读取机会…');
 main.append(tools,board,empty);
 const model=new Opportunities(), nodes=new Map(); let envelope=null, failed=false, failures=0, timer;
-const transfers=createRadarTransfers(()=>render());
+// Collect transfer updates silently; commit all visible card changes together.
+const transfers=createRadarTransfers(()=>{});
+const DISPLAY_REFRESH_MS=10_000;
+let hasRendered=false;
 const time = value => { const d = new Date(value); return Number.isFinite(+d) ? d.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—'; };
 function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? n>=3600?`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`:n>=60?`${Math.floor(n/60)}m ${n%60}s`:`${n}s` : '—'; }
 function render() {
@@ -47,6 +50,8 @@ async function poll() {
   } catch { failed=true; failures++; }
   // Read the shared local cache often enough for the source's short validUntil.
   // This never increases upstream polling, which is owned by the single worker.
-  render(); timer=setTimeout(poll,failures ? Math.min(30_000,5000*2**Math.min(failures-1,3)) : 1000);
+  if(!hasRendered){render();hasRendered=true;}
+  timer=setTimeout(poll,failures ? Math.min(30_000,5000*2**Math.min(failures-1,3)) : 1000);
 }
-setInterval(()=>{render();void transfers.refresh(model.tick().flatMap(c=>c.data.details?.legs || []));},1000); poll();
+setInterval(render,DISPLAY_REFRESH_MS);
+setInterval(()=>{void transfers.refresh(model.tick().flatMap(c=>c.data.details?.legs || []));},1000); poll();
