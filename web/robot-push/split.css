@@ -1,0 +1,31 @@
+/* Two independent, equal-width work areas share the existing live data modules. */
+body.split-mode{height:100dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#fff}
+.split-mode .site-head,.split-mode .site-nav{flex-shrink:0}
+.split-mode main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;flex:1;min-height:0;min-width:0;margin:10px 10px 0;overflow:hidden}
+.feed-pane{min-width:0;min-height:0;position:relative;background:#fff}
+.feed-pane-title{font-size:16px;line-height:24px;margin:0 0 8px;color:#26384b}
+.split-mode #basis-pane{min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0 10px 16px 14px;border-left:1px solid #dce3e8;background:#f3f1ec;scrollbar-width:thin}
+.split-mode .bp-tools{position:relative;padding-top:0;gap:8px}
+.split-mode .bp-tools h1{font-size:16px;line-height:24px;width:100%}
+.split-mode .bp-tools input{margin-left:0;min-width:120px;flex:1}
+.split-mode .bp-board{grid-template-columns:minmax(0,1fr);gap:12px}
+.split-mode #board{padding-left:11px;padding-right:0;min-height:120px}
+.split-mode #history-scroll{left:0;right:auto}
+.split-mode .message-head time{order:-1;margin-left:0;flex:0 0 58px;text-align:left;font-variant-numeric:tabular-nums}
+.split-mode .message-head{align-items:baseline}
+.split-mode .boundary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(min-width:901px) and (max-width:1250px){
+ .split-mode .bp-card-head{flex-wrap:wrap}.split-mode .bp-live{order:3;width:100%}
+ .split-mode .bp-legs{padding:16px 0;gap:12px}.split-mode .bp-leg h3{font-size:13px}
+ .split-mode .bp-rate strong{font-size:20px}.split-mode .bp-metrics strong{font-size:20px}
+ .split-mode .bp-metrics span{font-size:13px}
+}
+@media(max-width:900px){
+ html.split-layout{height:auto;overflow:auto}
+ body.split-mode{height:auto;min-height:100dvh;overflow:auto}
+ .split-mode main{display:flex;flex-direction:column;overflow:visible;flex:none;gap:16px;margin:8px}
+ .feed-pane{height:60dvh;min-height:350px;flex:none}
+ .split-mode #basis-pane{overflow:visible;border-left:0;border-top:1px solid #dce3e8;padding:12px 0;flex:none}
+ .split-mode .message-head time{flex-basis:54px}
+ .split-mode .bp-tools h1{width:100%}
+}

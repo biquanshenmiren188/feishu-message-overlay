@@ -12,7 +12,7 @@ cp "$web/index.html" "$backup/index.html"
 cp /etc/nginx/snippets/robot-push.conf "$backup/robot-push.conf"
 install -m 0644 "$stage/basispulse.py" /opt/robot-push/basispulse.py
 install -m 0644 "$stage/basispulse.service" /etc/systemd/system/basispulse.service
-for file in basispulse.js basispulse.css basispulse-model.js basispulse-card.js basispulse-card-model.js basispulse-transfers.js source-entry.js; do
+for file in basispulse.js basispulse.css basispulse-model.js basispulse-card.js basispulse-card-model.js basispulse-transfers.js split.css page.js source-entry.js; do
   install -m 0644 "$stage/$file" "$web/$file"
 done
 cat >> /etc/nginx/snippets/robot-push.conf <<'NGINX'

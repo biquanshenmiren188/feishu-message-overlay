@@ -121,7 +121,9 @@ function fitCards(force=false){
  const footerHeight=getComputedStyle(footer).display==='none'?0:footer.getBoundingClientRect().height+8;
  const viewportBottom=Math.min(innerHeight,window.visualViewport?visualViewport.height+visualViewport.offsetTop:innerHeight);
  const safeBottom=parseFloat(getComputedStyle($('board-shell')).paddingBottom)||0;
- const height=Math.max(120,viewportBottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
+ const pane=document.querySelector('.feed-pane');
+ const bottom=pane?Math.min(viewportBottom,pane.getBoundingClientRect().bottom):viewportBottom;
+ const height=Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
  if(key===fitKey)return;fitKey=key;guardScroll();

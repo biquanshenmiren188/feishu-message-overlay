@@ -1,10 +1,9 @@
-const basis = new URLSearchParams(location.search).get('source') === 'basispulse';
-const modes = document.createElement('nav');
-modes.className = 'source-modes'; modes.setAttribute('aria-label', '推送数据来源');
-for (const [label, url, selected] of [['机器人消息', './', !basis], ['BasisPulse 机会', './?source=basispulse', basis]]) {
-  const a = document.createElement('a'); a.textContent = label; a.href = url;
-  if (selected) a.setAttribute('aria-current', 'page'); modes.append(a);
-}
-document.querySelector('main').prepend(modes);
-if (basis) await import('./basispulse.js?v=20261005b');
-else await import('./page.js?v=20261003m');
+const main=document.querySelector('main');
+document.body.classList.add('split-mode');
+document.documentElement.classList.add('split-layout');
+const feedPane=document.createElement('section');feedPane.className='feed-pane';feedPane.setAttribute('aria-label','机器人推送');
+const title=document.createElement('h1');title.className='feed-pane-title';title.textContent='机器人推送';
+feedPane.append(title,...main.children);
+const basisPane=document.createElement('section');basisPane.id='basis-pane';basisPane.setAttribute('aria-label','BasisPulse 机会卡片');
+main.append(feedPane,basisPane);
+await Promise.all([import('./page.js?v=20261005split1'),import('./basispulse.js?v=20261005split1')]);
