@@ -31,6 +31,38 @@
 .split-mode .bp-card-foot .bp-source{border:0;background:none;padding:3px 4px}
 .split-mode .bp-card-foot .bp-radar{box-shadow:none}
 .split-mode .bp-card-foot .bp-more{font-size:16px;padding:0 8px}
+.split-mode .bp-card{container-type:inline-size}
+.split-mode .bp-card.bp-expired{background:#faf9f6;color:#182126;--rank:#4c7a6b!important}
+.split-mode .bp-card.bp-expired[data-rank="2"]{--rank:#3c7cd8!important}
+.split-mode .bp-card.bp-expired[data-rank="3"]{--rank:#7756b9!important}
+.split-mode .bp-expired .bp-age{color:#986111}
+.split-mode .bp-expired .bp-age:before{background:#986111}
+.bp-period-warning{padding:5px 7px;margin:0 0 5px;border-left:3px solid #d33655;background:#ffe7ec;color:#ab1735;font-weight:700;font-size:12px}
+.bp-period-warning:before{content:'⚠';margin-right:6px}
+.split-mode .bp-board{align-items:stretch}
+.split-mode .bp-card{display:flex;flex-direction:column}
+.split-mode .bp-card-foot{margin-top:auto;padding-top:4px}
+@media(min-width:1200px){.split-mode .bp-board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:901px) and (max-width:1199px){.split-mode .bp-board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container(max-width:430px){
+ .split-mode .bp-card-head{flex-wrap:wrap;gap:4px}.split-mode .bp-live{order:3;width:100%}
+ .split-mode .bp-leg{flex-wrap:wrap}.split-mode .bp-leg-stats{display:flex;gap:6px;flex-wrap:wrap;text-align:left}
+ .split-mode .bp-leg-stats .bp-metric{font-size:11px;margin:0;gap:3px}
+ .split-mode .bp-metrics span{font-size:11px;white-space:normal}
+ .split-mode .bp-metrics strong{font-size:15px}
+ .split-mode .bp-transfer-table th:first-child{width:66px}
+ .split-mode .bp-transfer-pair{gap:3px}
+ .split-mode .bp-card-foot{gap:3px;flex-wrap:wrap}
+ .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{padding:3px 5px}
+}
+@container(max-width:270px){
+ .split-mode .bp-leg-stats{flex:1 1 100%;min-width:0;max-width:100%;gap:2px}
+ .split-mode .bp-legs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+ .split-mode .bp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .split-mode .bp-metrics .bp-metric{border-bottom:1px solid #d2cec5}
+ .split-mode .bp-leg h3{font-size:11px}.split-mode .bp-rate strong{font-size:14px}
+ .split-mode .bp-card h2{font-size:15px}.split-mode .bp-level{font-size:11px;padding:2px 3px}
+}
 @media(max-width:640px){
  .split-mode .bp-card-head{flex-wrap:wrap;gap:3px}
  .split-mode .bp-live{order:3;width:100%}

@@ -1,8 +1,9 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005b';
-import {strategyCopy} from './basispulse-card-model.js?v=20261005b';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005grid2';
+import {strategyCopy,periodWarning} from './basispulse-card-model.js?v=20261005grid2';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
+const exchangeLabel=v=>String(v).toUpperCase()==='HYPERLIQUID'?'HL':String(v).toUpperCase();
 const metric=(label,value)=>{const n=el('div','bp-metric');n.append(el('span','',label),el('strong','',value));return n;};
 function showDetails(title,text,opener) {
   const dialog=el('dialog','bp-dialog'), head=el('header'), close=el('button','','关闭');
@@ -23,7 +24,7 @@ export function cardNode(c, matrix) {
   const legGrid=el('div','bp-legs');
   for(const [i,leg]of legs.entries()) {
     const row=el('section','bp-leg'), primary=el('div','bp-leg-main'), exchange=el('h3');
-    exchange.append(el('span','bp-side',i===0?'买':'卖'),el('span','',`${String(leg.exchange || '').toUpperCase()} ${leg.spot?'现货':'永续'}`));
+    exchange.append(el('span','bp-side',i===0?'买':'卖'),el('span','',`${exchangeLabel(leg.exchange || '')} ${leg.spot?'现货':'永续'}`));
     exchange.title=leg.symbol || '';primary.append(exchange);
     const rate=el('div','bp-rate');rate.append(el('strong',leg.spot?'bp-na':'',leg.spot?'不适用':percent(leg.rate,.01)));
     if(!leg.spot)rate.append(el('span','bp-period',number(leg.hours)?`${leg.hours}h`:'—'));
@@ -36,13 +37,15 @@ export function cardNode(c, matrix) {
     const v=percent(detail[key]), m=metric(label,key==='netBps'?v.replace(/^\+/,''):v);
     if(key==='indexBps'&&detail.spotIndex)m.append(el('small','','现货价代指数'));metrics.append(m);
   }card.append(metrics);
+  const warning=periodWarning(legs);
+  if(warning){const notice=el('div','bp-period-warning',warning);notice.setAttribute('aria-label','资金费结算'+warning);card.append(notice);}
   const transfer=el('section','bp-transfer'), heading=el('div','bp-transfer-heading');
   heading.append(el('strong','','现货充提'),el('span','','充 / 提 · ✓开 ×关 ?未知 —无数据'));
   const noSpot=matrix.rows.filter(r=>r.noSpot).map(r=>r.exchange).join(' / ');if(noSpot)heading.append(el('span','',`${noSpot} 无现货`));
   transfer.append(heading);const table=el('table','bp-transfer-table');table.setAttribute('aria-label','链与充提状态');
   const thead=el('thead'),tr=el('tr');tr.append(el('th','','链'));for(const chain of matrix.chains)tr.append(el('th','',chain));thead.append(tr);table.append(thead);
   const tbody=el('tbody'),symbols={open:'✓',closed:'×',unknown:'?',none:'—',supported:'支持',delayed:'延迟',congested:'拥堵',restricted:'受限'},labels={open:'开放',closed:'关闭',unknown:'未知',none:'无现货',supported:'仅支持，未确认开放',delayed:'延迟',congested:'拥堵',restricted:'受限'};
-  for(const row of matrix.rows){const tr=el('tr'),th=el('th','',row.exchange);th.scope='row';tr.append(th);
+  for(const row of matrix.rows){const tr=el('tr'),th=el('th','',exchangeLabel(row.exchange));th.scope='row';tr.append(th);
     row.cells.forEach((pair,index)=>{const td=el('td'),group=el('div','bp-transfer-pair');pair.forEach((s,i)=>{const cell=el('span',`bp-transfer-${s}`,symbols[s]);const label=`${row.exchange} ${matrix.chains[index]} ${i?'提现':'充值'}：${labels[s]}`;cell.title=label;cell.setAttribute('aria-label',label);group.append(cell);});td.append(group);tr.append(td);});tbody.append(tr);
   }table.append(tbody);transfer.append(table);
   const source=el('button','bp-source','雷达充提 · 查看来源');source.type='button';source.dataset.action='source';

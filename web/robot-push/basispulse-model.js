@@ -35,7 +35,7 @@ export class Opportunities {
     if (now >= this.nextSort) {
       this.order.sort((a,b) => {
         const x=this.cards.get(a), y=this.cards.get(b);
-        return assetName(x.data).localeCompare(assetName(y.data), 'en') || (y.stableLevel ?? -1)-(x.stableLevel ?? -1) || Date.parse(y.data.enteredAt)-Date.parse(x.data.enteredAt);
+        return assetName(x.data).localeCompare(assetName(y.data), 'en') || (y.stableLevel ?? -1)-(x.stableLevel ?? -1) || Date.parse(x.data.enteredAt)-Date.parse(y.data.enteredAt);
       });
       this.nextSort = now + 15_000;
     }

@@ -5,6 +5,10 @@ export function chainName(value) {
   if (/^(BSC|BEP[- ]?20|BNB(?: SMART CHAIN)?(?:\s*\(BEP20\))?)$/i.test(name)) return 'BNB';
   return name;
 }
+export function periodWarning(legs) {
+  if(legs?.length!==2 || legs.some(l=>l.spot!==false || !Number.isFinite(l.hours) || l.hours<=0))return null;
+  return legs[0].hours!==legs[1].hours?`周期 ${legs[0].hours}h/${legs[1].hours}h`:null;
+}
 export function strategyCopy(data) {
   const legs=data.details?.legs || [], [buy,sell]=legs;
   const allowed=new Set(['binance','bitget','bybit','gate','okx','aster']);

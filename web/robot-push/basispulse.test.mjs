@@ -5,6 +5,7 @@ const now=Date.parse('2026-10-04T10:00:00Z');
 const iso=n=>new Date(n).toISOString();
 const card=(id='a',over={})=>({id,asset:'name:USDT:ABC',enteredAt:iso(now-60000),updatedAt:iso(now),validUntil:iso(now+100000),v2Residual:{level:1,bps:50},...over});
 const envelope=(cards,stamp=now,complete=true)=>({snapshot:{sampledAt:iso(stamp),complete,active:cards}});
+test('equal name and rank put longest active first, matching source duration descending',()=>{const m=new Opportunities();m.ingest(envelope([card('new',{enteredAt:iso(now-1000)}),card('old',{enteredAt:iso(now-600000)})]),now);assert.deepEqual(m.order,['old','new']);});
 test('numbers retain units; unknown is not zero',()=>{assert.equal(percent(50),'+0.50%');assert.equal(percent(.001,.01),'+0.10%');assert.equal(percent(null),'—');assert.equal(money(0),'0.00');assert.equal(money(null),'—');});
 test('updates replace same ID without duplicate; older snapshots ignored',()=>{const m=new Opportunities();m.ingest(envelope([card()]),now);m.ingest(envelope([card('a',{rawBps:85})],now+1),now+1);assert.equal(m.cards.size,1);m.ingest(envelope([],now),now+2);assert.equal(m.cards.get('a').data.rawBps,85);});
 test('complete empty snapshot expires then removes at exactly 30 seconds',()=>{const m=new Opportunities();m.ingest(envelope([card()]),now);m.ingest(envelope([],now+1000),now+1000);assert.equal(m.tick(now+30999).length,1);assert.equal(m.tick(now+31000).length,0);});

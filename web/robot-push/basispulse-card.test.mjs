@@ -1,8 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
-import {strategyCopy} from './basispulse-card-model.js';
+import {strategyCopy,periodWarning} from './basispulse-card-model.js';
 const now=1791162796000;
+test('period warning excludes spot, missing and equal periods',()=>{
+ assert.equal(periodWarning([{spot:false,hours:4},{spot:false,hours:1}]),'周期 4h/1h');
+ for(const legs of [[{spot:false,hours:4},{spot:false,hours:4}],[{spot:true,hours:4},{spot:false,hours:1}],[{spot:false,hours:null},{spot:false,hours:1}]])assert.equal(periodWarning(legs),null);
+});
 const legs=[{exchange:'gate',symbol:'ABC_USDT',spot:true},{exchange:'binance',symbol:'ABCUSDT',spot:false}];
 const data=(chains,extra={})=>({coin:'ABC',exchange:'gate',checkedAt:now,chains,...extra});
 const matrix=(items,t=now)=>radarMatrix(legs,()=>({items}),t);
