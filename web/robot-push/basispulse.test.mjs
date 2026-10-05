@@ -16,3 +16,13 @@ test('new cards append until next 15 second sort',()=>{const m=new Opportunities
 test('R level must remain stable 15 seconds before reordering',()=>{const m=new Opportunities();m.ingest(envelope([card('a'),card('b',{v2Residual:{level:0}})]),now);m.ingest(envelope([card('a'),card('b',{v2Residual:{level:2}})],now+1000),now+1000);m.tick(now+15000);assert.deepEqual(m.order,['a','b']);m.tick(now+30000);assert.deepEqual(m.order,['b','a']);});
 test('only verified radar host/path is linked',()=>{assert.equal(safeRadar('javascript:alert(1)'),null);assert.equal(safeRadar('https://evil.test/radar/'),null);assert.equal(safeRadar('https://u:p@leida.shenmiren.work/radar/'),null);assert.ok(safeRadar('https://leida.shenmiren.work/radar/?tab=FF'));});
 test('re-entered market pair replaces earlier span instead of duplicate grey cards',()=>{const m=new Opportunities();m.ingest(envelope([card('old',{pair:'A>B'})]),now);m.ingest(envelope([],now+1),now+1);m.ingest(envelope([card('new',{pair:'A>B'})],now+2),now+2);assert.equal(m.tick(now+2).length,1);assert.equal(m.tick(now+2)[0].data.id,'new');});
+
+test('snapshot expiry is pending, confirmed absence expires, reconnect does not imply active',async()=>{
+ const {opportunityState}=await import('./basispulse-model.js');
+ const c={expiredAt:now+5000,missingAt:null};
+ assert.equal(opportunityState(c,true,now),'active');
+ assert.equal(opportunityState(c,true,now+6000),'pending');
+ assert.equal(opportunityState(c,false,now),'recovering');
+ assert.equal(opportunityState({...c,missingAt:now},true,now),'expired');
+ assert.equal(opportunityState({...c,expiredAt:now+10000},true,now+6000),'active');
+});

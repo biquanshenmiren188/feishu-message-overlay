@@ -42,3 +42,10 @@ export class Opportunities {
     return this.order.map(id => this.cards.get(id));
   }
 }
+
+// An expired snapshot is not proof that the opportunity has ended.
+export function opportunityState(card, healthy, now=Date.now()) {
+ if(card.missingAt!=null)return 'expired';
+ if(!healthy)return 'recovering';
+ return now<card.expiredAt?'active':'pending';
+}

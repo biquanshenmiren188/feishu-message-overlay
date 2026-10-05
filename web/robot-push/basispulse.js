@@ -1,6 +1,6 @@
-import { Opportunities, assetName } from './basispulse-model.js?v=20261005clean2';
-import { cardNode } from './basispulse-card.js?v=20261005clean2';
-import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005clean2';
+import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005state1';
+import { cardNode } from './basispulse-card.js?v=20261005state1';
+import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005state1';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
@@ -21,7 +21,7 @@ function render() {
   count.dataset.connected=String(healthy);
   const keep=new Set(); let active=0, shown=0;
   for(const c of rows) {
-    const id=c.data.id, live=healthy && now<c.expiredAt;
+    const id=c.data.id, state=opportunityState(c,healthy,now), live=state==='active';
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
     const matrix=radarMatrix(c.data.details?.legs || [],transfers.get,now);
@@ -30,7 +30,7 @@ function render() {
       const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
-    node.card.classList.toggle('bp-expired',!live); node.age.textContent=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:now>=c.expiredAt?'已失效':'待恢复';
+    node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; node.age.textContent=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';
     const desired=board.children[shown-1]; if(desired!==node.card)board.insertBefore(node.card,desired || null);
   }
   for(const [id,node]of nodes)if(!keep.has(id)){node.card.remove();nodes.delete(id);}
