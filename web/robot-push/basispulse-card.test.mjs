@@ -47,3 +47,8 @@ test('news summaries preserve postponed and uncertain notices alongside funding 
  const result=fundingWarnings([{exchange:'bybit',spot:false,hours:1}],news);
  assert.deepEqual(result,['OKX ONE永续合约下架（已延期，时间未定）','GATE 维护（待确认）','Bybit 1h 计算不同']);
 });
+
+test('Base display case does not split one network into two columns',()=>{
+ const m=matrix([data([{chain:'Base',deposit:'可用',withdraw:'可用'},{chain:'BASE',deposit:'可用',withdraw:'可用'}])]);
+ assert.deepEqual(m.chains,['BASE']);assert.deepEqual(m.rows[0].cells,[['open','open']]);
+});

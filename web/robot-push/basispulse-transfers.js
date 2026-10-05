@@ -1,4 +1,4 @@
-import {chainName} from './basispulse-card-model.js?v=20261005ton1';
+import {chainName} from './basispulse-card-model.js?v=20261005base1';
 export function transferCoin(leg) {
   const symbol=String(leg?.symbol || '').toUpperCase();
   return /^([\p{L}\p{N}_]{1,40})(?:\/|_)?USDT$/u.exec(symbol)?.[1]?.replace(/_$/,'') || null;
