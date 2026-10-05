@@ -31,6 +31,9 @@
 .split-mode .bp-card-foot .bp-source{border:0;background:none;padding:3px 4px}
 .split-mode .bp-card-foot .bp-radar{box-shadow:none}
 .split-mode .bp-card-foot .bp-more{font-size:16px;padding:0 8px}
+.split-mode .bp-card-foot .bp-more{margin-left:0}
+.split-mode .bp-card-foot .bp-radar{margin-left:auto}
+.split-mode .bp-card-foot button,.split-mode .bp-card-foot a{display:inline-flex;align-items:center;justify-content:center;line-height:1.2}
 @media(min-width:901px){
  .split-mode .bp-spot-leg{display:grid;grid-template-columns:minmax(0,1fr) auto;align-content:start;align-items:center;column-gap:3px;row-gap:2px}
  .split-mode .bp-spot-leg .bp-leg-main{display:contents}
@@ -81,4 +84,28 @@
  .split-mode .bp-metrics span{font-size:10px}
  .split-mode .bp-metrics strong{font-size:14px}
  .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{min-height:36px}
+}
+@media(min-width:901px){
+ .split-mode #basis-pane{background:#fff}
+ .split-mode .bp-card,.split-mode .bp-card.bp-expired{background:#fff;border-top-color:#dce3e8;border-right-color:#dce3e8;border-bottom-color:#dce3e8}
+ .split-mode .bp-card-head{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;align-items:center}
+ .split-mode .bp-name{gap:4px}
+ .split-mode .bp-card h2{font-size:15px}
+ .split-mode .bp-live{order:0;width:auto;display:flex;flex-direction:column;align-items:flex-start;gap:0;line-height:1.2}
+ .split-mode .bp-age{font-size:9px}
+ .split-mode .bp-age:before{width:5px;height:5px;margin-right:3px}
+ .split-mode .bp-window{font-size:8px;padding:1px 0}
+ .split-mode .bp-level{font-size:10px;padding:3px}
+ .split-mode .bp-metrics,.split-mode .bp-transfer-table thead{background:#f5f7f9}
+ .split-mode .bp-card-head,.split-mode .bp-card-foot,.split-mode .bp-metrics .bp-metric,.split-mode .bp-transfer-table th,.split-mode .bp-transfer-table td{border-color:#dce3e8}
+ .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{background:#fff;border-color:#dce3e8}
+}
+@media(min-width:901px){
+ @container(max-width:270px){
+  .split-mode .bp-card-head{grid-template-columns:minmax(0,1fr) auto;gap:2px 4px}
+  .split-mode .bp-name{grid-row:1 / 3;flex-wrap:wrap;align-content:center}
+  .split-mode .bp-card h2{font-size:13px;overflow-wrap:normal}
+  .split-mode .bp-live{grid-column:2;grid-row:1}
+  .split-mode .bp-level{grid-column:2;grid-row:2;justify-self:end}
+ }
 }
