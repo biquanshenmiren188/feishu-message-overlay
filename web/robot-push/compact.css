@@ -267,7 +267,7 @@
  .split-mode .bp-card-foot{padding-top:4px}
  .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{min-height:24px;padding:2px 7px}
 }
-@media(min-width:1600px){.split-mode .bp-board{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}}
+@media(min-width:1600px){.split-mode .bp-board{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}}
 @media(min-width:901px){
  @container(max-width:270px){
   .split-mode .bp-card-head{grid-template-columns:minmax(0,1fr) auto;gap:3px}
