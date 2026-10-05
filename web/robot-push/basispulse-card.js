@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005ton1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005ton1';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005news1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005news1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -37,7 +37,7 @@ export function cardNode(c, matrix) {
     const v=percent(detail[key]), m=metric(label,key==='netBps'?v.replace(/^\+/,''):v);
     metrics.append(m);
   }card.append(metrics);
-  const warnings=fundingWarnings(legs);
+  const warnings=fundingWarnings(legs,detail.newsWarnings);
   const notice=el('div',warnings.length?'bp-period-warning':'bp-warning-space',warnings.join(' · '));
   if(warnings.length)notice.setAttribute('aria-label',warnings.join(' · '));else notice.setAttribute('aria-hidden','true');
   card.append(notice);

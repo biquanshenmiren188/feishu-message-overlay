@@ -21,8 +21,14 @@ export function strategyCopy(data) {
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange,sellEx:sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
 
-export function fundingWarnings(legs) {
- const warnings=[];
+export function fundingWarnings(legs, news=[]) {
+ const warnings=(Array.isArray(news)?news:[]).filter(w=>w && typeof w.summary==='string' && w.summary.trim()).map(w=>{
+  const exchange=typeof w.exchange==='string'?w.exchange.toUpperCase():'';
+  const status=w.status==='postponed'?'（已延期，时间未定）':w.status==='uncertain'?'（待确认）':'';
+  const date=Date.parse(w.deadline);
+  const deadline=Number.isFinite(date)?' · '+new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(date))+' UTC+8':'';
+  return `${exchange} ${w.summary}${status}${deadline}`.trim();
+ });
  const period=periodWarning(legs); if(period)warnings.push(period);
  if(legs?.some(l=>l.spot===false && String(l.exchange).toLowerCase()==='bybit' && l.hours===1)) warnings.push('Bybit 1h 计算不同');
  return warnings;

@@ -41,3 +41,9 @@ test('TON full name and ticker merge into a single chain column',()=>{
  const conflict=matrix([data([{chain:'The Open Network (TON)',deposit:'可用',withdraw:'可用'},{chain:'TON',deposit:'暂停',withdraw:'可用'}])]);
  assert.deepEqual(conflict.rows[0].cells,[['unknown','open']]);
 });
+
+test('news summaries preserve postponed and uncertain notices alongside funding warnings',()=>{
+ const news=[{exchange:'okx',summary:'ONE永续合约下架',status:'postponed'},{exchange:'gate',summary:'维护',status:'uncertain'},null,{}];
+ const result=fundingWarnings([{exchange:'bybit',spot:false,hours:1}],news);
+ assert.deepEqual(result,['OKX ONE永续合约下架（已延期，时间未定）','GATE 维护（待确认）','Bybit 1h 计算不同']);
+});

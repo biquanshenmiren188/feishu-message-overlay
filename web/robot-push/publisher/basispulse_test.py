@@ -27,6 +27,11 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual([c['id'] for c in result['active']],['a'])
         self.assertFalse(result['complete'])
         self.assertEqual(result['invalidCards'],1)
+    def test_news_fields_are_preserved_without_unknown_data(self):
+        value=self.sample()
+        value['active'][0]['details']['newsWarnings']=[{'exchange':'okx','summary':'delisting','status':'postponed','private':'excluded'},None]
+        warnings=normalize(value)['active'][0]['details']['newsWarnings']
+        self.assertEqual(warnings,[{'exchange':'okx','summary':'delisting','status':'postponed'}])
     def test_no_redirects(self):
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.test'))
 

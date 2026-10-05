@@ -50,6 +50,8 @@ def normalize(data):
         card['v2Residual'] = pick(raw.get('v2Residual'), ('bps', 'level', 'windowSeconds'))
         details = raw.get('details') or {}
         card['details'] = pick(details, DETAIL_KEYS)
+        warnings = details.get('newsWarnings')
+        card['details']['newsWarnings'] = [{k: v[:2000] for k, v in pick(w, ('exchange', 'summary', 'status', 'deadline')).items() if isinstance(v, str)} for w in warnings[:20] if isinstance(w, dict)] if isinstance(warnings, list) else []
         card['details']['legs'] = [pick(leg, ('exchange', 'market', 'symbol', 'spot', 'rate', 'hours', 'volume', 'oi')) for leg in details.get('legs', [])[:2]]
         card['details']['transferWallets'] = [pick(wallet, ('key', 'text', 'checkedAt', 'expiresAt', 'refreshFailed')) for wallet in details.get('transferWallets', [])[:20]]
         cards.append(card)

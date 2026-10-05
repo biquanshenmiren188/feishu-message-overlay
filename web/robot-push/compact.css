@@ -227,7 +227,7 @@
 /* Desktop density: clear hierarchy without oversized empty section tracks. */
 @media(min-width:901px){
  .split-mode .bp-board{gap:10px}
- .split-mode .bp-card{padding:9px 10px 8px;border-left-width:4px;border-radius:4px;grid-template-rows:auto 50px minmax(44px,auto) 20px 1fr auto;row-gap:5px}
+ .split-mode .bp-card{padding:9px 10px 8px;border-left-width:4px;border-radius:4px;grid-template-rows:auto 50px minmax(44px,auto) minmax(20px,auto) 1fr auto;row-gap:5px}
  .split-mode .bp-card-head{padding-bottom:7px}
  .split-mode .bp-legs{min-height:50px;padding:0;gap:10px}
  .split-mode .bp-metrics{min-height:44px;border-radius:4px;background:#f4f7f9}
