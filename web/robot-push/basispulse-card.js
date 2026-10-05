@@ -54,6 +54,6 @@ export function cardNode(c, matrix) {
   const payload=strategyCopy(d);copy.disabled=!payload;if(!payload)copy.title='当前组合不能安全生成策略代码，请使用雷达核对';
   copy.onclick=async()=>{try{await navigator.clipboard.writeText(payload);copy.textContent='已复制';copy.setAttribute('aria-label','策略代码已复制');}catch{showDetails('复制策略代码',payload,copy);}};
   footer.append(copy);const radar=safeRadar(d.radarUrl);if(radar){const link=el('a','bp-radar','雷达 ↗');link.href=radar;link.target='_blank';link.rel='noopener noreferrer';link.dataset.action='radar';footer.append(link);}
-  const more=el('button','bp-more','···');more.type='button';more.dataset.action='more';more.setAttribute('aria-label','更多卡片信息');more.onclick=()=>showDetails('卡片信息',`数据来源：BasisPulse\n组合：${d.strategy} · ${assetName(d)}\n${legs.map((l,i)=>`${i?'卖':'买'}：${l.market} ${l.symbol}`).join('\n')}\n更新时间：${clock(d.updatedAt)}\n窗口：${detail.windowSeconds ?? '—'} 秒\n报价单位：USDT`,more);footer.insertBefore(more,footer.querySelector('.bp-radar'));card.append(footer);
+  card.append(footer);
   return {card,age,stamp:JSON.stringify([d,matrix])};
 }
