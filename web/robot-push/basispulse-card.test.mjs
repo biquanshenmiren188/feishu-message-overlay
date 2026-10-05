@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
-import {strategyCopy,periodWarning} from './basispulse-card-model.js';
+import {strategyCopy,periodWarning,fundingWarnings} from './basispulse-card-model.js';
 const now=1791162796000;
 test('period warning excludes spot, missing and equal periods',()=>{
  assert.equal(periodWarning([{spot:false,hours:4},{spot:false,hours:1}]),'周期 4h/1h');
@@ -23,4 +23,10 @@ test('same coin requests coalesce, refresh at five seconds and retry failures',a
   t+=5000;fail=true;await cache.refresh(legs);assert.equal(calls,2);assert.equal(cache.get('ABC').items.length,1);
   t+=4999;await cache.refresh(legs);assert.equal(calls,2);t++;fail=false;await cache.refresh(legs);assert.equal(calls,3);
   delete globalThis.document;
+});
+
+test('Bybit hourly warning independent of period mismatch and excludes spot',()=>{
+ assert.deepEqual(fundingWarnings([{exchange:'binance',spot:false,hours:1},{exchange:'bybit',spot:false,hours:1}]),['Bybit 1h 计算不同']);
+ assert.deepEqual(fundingWarnings([{exchange:'gate',spot:false,hours:4},{exchange:'bybit',spot:false,hours:1}]),['周期 4h/1h','Bybit 1h 计算不同']);
+ assert.deepEqual(fundingWarnings([{exchange:'bybit',spot:true,hours:1}]),[]);
 });

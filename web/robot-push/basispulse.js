@@ -1,11 +1,11 @@
-import { Opportunities, assetName } from './basispulse-model.js?v=20261005link1';
-import { cardNode } from './basispulse-card.js?v=20261005link1';
+import { Opportunities, assetName } from './basispulse-model.js?v=20261005aligned1';
+import { cardNode } from './basispulse-card.js?v=20261005aligned1';
 import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005b';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
 const tools = el('div','bp-tools'), heading=el('h1',''), count=el('span','bp-count','0 ACTIVE');
-const headingLink=el('a','bp-heading-link','卡片推送'); headingLink.href='https://basispulse.yielding.pro/trader#sent-history'; heading.append(headingLink,count); tools.append(heading);
+const headingLink=el('a','bp-heading-link','卡片推送'); headingLink.href='https://basispulse.yielding.pro/trader#sent-history'; headingLink.target='_blank'; headingLink.rel='noopener noreferrer'; heading.append(headingLink,count); tools.append(heading);
 const board=el('section','bp-board'); board.setAttribute('aria-label','BasisPulse 机会列表');
 const empty=el('p','bp-empty','正在读取机会…');
 main.append(tools,board,empty);

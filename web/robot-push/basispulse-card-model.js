@@ -19,3 +19,10 @@ export function strategyCopy(data) {
   if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange,sellEx:sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
+
+export function fundingWarnings(legs) {
+ const warnings=[];
+ const period=periodWarning(legs); if(period)warnings.push(period);
+ if(legs?.some(l=>l.spot===false && String(l.exchange).toLowerCase()==='bybit' && l.hours===1)) warnings.push('Bybit 1h 计算不同');
+ return warnings;
+}

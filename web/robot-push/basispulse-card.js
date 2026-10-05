@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005grid2';
-import {strategyCopy,periodWarning} from './basispulse-card-model.js?v=20261005grid2';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005aligned1';
+import {strategyCopy,fundingWarnings} from './basispulse-card-model.js?v=20261005aligned1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -38,8 +38,10 @@ export function cardNode(c, matrix) {
     const v=percent(detail[key]), m=metric(label,key==='netBps'?v.replace(/^\+/,''):v);
     if(key==='indexBps'&&detail.spotIndex)m.append(el('small','','现货价代指数'));metrics.append(m);
   }card.append(metrics);
-  const warning=periodWarning(legs);
-  if(warning){const notice=el('div','bp-period-warning',warning);notice.setAttribute('aria-label','资金费结算'+warning);card.append(notice);}
+  const warnings=fundingWarnings(legs);
+  const notice=el('div',warnings.length?'bp-period-warning':'bp-warning-space',warnings.join(' · '));
+  if(warnings.length)notice.setAttribute('aria-label',warnings.join(' · '));else notice.setAttribute('aria-hidden','true');
+  card.append(notice);
   const transfer=el('section','bp-transfer'), heading=el('div','bp-transfer-heading');
   heading.append(el('strong','','现货充提'),el('span','','充 / 提 · ✓开 ×关 ?未知 —无数据'));
   const noSpot=matrix.rows.filter(r=>r.noSpot).map(r=>r.exchange).join(' / ');if(noSpot)heading.append(el('span','',`${noSpot} 无现货`));

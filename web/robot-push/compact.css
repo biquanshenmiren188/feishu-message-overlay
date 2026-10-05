@@ -140,3 +140,38 @@
   .split-mode .bp-card-head{gap:2px}
  }
 }
+.bp-warning-space{display:none}
+@media(min-width:901px){
+ .split-mode .bp-card{padding:8px 9px;line-height:1.3}
+ .split-mode .bp-card-head{min-height:26px;padding-bottom:6px}
+ .split-mode .bp-legs{padding:7px 0;min-height:80px;box-sizing:border-box;gap:10px}
+ .split-mode .bp-leg{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:20px 25px 19px;gap:0;align-content:start}
+ .split-mode .bp-leg-main{display:contents}
+ .split-mode .bp-leg h3{grid-column:1;grid-row:1;margin:0;font-family:inherit;font-size:11px;line-height:18px;align-items:center;gap:3px}
+ .split-mode .bp-rate{grid-column:1;grid-row:2;align-items:center;align-self:start;min-height:24px}
+ .split-mode .bp-rate strong{font-size:17px;font-variant-numeric:tabular-nums}
+ .split-mode .bp-leg-stats{grid-column:1;grid-row:3;display:flex;align-items:center;gap:7px;min-width:0;text-align:left;flex-wrap:wrap}
+ .split-mode .bp-leg-stats .bp-metric{display:flex;flex-direction:row;align-items:baseline;gap:3px;margin:0;font:10px/1.2 ui-monospace,Consolas,monospace;white-space:nowrap}
+ .split-mode .bp-leg-stats .bp-metric span{font-size:9px}
+ .split-mode .bp-spot-leg{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:20px 25px 19px;align-items:start;gap:0}
+ .split-mode .bp-spot-leg h3{grid-column:1 / -1;grid-row:1}
+ .split-mode .bp-spot-leg .bp-rate{grid-column:1;grid-row:2}
+ .split-mode .bp-spot-leg .bp-leg-stats{grid-column:2;grid-row:2;align-self:center}
+ .split-mode .bp-spot-leg .bp-leg-stats .bp-metric{flex-direction:column;gap:0;font-size:10px;line-height:1.15}
+ .split-mode .bp-metrics{min-height:61px;margin:0 0 6px}
+ .split-mode .bp-metrics .bp-metric{padding:6px 2px;gap:3px;justify-content:flex-start}
+ .split-mode .bp-metrics strong{font-size:15px;font-variant-numeric:tabular-nums}
+ .split-mode .bp-period-warning,.split-mode .bp-warning-space{display:block;box-sizing:border-box;min-height:25px;margin:0 0 6px;padding:4px 6px;font-size:11px}
+ .split-mode .bp-transfer-heading{min-height:20px;line-height:18px;align-items:center;gap:5px;margin-bottom:3px}
+ .split-mode .bp-transfer-heading>span{font-size:10px}
+ .split-mode .bp-transfer-table th,.split-mode .bp-transfer-table td{height:18px;padding:2px 3px;font-size:10px}
+ .split-mode .bp-card-foot{padding-top:6px;margin-top:8px}
+ .split-mode .bp-card-foot button,.split-mode .bp-card-foot a{min-height:28px;padding:3px 8px}
+ @container(max-width:270px){
+  .split-mode .bp-legs{min-height:103px;gap:6px}
+  .split-mode .bp-leg h3{font-size:10px}
+  .split-mode .bp-leg-stats{gap:2px}
+  .split-mode .bp-rate strong{font-size:14px}
+  .split-mode .bp-metrics{min-height:94px}
+ }
+}
