@@ -69,3 +69,10 @@ test('fresh attributed source fills unknowns without overriding radar or hidden 
  for(const patch of [{key:'gate:OTHER'},{refreshFailed:true},{checkedAt:new Date(now-120001).toISOString()},{expiresAt:new Date(now-1).toISOString()},{text:'Gate【未知来源｜12:00】：充开/提开 ETH'}])assert.deepEqual(build({...w,...patch}).rows[0].cells,[['unknown','unknown']]);
  assert.deepEqual(build({...w,text:'Gate【官方｜12:00】：充开/提开 ETH；充关/提开 ERC20'}).rows[0].cells,[['unknown','open']]);
 });
+
+
+test('retained expired Gate/OKX cards still produce compatible strategy codes',()=>{
+ const d={strategy:'SF',validUntil:'2000-01-01T00:00:00Z',details:{legs:[{exchange:'gate',symbol:'UP_USDT',spot:true},{exchange:'okx',symbol:'UP-USDT-SWAP',spot:false}]}};
+ assert.deepEqual(JSON.parse(strategyCopy(d).split('\n').slice(1).join('\n')),{type:'SF',name:'UP',buyEx:'gate',sellEx:'okx'});
+ for(const symbol of ['1000UP-USDT-SWAP','UP-USD-SWAP','UP-USDT-261225'])assert.equal(strategyCopy({...d,details:{legs:[d.details.legs[0],{...d.details.legs[1],symbol}]}}),null);
+});

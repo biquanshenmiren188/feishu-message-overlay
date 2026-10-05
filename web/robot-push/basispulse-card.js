@@ -1,5 +1,5 @@
 import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005fill1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005fill1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261006copy1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -52,8 +52,16 @@ export function cardNode(c, matrix) {
   }table.append(tbody);transfer.append(table);
   card.append(transfer);
   const footer=el('footer','bp-card-foot'), copy=el('button','','复制');copy.type='button';copy.dataset.action='copy';copy.title='复制 ASTRO-QUICK-COPY 代码';
-  const payload=strategyCopy(d);copy.disabled=!payload;if(!payload)copy.title='当前组合不能安全生成策略代码，请使用雷达核对';
-  copy.onclick=async()=>{try{await navigator.clipboard.writeText(payload);copy.textContent='已复制';copy.setAttribute('aria-label','策略代码已复制');}catch{showDetails('复制策略代码',payload,copy);}};
+  const strategyPayload=strategyCopy(d);
+  const copyKind=strategyPayload?'策略代码':'卡片文字';
+  if(!strategyPayload)copy.title='复制卡片文字（当前组合不支持策略代码）';
+  copy.setAttribute('aria-live','polite');
+  copy.onclick=async()=>{
+    // Read the displayed status at click time: retained cards can expire without rebuilding.
+    const payload=strategyPayload || [...card.children].filter(n=>n!==footer).map(n=>n.innerText).filter(Boolean).join('\n')+`\n更新时间：${clock(d.updatedAt)}`+(safeRadar(d.radarUrl)?`\n${safeRadar(d.radarUrl)}`:'');
+    try{await navigator.clipboard.writeText(payload);copy.textContent='已复制';copy.setAttribute('aria-label',`${copyKind}已复制`);}
+    catch{showDetails(`复制${copyKind}`,payload,copy);}
+  };
   footer.append(copy);const radar=safeRadar(d.radarUrl);if(radar){const link=el('a','bp-radar','雷达 ↗');link.href=radar;link.target='_blank';link.rel='noopener noreferrer';link.dataset.action='radar';footer.append(link);}
   card.append(footer);
   return {card,age,stamp:JSON.stringify([d,matrix])};

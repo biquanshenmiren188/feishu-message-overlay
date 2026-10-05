@@ -17,7 +17,12 @@ export function strategyCopy(data) {
   if(!buy || !sell || !['SF','FS','FF'].includes(data.strategy) || !allowed.has(buy.exchange) || !allowed.has(sell.exchange)) return null;
   if(data.strategy==='FS' && sell.exchange==='aster')return null;
   if(Boolean(buy.spot)!==(data.strategy==='SF') || Boolean(sell.spot)!==(data.strategy==='FS'))return null;
-  const a=String(buy.symbol || '').replace(/[_/\-]/g,'').toUpperCase(), b=String(sell.symbol || '').replace(/[_/\-]/g,'').toUpperCase();
+  const symbol=leg=>{
+    const raw=String(leg.symbol || '').toUpperCase();
+    const pair=leg.exchange==='okx' && leg.spot===false && /^[A-Z0-9]+-USDT-SWAP$/.test(raw)?raw.slice(0,-5):raw;
+    return pair.replace(/[_/\-]/g,'');
+  };
+  const a=symbol(buy), b=symbol(sell);
   if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange,sellEx:sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
