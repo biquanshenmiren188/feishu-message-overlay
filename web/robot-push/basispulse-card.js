@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005colors1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005colors1';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005ton1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005ton1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -26,9 +26,8 @@ export function cardNode(c, matrix) {
     const row=el('section','bp-leg'), primary=el('div','bp-leg-main'), exchange=el('h3');
     exchange.append(el('span','bp-side',i===0?'买':'卖'),el('span','',`${exchangeLabel(leg.exchange || '')} ${leg.spot?'现货':'永续'}`));
     exchange.title=leg.symbol || '';primary.append(exchange);
-    const rate=el('div','bp-rate');rate.append(el('strong',leg.spot?'bp-na':'',leg.spot?'不适用':percent(leg.rate,.01)));
-    if(!leg.spot)rate.append(el('span','bp-period',number(leg.hours)?`${leg.hours}h`:'—'));
-    primary.append(rate);const stats=el('div','bp-leg-stats');stats.append(metric('24H',numeric(leg.volume)));
+    if(!leg.spot){const rate=el('div','bp-rate');rate.append(el('strong','',percent(leg.rate,.01)),el('span','bp-period',number(leg.hours)?`${leg.hours}h`:'—'));primary.append(rate);}
+    const stats=el('div','bp-leg-stats');stats.append(metric('24H',numeric(leg.volume)));
     if(!leg.spot)stats.append(metric('OI',numeric(leg.oi)));
     row.classList.toggle('bp-spot-leg',leg.spot===true);
     row.append(primary,stats);legGrid.append(row);
@@ -36,7 +35,7 @@ export function cardNode(c, matrix) {
   const metrics=el('div','bp-metrics');
   for(const [label,key]of [['净收益均值','netBps'],['盘口差均值','marketBps'],['盘口差 P75','p75Bps'],['指数差均值','indexBps']]) {
     const v=percent(detail[key]), m=metric(label,key==='netBps'?v.replace(/^\+/,''):v);
-    if(key==='indexBps'&&detail.spotIndex)m.append(el('small','','现货价代指数'));metrics.append(m);
+    metrics.append(m);
   }card.append(metrics);
   const warnings=fundingWarnings(legs);
   const notice=el('div',warnings.length?'bp-period-warning':'bp-warning-space',warnings.join(' · '));

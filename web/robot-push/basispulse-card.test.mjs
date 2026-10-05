@@ -34,3 +34,10 @@ test('Bybit hourly warning independent of period mismatch and excludes spot',()=
 test('source residual color boundaries preserve all five tiers',()=>{
  for(const [level,tone] of [[null,'grey'],[NaN,'grey'],[0,'grey'],[1,'grey'],[2,'blue'],[3,'blue'],[4,'yellow'],[5,'yellow'],[6,'orange'],[9,'orange'],[10,'red'],[81,'red']])assert.equal(residualTone(level),tone);
 });
+
+test('TON full name and ticker merge into a single chain column',()=>{
+ const m=matrix([data([{chain:'The Open Network (TON)',deposit:'可用',withdraw:'可用'},{chain:'TON',deposit:'可用',withdraw:'可用'}])]);
+ assert.deepEqual(m.chains,['TON']);assert.deepEqual(m.rows[0].cells,[['open','open']]);
+ const conflict=matrix([data([{chain:'The Open Network (TON)',deposit:'可用',withdraw:'可用'},{chain:'TON',deposit:'暂停',withdraw:'可用'}])]);
+ assert.deepEqual(conflict.rows[0].cells,[['unknown','open']]);
+});

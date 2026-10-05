@@ -3,6 +3,7 @@ export function chainName(value) {
   const name=value.trim();
   if (/^(ERC[- ]?20|ETH|ETHEREUM(?:\s*\(ERC20\))?)$/i.test(name)) return 'ETH';
   if (/^(BSC|BEP[- ]?20|BNB(?: SMART CHAIN)?(?:\s*\(BEP20\))?)$/i.test(name)) return 'BNB';
+  if (/^(TON|(?:THE )?OPEN NETWORK(?:\s*\(TON\))?)$/i.test(name)) return 'TON';
   return name;
 }
 export function periodWarning(legs) {
