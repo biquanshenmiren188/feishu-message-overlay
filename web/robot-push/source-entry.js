@@ -6,5 +6,5 @@ for (const [label, url, selected] of [['机器人消息', './', !basis], ['Basis
   if (selected) a.setAttribute('aria-current', 'page'); modes.append(a);
 }
 document.querySelector('main').prepend(modes);
-if (basis) await import('./basispulse.js?v=20261004d');
+if (basis) await import('./basispulse.js?v=20261005b');
 else await import('./page.js?v=20261003m');

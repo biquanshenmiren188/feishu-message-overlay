@@ -15,14 +15,14 @@ Cloudflare 服务令牌只放 `/etc/robot-push/basispulse.json`，root:robot-pus
 - 展示所有 active 项，没有 R1 过滤或额外阈值；同一市场组合去重，重新进入的 span 替换旧卡，旧快照不覆盖新快照。
 - 名称升序、稳定 R 级别降序、活跃开始时间降序；15 秒排序，级别变化须稳定 15 秒，新项先追加。
 - 完整快照中消失的项目，或到达源 validUntil 的项目，变灰保留 30 秒。非完整快照缺项不会直接删除，仍遵守项目原始有效期。
-- 币种、方向、两边资金费及周期、成交额、持仓、净收益/盘口差/P75/指数差、充提原文和源更新时间均来自接口。bps 转百分比除以 100；资金费小数转百分比乘以 100，保留四位小数。未知显示横杠，现货不显示合约持仓。
+- 币种、方向、两边资金费及周期、成交额、持仓、净收益/盘口差/P75/指数差和源更新时间来自 BasisPulse。bps 转百分比除以 100；资金费小数转百分比乘以 100，按参考卡片保留两位小数，底层值不变。未知显示横杠，现货不显示合约持仓。
 - 手机完整展开，无卡片分页或折叠。可搜索币种/交易所，跳转真实雷达链接。
-- 同步的是接口数据和卡片生命周期，不是嵌入源站。源站专用 Astro/GC 交易复制协议不在提供接口中，没有自行生成交易指令；可由“查看原站”使用原站功能。
+- 卡片采用参考截图的左右腿、四项指标、链表、复制/雷达/详情布局。复制使用已核对的自有雷达 ASTRO-QUICK-COPY 协议，仅支持已知交易所、方向和相同 USDT 币种；不同单位、未支持平台或 Aster FS 禁用复制。复制不执行交易，未增加 GC 指令。
 - 源站 SSE 每秒更新；此授权接口按 5 秒拉取，网页每秒读缓存，正常情况下可能相差约一个到两个刷新周期，不承诺逐秒一致。
 
 ## 验证与发布
 
-运行 `node --test web/robot-push/*.test.mjs`：51 项通过。运行 `python -m unittest discover -s web/robot-push/publisher -p basispulse_test.py`：5 项通过；同样的 Python 测试已在生产 Linux 上通过。
+运行 `node --test web/robot-push/*.test.mjs`：58 项通过。运行 `python -m unittest discover -s web/robot-push/publisher -p basispulse_test.py`：5 项通过；同样的 Python 测试已在生产 Linux 上通过。
 
 Chromium 390×844：全部卡片展开、搜索筛选通过，页面 scrollWidth=390，无横向溢出。桌面布局检查通过。隔离测试接口 503 后页面退出 ACTIVE；恢复接口后无需刷新自动恢复。未进行实体 iPhone/微信测试。
 
@@ -31,3 +31,11 @@ Chromium 390×844：全部卡片展开、搜索筛选通过，页面 scrollWidth
 发布脚本 `publisher/deploy-basispulse.sh` 会核对原 index SHA256 并备份，备份目录 `/opt/robot-push/backups/basispulse-20261004`。代码上传 GitHub 不自动部署。此变更基于尚未合并的源代码同步 PR #2，使用独立分支和叠加 PR，未合并任何 PR。
 
 回滚：停止并禁用 `basispulse.service`，恢复备份 index.html 和 robot-push.conf，nginx -t 通过后 reload。恢复页面入口和路由即可，不需要改动现有 Feishu 接收器。凭证轮换时仅更新服务器私有配置并重启新 sidecar。
+
+## 2026-10-05 卡片与雷达充提更新
+
+充提改用雷达同源 /api/transfers/query?coin=...，同币查询合并、最多两个并发，完整结果每 5 秒查询，pending 每秒补查，失败按 5/10/20/30 秒重试。页面隐藏时暂停。沿用雷达两分钟新鲜度与逐方向证据时间，保留支持、延迟、拥堵、受限；未知不推断为开放或无现货，不退回第三方充提文本。链别名归并冲突记为未知，来源弹窗保留原始状态与采集时间。
+
+正式页使用 3 号浏览器验收：1366×900 双列、390×844 和 320×740 手机无横向溢出，真实 Gate ETH 开放/BSC 暂停、Bitget ERC20 开放与雷达接口一致；复制按钮成功反馈、来源弹窗通过。后端仍 INTERVAL=5，两个服务 active。未做实体手机验证。
+
+此 UI 更新独立备份：/opt/robot-push/backups/basispulse-cards-20261005。回滚只需恢复备份内页面与静态模块，无须停止采集服务或修改 nginx/Access。初次安装脚本是一次性有保护脚本，不用于此次更新。

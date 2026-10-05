@@ -1,4 +1,6 @@
-import { Opportunities, percent, money, assetName, safeRadar, number } from './basispulse-model.js?v=20261004d';
+import { Opportunities, assetName } from './basispulse-model.js?v=20261005b';
+import { cardNode } from './basispulse-card.js?v=20261005b';
+import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005b';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('main');
 for (const child of [...main.children]) if (!child.classList.contains('source-modes')) child.hidden = true;
@@ -13,40 +15,9 @@ const board=el('section','bp-board'); board.setAttribute('aria-label','BasisPuls
 const empty=el('p','bp-empty','正在读取机会…');
 main.append(tools,state,note,board,empty);
 const model=new Opportunities(), nodes=new Map(); let envelope=null, failed=false, failures=0, timer;
+const transfers=createRadarTransfers(()=>render());
 const time = value => { const d = new Date(value); return Number.isFinite(+d) ? d.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—'; };
-function metric(label, value) { const n=el('div','bp-metric'); n.append(el('span','',label),el('strong','',value)); return n; }
-function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? `${Math.floor(n/60)}分${n%60}秒` : '—'; }
-function cardNode(c, now) {
-  const d=c.data, detail=d.details || {}, card=el('article','bp-card'), title=el('header','bp-card-head');
-  card.dataset.id=d.id;
-  title.append(el('h2','',`${assetName(d)} · ${d.strategy || '—'}`));
-  const age=el('span','bp-age'); title.append(age); card.append(title);
-  const level=el('div','bp-level',`R${number(d.v2Residual?.level) ? d.v2Residual.level : '—'}  ${percent(d.v2Residual?.bps)}`);
-  level.append(el('span','',d.trigger==='v2_price_window' ? 'V2 收敛' : (d.trigger || ''))); card.append(level);
-  const legs=el('div','bp-legs');
-  for (const [i, leg] of (detail.legs || []).entries()) {
-    const row=el('section','bp-leg');
-    row.append(el('h3','',`${i===0?'买入 / 多':'卖出 / 空'} · ${leg.market || leg.exchange || '—'}`),el('span','bp-symbol',leg.symbol || '—'));
-    const values=el('div','bp-leg-values');
-    if (!leg.spot) values.append(metric('资金费',`${percent(leg.rate, .01, 4)} / ${number(leg.hours) ? `${leg.hours}h` : '—'}`));
-    values.append(metric('24H 成交额',`${money(leg.volume)} U`));
-    if (!leg.spot) values.append(metric('持仓量',`${money(leg.oi)} U`));
-    row.append(values); legs.append(row);
-  }
-  card.append(legs);
-  const metrics=el('div','bp-metrics');
-  for(const [name,key] of [['净收益均值','netBps'],['盘口差均值','marketBps'],['盘口差 P75','p75Bps'],['指数差均值','indexBps']]) metrics.append(metric(name,percent(detail[key])));
-  card.append(metrics);
-  const flags=el('div','bp-flags');
-  if (detail.spotIndex) flags.append(el('span','','现货价代指数'));
-  if (detail.early) flags.append(el('span','','提前信号'));
-  flags.append(el('span','',`窗口 ${number(detail.windowSeconds)?detail.windowSeconds:'—'} 秒`)); card.append(flags);
-  if (detail.transferText) card.append(el('p','bp-transfers',detail.transferText.trim()));
-  const foot=el('footer','bp-card-foot'); foot.append(el('span','',`更新 ${time(d.updatedAt)} · UTC+8`));
-  const radar=safeRadar(d.radarUrl);
-  if(radar){ const a=el('a','','雷达走势 ↗'); a.href=radar; a.target='_blank'; a.rel='noopener noreferrer'; foot.append(a); }
-  card.append(foot); return {card,age,stamp:JSON.stringify(d)};
-}
+function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? n>=3600?`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`:n>=60?`${Math.floor(n/60)}m ${n%60}s`:`${n}s` : '—'; }
 function render() {
   const now=Date.now(), rows=model.tick(now), query=search.value.trim().toLowerCase();
   const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000;
@@ -59,8 +30,11 @@ function render() {
     if(live)active++;
     if(query && !`${assetName(c.data)} ${c.data.longMarket} ${c.data.shortMarket}`.toLowerCase().includes(query))continue;
     shown++; keep.add(id); let node=nodes.get(id);
-    if(!node || node.stamp!==JSON.stringify(c.data)) {
-      const next=cardNode(c,now); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
+    const matrix=radarMatrix(c.data.details?.legs || [],transfers.get,now);
+    if(!node || node.stamp!==JSON.stringify([c.data,matrix])) {
+      const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
+      const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
+      if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
     node.card.classList.toggle('bp-expired',!live); node.age.textContent=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:now>=c.expiredAt?'已失效':'待恢复';
     const desired=board.children[shown-1]; if(desired!==node.card)board.insertBefore(node.card,desired || null);
@@ -82,4 +56,4 @@ async function poll() {
   render(); timer=setTimeout(poll,failures ? Math.min(30_000,5000*2**Math.min(failures-1,3)) : 1000);
 }
 search.addEventListener('input',render);
-setInterval(render,1000); poll();
+setInterval(()=>{render();void transfers.refresh(model.tick().flatMap(c=>c.data.details?.legs || []));},1000); poll();
