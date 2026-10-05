@@ -60,3 +60,12 @@ test('no spot requires current matching explicit catalog evidence, not missing d
  for(const patch of [{key:'binance:OTHER'},{refreshFailed:true},{expiresAt:new Date(now-1).toISOString()},{text:'状态未知'},{checkedAt:new Date(now+60000).toISOString()}])assert.equal(build([{...w,...patch}]).noSpot,false);
  assert.equal(build([w],[data([{chain:'ETH',deposit:'可用',withdraw:'可用'}],{exchange:'binance'})]).noSpot,false);
 });
+
+test('fresh attributed source fills unknowns without overriding radar or hidden sides',()=>{
+ const w={key:'gate:ABC',text:'Gate【官方｜12:00:00】：充开/提关 ETH；充支持/提支持 BSC',checkedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString(),refreshFailed:false};
+ const build=(wallet=w,items=[])=>radarMatrix(legs,()=>({items}),now,[wallet]);
+ assert.deepEqual(build().rows[0].cells,[['open','closed'],['supported','supported']]);
+ assert.deepEqual(build(w,[data([{chain:'ETH',deposit:'暂停',withdraw:'未知',withdrawHidden:true}])]).rows[0].cells[0],['closed','unknown']);
+ for(const patch of [{key:'gate:OTHER'},{refreshFailed:true},{checkedAt:new Date(now-120001).toISOString()},{expiresAt:new Date(now-1).toISOString()},{text:'Gate【未知来源｜12:00】：充开/提开 ETH'}])assert.deepEqual(build({...w,...patch}).rows[0].cells,[['unknown','unknown']]);
+ assert.deepEqual(build({...w,text:'Gate【官方｜12:00】：充开/提开 ETH；充关/提开 ERC20'}).rows[0].cells,[['unknown','open']]);
+});

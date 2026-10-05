@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005nospot2';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005nospot2';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005fill1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005fill1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -48,7 +48,7 @@ export function cardNode(c, matrix) {
   const thead=el('thead'),tr=el('tr');tr.append(el('th','','链'));for(const chain of matrix.chains)tr.append(el('th','',chain));thead.append(tr);table.append(thead);
   const tbody=el('tbody'),symbols={open:'✓',closed:'×',unknown:'?',none:'—',supported:'支持',delayed:'延迟',congested:'拥堵',restricted:'受限'},labels={open:'开放',closed:'关闭',unknown:'未知',none:'无现货',supported:'仅支持，未确认开放',delayed:'延迟',congested:'拥堵',restricted:'受限'};
   for(const row of matrix.rows){const tr=el('tr'),th=el('th','',exchangeLabel(row.exchange));th.scope='row';tr.append(th);
-    row.cells.forEach((pair,index)=>{const td=el('td'),group=el('div','bp-transfer-pair');pair.forEach((s,i)=>{const cell=el('span',`bp-transfer-${s}`,symbols[s]);const label=`${row.exchange} ${matrix.chains[index]} ${i?'提现':'充值'}：${labels[s]}`;cell.title=label;cell.setAttribute('aria-label',label);group.append(cell);});td.append(group);tr.append(td);});tbody.append(tr);
+    row.cells.forEach((pair,index)=>{const td=el('td'),group=el('div','bp-transfer-pair');pair.forEach((s,i)=>{const cell=el('span',`bp-transfer-${s}`,symbols[s]);const label=`${row.exchange} ${matrix.chains[index]} ${i?'提现':'充值'}：${labels[s]}`;cell.title=label+(row.supplements?.get(matrix.chains[index])?.[i]?` · 源站充提补充 · ${clock(row.supplementAt)}`:'');cell.setAttribute('aria-label',label);group.append(cell);});td.append(group);tr.append(td);});tbody.append(tr);
   }table.append(tbody);transfer.append(table);
   card.append(transfer);
   const footer=el('footer','bp-card-foot'), copy=el('button','','复制');copy.type='button';copy.dataset.action='copy';copy.title='复制 ASTRO-QUICK-COPY 代码';

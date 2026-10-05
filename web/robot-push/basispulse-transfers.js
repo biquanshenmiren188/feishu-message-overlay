@@ -3,6 +3,27 @@ export function transferCoin(leg) {
   const symbol=String(leg?.symbol || '').toUpperCase();
   return /^([\p{L}\p{N}_]{1,40})(?:\/|_)?USDT$/u.exec(symbol)?.[1]?.replace(/_$/,'') || null;
 }
+export function walletStates(wallet, key, now) {
+  const states=new Map(), checked=Date.parse(wallet?.checkedAt), expires=Date.parse(wallet?.expiresAt);
+  if(!wallet || wallet.key!==key || wallet.refreshFailed!==false || !Number.isFinite(checked)
+    || checked>now+30000 || now-checked>120000 || !Number.isFinite(expires) || expires<=now)return states;
+  const text=String(wallet.text || '');
+  // Accept a known attribution and complete explicit status clauses only.
+  if(!/【(?:官方|官方名单|Cexorer补充)[｜|]/.test(text))return states;
+  const body=text.split('】：')[1];if(!body)return states;
+  const values={开:'open',关:'closed',支持:'supported',延迟:'delayed',拥堵:'congested',受限:'restricted',未知:'unknown','?':'unknown'};
+  for(const clause of body.split(/[；;\n]/)) {
+    const m=/^\s*充(开|关|支持|延迟|拥堵|受限|未知|\?)\/提(开|关|支持|延迟|拥堵|受限|未知|\?)\s+([^：:；;]+)\s*$/.exec(clause);
+    if(!m)continue;
+    // Commas delimit explicit network lists; do not split multiword names.
+    for(const raw of m[3].split(/[,，、]/)) {
+      const name=chainName(raw);if(!name || name.length>80)continue;
+      const pair=[values[m[1]],values[m[2]]],old=states.get(name);
+      states.set(name,old?pair.map((v,i)=>v===old[i]?v:'unknown'):pair);
+    }
+  }
+  return states;
+}
 export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
   const chains=[], descriptions=[];
   const rows=legs.map(leg=>{
@@ -17,7 +38,7 @@ export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
       && Number.isFinite(checked) && checked<=now+30000 && Number.isFinite(expires) && expires>now
       && expires-checked<=7200001 && /[｜|]无现货[｜|】]/.test(wallet.text || '')
       && /该平台无现货/.test(wallet.text || '') && !(fresh && data.chains?.length);
-    const states=new Map();
+    const states=new Map(), blocked=new Map(), supplements=new Map();
     for(const c of data?.chains || []) {
       // Match the radar's retired Binance Beacon-chain exclusion.
       if(leg.exchange==='binance'&&['BNB','BEP2','BNBBEACONCHAIN','BNBBEACONCHAINBEP2'].includes(String(c.chain).toUpperCase().replace(/[\s_()-]/g,'')))continue;
@@ -27,7 +48,17 @@ export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
         if(!fresh||c[side+'Hidden']||evidence&&(!Number.isFinite(evidence.at)||now-evidence.at>120000||evidence.at>now+30000))return 'unknown';
         return ({'可用':'open','暂停':'closed','不支持':'closed','支持':'supported','延迟':'delayed','拥堵':'congested','受限':'restricted'})[c[side]] || 'unknown';
       });
-      const old=states.get(name);states.set(name,old?pair.map((s,i)=>s===old[i]?s:'unknown'):pair);
+      const previousBlock=blocked.get(name)||[false,false];
+      blocked.set(name,['deposit','withdraw'].map((side,i)=>previousBlock[i]||!!c[side+'Hidden']));
+      const old=states.get(name);if(old)blocked.set(name,pair.map((s,i)=>blocked.get(name)[i]||s!==old[i]));states.set(name,old?pair.map((s,i)=>s===old[i]?s:'unknown'):pair);
+      if(!chains.includes(name))chains.push(name);
+    }
+    if(!noSpot)for(const [name,pair] of walletStates(wallet,`${leg.exchange}:${coin}`,now)) {
+      if(leg.exchange==='binance'&&name==='BNB'&&/充[^；]+ BNB(?:；|$)/.test(wallet.text))continue;
+      const current=states.get(name)||['unknown','unknown'], denied=blocked.get(name)||[];
+      const used=pair.map((value,i)=>current[i]==='unknown'&&!denied[i]&&value!=='unknown');
+      states.set(name,current.map((value,i)=>used[i]?pair[i]:value));
+      if(used.some(Boolean))supplements.set(name,used);
       if(!chains.includes(name))chains.push(name);
     }
     const at=value=>Number.isFinite(value)?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未提供';
@@ -36,7 +67,7 @@ export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
       `查询时间：${at(data.checkedAt)} · UTC+8\n${fresh?'':'状态已过期或查询失败，当前按未知显示\n'}${data.warning || ''}\n`+
       (data.chains?.length?data.chains.map(c=>`${c.chain}：充 ${c.deposit} / 提 ${c.withdraw}\n  充值来源：${source(c.depositEvidence)} · ${at(c.depositEvidence?.at ?? data.checkedAt)}\n  提现来源：${source(c.withdrawEvidence)} · ${at(c.withdrawEvidence?.at ?? data.checkedAt)}`).join('\n'):'未取得分链状态，当前显示未知')+
       `\n来源页面：${data.sourceUrl || '未提供'}`:'雷达充提数据正在查询，失败后自动重试'));
-    return {exchange:String(leg.exchange).toUpperCase(),noSpot,states};
+    return {exchange:String(leg.exchange).toUpperCase(),noSpot,states,supplements,supplementAt:checked};
   });
   if(!chains.length)chains.push('状态');
   return {text:'数据来源：资金费雷达 /api/transfers/query\n\n'+descriptions.join('\n\n'),chains,rows:rows.map(r=>({...r,cells:chains.map(c=>r.noSpot?['none','none']:(r.states.get(c)||['unknown','unknown']))}))};
