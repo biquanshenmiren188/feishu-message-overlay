@@ -246,3 +246,12 @@
  .split-mode .bp-card-foot a:focus-visible,.split-mode .bp-card-foot button:focus-visible{outline:2px solid #008b72;outline-offset:2px}
  @container(max-width:270px){.split-mode .bp-metrics{min-height:78px}}
 }
+
+/* Match source cycle colors and apply residual color to the full card frame. */
+@media(min-width:901px){
+ .split-mode .bp-period-hourly{color:#9a3900;background:#fff0e1;border-color:#d06a15}
+ .split-mode .bp-period-eight{color:#155cad;background:#e7f1ff;border-color:#4383c5}
+ .split-mode .bp-period-other{color:#7031a7;background:#f1e8ff;border-color:#9a62c8}
+ .split-mode .bp-period-unknown{color:#657b89;background:transparent;border-color:#dce3e8}
+ .split-mode .bp-card,.split-mode .bp-card.bp-expired{border:1px solid var(--rank)}
+}

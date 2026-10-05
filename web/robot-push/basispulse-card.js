@@ -1,5 +1,5 @@
-import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005base1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005base1';
+import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005frame1';
+import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261005frame1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -26,7 +26,7 @@ export function cardNode(c, matrix) {
     const row=el('section','bp-leg'), primary=el('div','bp-leg-main'), exchange=el('h3');
     exchange.append(el('span','bp-side',i===0?'买':'卖'),el('span','',`${exchangeLabel(leg.exchange || '')} ${leg.spot?'现货':'永续'}`));
     exchange.title=leg.symbol || '';primary.append(exchange);
-    if(!leg.spot){const rate=el('div','bp-rate');rate.append(el('strong','',percent(leg.rate,.01)),el('span','bp-period',number(leg.hours)?`${leg.hours}h`:'—'));primary.append(rate);}
+    if(!leg.spot){const rate=el('div','bp-rate');rate.append(el('strong','',percent(leg.rate,.01)),el('span',`bp-period bp-period-${!number(leg.hours)||leg.hours<=0?'unknown':leg.hours===1?'hourly':leg.hours===8?'eight':'other'}`,number(leg.hours)&&leg.hours>0?`${leg.hours}h`:'—'));primary.append(rate);}
     const stats=el('div','bp-leg-stats');stats.append(metric('24H',numeric(leg.volume)));
     if(!leg.spot)stats.append(metric('OI',numeric(leg.oi)));
     row.classList.toggle('bp-spot-leg',leg.spot===true);
