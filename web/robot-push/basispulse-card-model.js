@@ -13,9 +13,9 @@ export function periodWarning(legs) {
 }
 export function strategyCopy(data) {
   const legs=data.details?.legs || [], [buy,sell]=legs;
-  const allowed=new Set(['binance','bitget','bybit','gate','okx','aster']);
+  const allowed=new Set(['binance','bitget','bybit','gate','okx','aster','hyperliquid']);
   if(!buy || !sell || !['SF','FS','FF'].includes(data.strategy) || !allowed.has(buy.exchange) || !allowed.has(sell.exchange)) return null;
-  if(data.strategy==='FS' && sell.exchange==='aster')return null;
+  if(data.strategy==='FS' && ['aster','hyperliquid'].includes(sell.exchange))return null;
   if(Boolean(buy.spot)!==(data.strategy==='SF') || Boolean(sell.spot)!==(data.strategy==='FS'))return null;
   const symbol=leg=>{
     const raw=String(leg.symbol || '').toUpperCase();
@@ -24,7 +24,7 @@ export function strategyCopy(data) {
   };
   const a=symbol(buy), b=symbol(sell);
   if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
-  return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange,sellEx:sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
+  return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange==='hyperliquid'?'hl':buy.exchange,sellEx:sell.exchange==='hyperliquid'?'hl':sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
 
 export function fundingWarnings(legs, news=[]) {

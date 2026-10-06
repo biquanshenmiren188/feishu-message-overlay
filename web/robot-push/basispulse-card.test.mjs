@@ -76,3 +76,12 @@ test('retained expired Gate/OKX cards still produce compatible strategy codes',(
  assert.deepEqual(JSON.parse(strategyCopy(d).split('\n').slice(1).join('\n')),{type:'SF',name:'UP',buyEx:'gate',sellEx:'okx'});
  for(const symbol of ['1000UP-USDT-SWAP','UP-USD-SWAP','UP-USDT-261225'])assert.equal(strategyCopy({...d,details:{legs:[d.details.legs[0],{...d.details.legs[1],symbol}]}}),null);
 });
+
+test('Hyperliquid card strategies use Astro hl identifier and reject unsupported margin spot',()=>{
+ for(const side of [0,1]){
+  const legs=[{exchange:side===0?'hyperliquid':'binance',symbol:'HYPEUSDT',spot:false},{exchange:side===1?'hyperliquid':'binance',symbol:'HYPEUSDT',spot:false}];
+  const parsed=JSON.parse(strategyCopy({strategy:'FF',details:{legs}}).split('\n').slice(1).join('\n'));
+  assert.equal(parsed[side===0?'buyEx':'sellEx'],'hl');assert.equal(parsed.name,'HYPE');
+ }
+ assert.equal(strategyCopy({strategy:'FS',details:{legs:[{exchange:'binance',symbol:'HYPEUSDT',spot:false},{exchange:'hyperliquid',symbol:'HYPEUSDT',spot:true}]}}),null);
+});
