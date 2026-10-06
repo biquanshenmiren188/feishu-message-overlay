@@ -18,6 +18,8 @@ Cloudflare 服务令牌只放 `/etc/robot-push/basispulse.json`，root:robot-pus
 - 币种、方向、两边资金费及周期、成交额、持仓、净收益/盘口差/P75/指数差和源更新时间来自 BasisPulse。bps 转百分比除以 100；资金费小数转百分比乘以 100，按参考卡片保留两位小数，底层值不变。未知显示横杠，现货不显示合约持仓。
 - 手机完整展开，无卡片分页或折叠。可跳转真实雷达链接。
 - 卡片采用参考截图的左右腿、四项指标、链表、复制/雷达布局。失效后保留的卡片仍可复制。已知交易所、方向和相同 USDT 币种使用 ASTRO-QUICK-COPY 协议，OKX 的 USDT-SWAP 合约名可规范化；Hyperliquid 使用 Astro 代码 hl。不同单位、未支持平台或 Aster/Hyperliquid 现货杠杆 FS 仅复制卡片文字，点击时读取最新状态。复制不执行交易，未增加 GC 指令。
+
+2026-10-06 22:03（北京时间）正式3号浏览器验收：SIREN FF Binance/Bybit 卡片显示“已失效”，复制按钮启用，点击后系统剪贴板为正确的 SIREN FF binance/bybit ASTRO 协议。另以固定样例验证 ACTIVE 变为失效后文字复制读取最新状态。Hyperliquid 卡片代码使用 hl；29 项卡片与模型测试通过。此次仅发布5个静态文件，版本 20261006copy2，备份 `/opt/robot-push/backups/expired-copy-20261006-010806`，前版备份 `/opt/robot-push/backups/expired-copy-20261006-005520`。没有创建或启动交易策略。
 - 源站 SSE 每秒更新；此授权接口按 5 秒拉取，网页每秒读缓存，正常情况下可能相差约一个到两个刷新周期，不承诺逐秒一致。
 
 ## 验证与发布
