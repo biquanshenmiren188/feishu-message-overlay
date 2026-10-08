@@ -1,5 +1,13 @@
 name: Windows build
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      upload_package:
+        description: 'Upload the Windows package (retained for 3 days)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -34,9 +42,10 @@ jobs:
         shell: pwsh
         run: ./scripts/build.ps1 -SelfContained
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: WPF-smoke-diagnostics
+          retention-days: 3
           path: |
             artifacts/verification/ci-smoke/ui-smoke.txt
             artifacts/verification/ci-smoke/stdout.txt
@@ -47,6 +56,8 @@ jobs:
             artifacts/verification/ci-smoke/card-runtime.json
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_package
         with:
           name: FeishuMessageOverlay-win-x64
           path: artifacts/FeishuMessageOverlay-win-x64.zip
+          retention-days: 3
