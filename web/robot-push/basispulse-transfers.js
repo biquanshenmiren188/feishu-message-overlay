@@ -66,11 +66,11 @@ export function radarMatrix(legs, lookup, now=Date.now(), wallets=[]) {
     descriptions.push(`${String(leg.exchange).toUpperCase()} ${coin || leg.symbol}\n`+(data?
       `查询时间：${at(data.checkedAt)} · UTC+8\n${fresh?'':'状态已过期或查询失败，当前按未知显示\n'}${data.warning || ''}\n`+
       (data.chains?.length?data.chains.map(c=>`${c.chain}：充 ${c.deposit} / 提 ${c.withdraw}\n  充值来源：${source(c.depositEvidence)} · ${at(c.depositEvidence?.at ?? data.checkedAt)}\n  提现来源：${source(c.withdrawEvidence)} · ${at(c.withdrawEvidence?.at ?? data.checkedAt)}`).join('\n'):'未取得分链状态，当前显示未知')+
-      `\n来源页面：${data.sourceUrl || '未提供'}`:'雷达充提数据正在查询，失败后自动重试'));
+      `\n来源页面：${data.sourceUrl || '未提供'}`:(wallet?`推送附带充提状态 · ${at(checked)} · UTC+8\n${wallet.text || ''}\n过期或无法验证的状态显示未知`:'本次推送未提供充提证据，当前显示未知')));
     return {exchange:String(leg.exchange).toUpperCase(),noSpot,states,supplements,supplementAt:checked};
   });
   if(!chains.length)chains.push('状态');
-  return {text:'数据来源：资金费雷达 /api/transfers/query\n\n'+descriptions.join('\n\n'),chains,rows:rows.map(r=>({...r,cells:chains.map(c=>r.noSpot?['none','none']:(r.states.get(c)||['unknown','unknown']))}))};
+  return {text:'数据来源：推送附带充提证据（如有雷达查询结果则合并）\n\n'+descriptions.join('\n\n'),chains,rows:rows.map(r=>({...r,cells:chains.map(c=>r.noSpot?['none','none']:(r.states.get(c)||['unknown','unknown']))}))};
 }
 export function createRadarTransfers(onChange, fetcher=fetch, clock=Date.now) {
   const entries=new Map();let running=false;

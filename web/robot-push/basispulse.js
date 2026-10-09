@@ -1,6 +1,7 @@
+import {subscribePush} from './push-subscription.js';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005fill1';
 import { cardNode } from './basispulse-card.js?v=20261006copy2';
-import { radarMatrix, createRadarTransfers } from './basispulse-transfers.js?v=20261005fill1';
+import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
 document.body.classList.add('basis-mode');
 const main = document.querySelector('#basis-pane') || document.querySelector('main');
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
@@ -9,9 +10,9 @@ const headingLink=el('a','bp-heading-link','卡片推送'); headingLink.href='ht
 const board=el('section','bp-board'); board.setAttribute('aria-label','BasisPulse 机会列表');
 const empty=el('p','bp-empty','正在读取机会…');
 main.append(tools,board,empty);
-const model=new Opportunities(), nodes=new Map(); let envelope=null, failed=false, failures=0, timer;
-// Collect transfer updates silently; commit all visible card changes together.
-const transfers=createRadarTransfers(()=>{});
+const model=new Opportunities(), nodes=new Map(); let envelope=null, failed=false;
+// Commit ordinary card value changes together; connection recovery is immediate.
+// Transfer evidence comes with the push; do not start per-coin API polling.
 const DISPLAY_REFRESH_MS=10_000;
 let hasRendered=false;
 const time = value => { const d = new Date(value); return Number.isFinite(+d) ? d.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—'; };
@@ -27,7 +28,7 @@ function render() {
     const id=c.data.id, state=opportunityState(c,healthy,now), live=state==='active';
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
-    const matrix=radarMatrix(c.data.details?.legs || [],transfers.get,now,c.data.details?.transferWallets || []);
+    const matrix=radarMatrix(c.data.details?.legs || [],()=>null,now,c.data.details?.transferWallets || []);
     if(!node || node.stamp!==JSON.stringify([c.data,matrix])) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
       const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
@@ -40,18 +41,12 @@ function render() {
   count.textContent=`${active} ACTIVE`; empty.hidden=shown>0;
   empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
 }
-async function poll() {
-  clearTimeout(timer);
-  try {
-    const r=await fetch('./basispulse.json',{credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10_000)});
-    if(!r.ok)throw new Error('fetch'); const next=await r.json();
-    if(!next || !['connected','connecting','reconnecting','auth_required'].includes(next.status))throw new Error('schema');
-    envelope=next; failed=false; failures=0; model.ingest(envelope);
-  } catch { failed=true; failures++; }
-  // Read the shared local cache often enough for the source's short validUntil.
-  // This never increases upstream polling, which is owned by the single worker.
-  if(!hasRendered){render();hasRendered=true;}
-  timer=setTimeout(poll,failures ? Math.min(30_000,5000*2**Math.min(failures-1,3)) : 1000);
-}
-setInterval(render,DISPLAY_REFRESH_MS);
-setInterval(()=>{void transfers.refresh(model.tick().flatMap(c=>c.data.details?.legs || []));},1000); poll();
+subscribePush('basispulse',{
+  data(next){
+    const recovering=failed||!envelope||envelope.status!=='connected'||Date.now()-Date.parse(envelope.receivedAt)>=20000||Date.now()-Date.parse(envelope.snapshot?.sampledAt)>=20000;
+    envelope=next;failed=false;model.ingest(envelope);
+    if(!hasRendered||recovering){render();hasRendered=true;}
+  },
+  error(){failed=true;render();}
+});
+setInterval(()=>{if(!document.hidden)render()},DISPLAY_REFRESH_MS);

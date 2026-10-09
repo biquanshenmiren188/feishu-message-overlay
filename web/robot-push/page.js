@@ -1,3 +1,4 @@
+import {subscribePush} from './push-subscription.js';
 import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261003m';
 import {CarouselReader} from './carousel.js?v=20261003m';
 import {mobileSummary} from './summary.js?v=20261003m';
@@ -302,19 +303,11 @@ function endRail(){railDrag=null;schedule();}historyRail.addEventListener('point
 historyRail.addEventListener('keydown',e=>{if(mobile.matches)return;const g=progressGeometry();let ratio=g.ratio;if(e.key==='Home')ratio=0;else if(e.key==='End')ratio=1;else if(['ArrowUp','ArrowDown','PageUp','PageDown'].includes(e.key))ratio+=((e.key.endsWith('Up')?-1:1)*(e.key.startsWith('Page')?reader.capacity:1))/Math.max(1,g.domain);else return;e.preventDefault();seekProgress(ratio);});
 board.addEventListener('scroll',()=>updateProgress(true),{passive:true});
 
-let loadSequence=0,loadController=null,lastSnapshot=null,snapshotEtag=null;
-async function load(){
- clearTimeout(poll);loadController?.abort();const sequence=++loadSequence;const controller=new AbortController();loadController=controller;const timeout=setTimeout(()=>controller.abort(),8000);
- try{const headers=snapshotEtag?{'If-None-Match':snapshotEtag}:{};const response=await fetch('./feed.json',{cache:'no-store',headers,signal:controller.signal});if(sequence!==loadSequence)return;
- let data;if(response.status===304){if(!lastSnapshot)throw Error();data=lastSnapshot;}else{if(!response.ok)throw Error();data=await response.json();if(sequence!==loadSequence)return;lastSnapshot=data;const etag=response.headers?.get?.('ETag');snapshotEtag=typeof etag==='string'&&etag.length<=256?etag:null;}
- // Even a 304 must run normal expiry, reader and freshness checks; never replay audio.
- if(Date.now()-Date.parse(data.updatedAt)>45000)snapshotEtag=null;
+function receiveFeed(data){
  accept(data);const age=Date.now()-Date.parse(data.updatedAt);const connected=data.sourceConnected===true&&Number.isFinite(age)&&age>=-30000&&age<45000;setConnection(connected?'connected':'offline',connected?'消息源已连接':'等待消息源');
- }catch{if(sequence===loadSequence)setConnection('error','暂时无法更新，保留已接收消息');}
- finally{clearTimeout(timeout);if(sequence===loadSequence){loadController=null;poll=setTimeout(load,document.hidden?30000:5000);}}
 }
-document.addEventListener('visibilitychange',()=>{reader.setVisible(!document.hidden,Date.now(),firstVisible());if(document.hidden){stopSounds();clearTimeout(timer);clearTimeout(touchQuiet);timer=null;manualHeld=false;touchActive=false;touchSettling=false;pendingTouchStep=0;}else{render();schedule();if(!demo)load();}});
+document.addEventListener('visibilitychange',()=>{reader.setVisible(!document.hidden,Date.now(),firstVisible());if(document.hidden){stopSounds();clearTimeout(timer);clearTimeout(touchQuiet);timer=null;manualHeld=false;touchActive=false;touchSettling=false;pendingTouchStep=0;}else{render();schedule();}});
 mobile.addEventListener('change',queueResize);
 let resizeFrame=null;function queueResize(){if(resizeFrame!==null)return;resizeFrame=requestAnimationFrame(()=>{resizeFrame=null;const capacity=mobile.matches?5:3;if(reader.capacity!==capacity){reader.setCapacity(capacity,firstVisible());lastWindowKey=null;lastPinKey=null;render();schedule();}fitKey='';fitCards(true);updateLatest();updateProgress();});}
 window.addEventListener('resize',queueResize);window.visualViewport?.addEventListener('resize',queueResize);
-if(demo){$('demo-note').hidden=false;accept(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');load();}
+if(demo){$('demo-note').hidden=false;accept(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');subscribePush('feed',{data:receiveFeed,error:()=>setConnection('error','暂时无法更新，保留已接收消息')});}
