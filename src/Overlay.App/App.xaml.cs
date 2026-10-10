@@ -17,6 +17,14 @@ public partial class App : Application
             try{await WeixinContract.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
         }
         base.OnStartup(e);
+        if(e.Args.Contains("--opportunity-contract"))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"opportunity-ui-"+Guid.NewGuid().ToString("N")+".json");
+            var fixture=new MainWindow{ShowActivated=false};MainWindow=fixture;fixture.Loaded+=(_,_)=>{fixture.Left=-12000;fixture.Top=-12000;};fixture.Show();
+            try{await fixture.RunOpportunityContractAsync(e.Args.Last());await fixture.ExitAsync();}
+            catch(Exception error){await File.WriteAllTextAsync(e.Args.Last(),System.Text.Json.JsonSerializer.Serialize(new{passed=false,error=error.ToString()}));await fixture.ExitAsync();Shutdown(1);}return;
+        }
         SmokeMode = e.Args.Contains("--smoke-test") || e.Args.Contains("--measure-current-window");
         if(e.Args.Contains("--cloud-window-contract"))
         {

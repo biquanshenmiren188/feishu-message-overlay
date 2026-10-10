@@ -17,6 +17,8 @@ internal sealed class CloudMessageSource : IMessageSource
     internal IReadOnlyDictionary<string,string> Groups{get;private set;}=new Dictionary<string,string>();
     internal IncomingMessage? Pinned{get;private set;}
     internal string PinnedGroupId{get;private set;}="";
+    internal JsonElement? Opportunities{get;private set;}
+    internal bool TransportConnected{get;private set;}
     internal DateTimeOffset StartedAt{get;}=DateTimeOffset.UtcNow;
     public bool IsRealConnection=>State==LinkState.Connected;
     public string Mode=>State==LinkState.Connected?"已连接 · 云端唯一接收源":State==LinkState.Connecting?"连接云端中":"云端暂不可用 · 不会启动本地飞书连接";
@@ -61,6 +63,8 @@ internal sealed class CloudMessageSource : IMessageSource
                 lock(gate)
                 {
                     Groups=groups;Pinned=pinned;PinnedGroupId=selected;StateLoaded=true;
+                    Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():null;
+                    TransportConnected=true;
                     foreach(var key in seen.Where(p=>DateTimeOffset.UtcNow-p.Value>TimeSpan.FromMinutes(30)).Select(p=>p.Key).ToArray())seen.Remove(key);
                     foreach(var message in normal.OrderBy(m=>m.SentAt))
                     {if(DateTimeOffset.UtcNow-message.SentAt>=TimeSpan.FromMinutes(30)||seen.ContainsKey(message.Id))continue;if(seen.Count>=10000)throw new JsonException();seen[message.Id]=DateTimeOffset.UtcNow;if(pending.Count==100)pending.Dequeue();pending.Enqueue(message);}
@@ -70,7 +74,7 @@ internal sealed class CloudMessageSource : IMessageSource
                 }
                 delay=3;Activity?.Invoke();
             }
-            catch{State=LinkState.Reconnecting;Activity?.Invoke();delay=Math.Min(30,delay*2);}
+            catch{TransportConnected=false;State=LinkState.Reconnecting;Activity?.Invoke();delay=Math.Min(30,delay*2);}
             try{await Task.Delay(delay==3?pollInterval:TimeSpan.FromSeconds(delay),stop.Token);}catch(OperationCanceledException){break;}
         }
     }

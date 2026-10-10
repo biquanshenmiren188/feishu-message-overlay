@@ -15,6 +15,7 @@ namespace Overlay.App;
 public partial class MainWindow : Window
 {
     private readonly MessageStore store = new();
+    private readonly OpportunityBoard opportunityBoard=new();
     private readonly PublicWebPublisher webPublisher=new();
     private readonly TimedMessageReader reader=new();
     private readonly DispatcherTimer readingTimer=new();
@@ -66,6 +67,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        OpportunityArea.Child=opportunityBoard;
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
         Height = double.IsFinite(prefs.Height) ? Math.Clamp(prefs.Height, 120, 1200) : 460;
@@ -98,6 +100,7 @@ public partial class MainWindow : Window
     private async Task StopAsync(string status)
     {
         generation++; timer.Stop(); var old = source; source = null;
+        opportunityBoard.Update(null,false,DateTimeOffset.UtcNow,IsVisible);
         pinnedHoldChats=!exiting && old is OfficialBotSource {State:LinkState.Connected or LinkState.Reconnecting}?new(selectedChats,StringComparer.Ordinal):[];
         selectedChats.Clear(); previousLinkState = null;
         store.Clear(DateTimeOffset.UtcNow); Render(); SetStatus(status);
@@ -131,6 +134,8 @@ public partial class MainWindow : Window
             if(current is OfficialBotSource membership && AutoJoined.IsChecked==true && !selectedChats.SetEquals(membership.JoinedChatIds)){selectedChats=new(membership.JoinedChatIds,StringComparer.Ordinal);reception.Select(selectedChats);renderedRevision=-1;UpdatePinnedChoices();}
             var messages = await current.ReadAsync(shutdown.Token);
             if (version != generation || source != current || shutdown.IsCancellationRequested) return;
+            if(current is CloudMessageSource opportunitySource)
+                opportunityBoard.Update(opportunitySource.Opportunities,opportunitySource.TransportConnected,DateTimeOffset.UtcNow,IsVisible);
             var cloudPinAdded=false;
             if(current is CloudMessageSource {StateLoaded:true} cloud)
             {
@@ -335,6 +340,7 @@ public partial class MainWindow : Window
     }
     private void HomeClick(object sender,RoutedEventArgs e)
     {
+        if(OpportunityArea.Visibility==Visibility.Visible){initialFit=false;Width=Math.Min(1000,CurrentWorkArea().Width-16);Height=Math.Min(760,CurrentWorkArea().Height-16);PlaceTopRight();SavePreferences();return;}
         initialFit=true;var work=CurrentWorkArea();fittingWindow=true;
         Width=Math.Clamp(Width,300,Math.Max(300,Math.Min(680,work.Width-16)));fittingWindow=false;
         Dispatcher.BeginInvoke(()=>{FitThreeMessages();PlaceTopRight();SavePreferences();},DispatcherPriority.Loaded);
@@ -680,8 +686,14 @@ public partial class MainWindow : Window
         await StopAsync("Connecting to cloud source");
         cloudConnectionRevision=0;focusCloudLatest=false;
         AutoJoined.IsChecked=true;AutoJoined.IsEnabled=false;
+        EnableOpportunityBoard();
         store.Start(DateTimeOffset.UtcNow.AddMinutes(-30));
-        var cloud=new CloudMessageSource();source=cloud;cloud.Activity+=ScheduleRead;await ReadAsync();
+        var cloud=new CloudMessageSource();source=cloud;cloud.Activity+=ScheduleRead;timer.Start();await ReadAsync();
+    }
+    private void EnableOpportunityBoard()
+    {
+        OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(360);CardsColumn.Width=new GridLength(1,GridUnitType.Star);
+        initialFit=false;MinWidth=720;var work=CurrentWorkArea();Width=Math.Min(Math.Max(Width,960),Math.Max(720,work.Width-16));Height=Math.Min(Math.Max(Height,620),Math.Max(120,work.Height-16));PlaceTopRight();
     }
     internal async Task RestoreConfiguredConnectionAsync()
     {
@@ -703,7 +715,7 @@ public partial class MainWindow : Window
     internal void ObserveConfiguredState(string receipt)
     {trialReceipt=receipt;trialChat=ConnectionSelection.Load()?.ChatIds.FirstOrDefault();WriteTrialReceipt();}
     private void WriteTrialReceipt(){ } // Legacy startup option never writes a periodic receipt.
-    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),messageCount=readingQueue.Length,visibleContainers=displayed.Count,visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
+    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{opportunityCount=opportunityBoard.Model.Cards.Count,activeOpportunities=opportunityBoard.ActiveCount,opportunityPaneVisible=OpportunityArea.Visibility==Visibility.Visible,opportunitySourceConnected=opportunityBoard.Model.Connected,webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),messageCount=readingQueue.Length,visibleContainers=displayed.Count,visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
     private void CreateTray(bool verify=false)
     {
         if(App.SmokeMode && !verify)return;

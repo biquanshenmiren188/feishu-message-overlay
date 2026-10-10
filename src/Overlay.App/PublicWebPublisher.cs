@@ -51,7 +51,7 @@ internal sealed class PublicWebPublisher : IAsyncDisposable
             using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await using var stream=await response.Content.ReadAsStreamAsync(timeout.Token);
             using var output=new MemoryStream();var buffer=new byte[4096];int count;
-            var limit=path.EndsWith("/control",StringComparison.Ordinal)?4*1024*1024:32768;
+            var limit=path.EndsWith("/control",StringComparison.Ordinal)?8*1024*1024:32768;
             while((count=await stream.ReadAsync(buffer,timeout.Token))>0){if(output.Length+count>limit)throw new InvalidOperationException();output.Write(buffer,0,count);}
             return JsonDocument.Parse(output.ToArray());
         }

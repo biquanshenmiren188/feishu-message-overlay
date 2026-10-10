@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+from desktop_cards import read_cards
 
 ROUTE='/radar/api/robot-push/publish'
 CONFIG_ROUTE='/radar/api/robot-push/configure'
@@ -163,7 +164,9 @@ class Handler(BaseHTTPRequestHandler):
                 nonce=publisher.authenticate(self.headers,body,now,CONTROL_ROUTE)
                 publisher.db.execute('INSERT INTO nonces VALUES (?,?)',(nonce,now));publisher.db.commit()
                 control=json.loads(body)
-                if control=={'action':'state'}:result=receiver.state()
+                if control=={'action':'state'}:
+                    result=receiver.state()
+                    result['opportunities']=read_cards(publisher.directory)
                 elif isinstance(control,dict) and set(control)=={'action','pinnedGroupId'} and control['action']=='pin':result=receiver.select_pin(control['pinnedGroupId'])
                 else:raise Rejected(400,'invalid_control')
             elif self.path==CONFIG_ROUTE:
