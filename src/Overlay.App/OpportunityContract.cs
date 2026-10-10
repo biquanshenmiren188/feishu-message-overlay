@@ -11,7 +11,7 @@ public partial class MainWindow
     {
         var now=DateTimeOffset.UtcNow;var checks=new List<string>();
         void Check(bool condition,string name){if(!condition)throw new InvalidOperationException(name);checks.Add(name);}
-        object Card(string id,string asset="GRIFFAIN")=>new{id,pair=id,asset,strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-6),updatedAt=now,validUntil=now.AddSeconds(120),v2Residual=new{level=0,bps=47},radarUrl="https://leida.shenmiren.work/radar/?fixture=synthetic",details=new{netBps=19,marketBps=45,p75Bps=49,indexBps=-2,legs=new[]{new{exchange="bybit",spot=false,symbol=asset+"USDT",rate=.0001,hours=4,volume=2920000,oi=787650},new{exchange="hyperliquid",spot=false,symbol=asset+"USDT",rate=.0003,hours=1,volume=1760000,oi=3950000}},transferWallets=new[]{new{key="bybit:"+asset,text="BYBIT【官方名单｜无现货｜现货目录】：该平台无现货，暂无充提数据",checkedAt=now,expiresAt=now.AddMinutes(30),refreshFailed=false}}}};
+        object Card(string id,string asset="GRIFFAIN")=>new{id,pair=id,asset,strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-6),updatedAt=now,validUntil=now.AddSeconds(120),v2Residual=new{level=0,bps=47},radarUrl="https://leida.shenmiren.work/radar/?fixture=synthetic",details=new{netBps=19,marketBps=45,p75Bps=49,indexBps=-2,legs=new[]{new{exchange="bybit",spot=false,symbol=asset+"USDT",rate=.0001,hours=4,volume=2920000,oi=787650},new{exchange="hyperliquid",spot=false,symbol=asset,rate=.0003,hours=1,volume=1760000,oi=3950000}},transferWallets=new[]{new{key="bybit:"+asset,text="BYBIT【官方名单｜无现货｜现货目录】：该平台无现货，暂无充提数据",checkedAt=now,expiresAt=now.AddMinutes(30),refreshFailed=false}}}};
         JsonElement Envelope(object[] cards,DateTimeOffset sample,bool complete=true)=>JsonSerializer.SerializeToElement(new{status="connected",receivedAt=sample,snapshot=new{sampledAt=sample,complete,active=cards}});
         var envelope=Envelope(new[]{Card("one"),Card("two","ORCA")},now);
         var model=new OpportunityModel();model.Ingest(envelope,true,now);
@@ -22,6 +22,12 @@ public partial class MainWindow
         model.Prune(now.AddSeconds(33));Check(model.Cards.Count==0,"expired retained thirty seconds");
         var raw=JsonSerializer.SerializeToElement(Card("copy"));var copied=OpportunityModel.CopyStrategy(raw);
         Check(copied is not null&&copied.Contains("\"sellEx\": \"hl\"",StringComparison.Ordinal),"HL strategy copy");
+        JsonElement CopyFixture(string buy,string buySymbol,string sell,string sellSymbol)=>JsonSerializer.SerializeToElement(new{strategy="FF",details=new{legs=new[]{new{exchange=buy,symbol=buySymbol,spot=false},new{exchange=sell,symbol=sellSymbol,spot=false}}}});
+        var official=OpportunityModel.CopyStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","GRIFFAIN"));
+        Check(official=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"FF\",\n  \"name\": \"GRIFFAIN\",\n  \"buyEx\": \"binance\",\n  \"sellEx\": \"hl\"\n}","matches actual Astro Pulse clipboard for Binance GRIFFAIN and HL");
+        Check(OpportunityModel.CopyStrategy(CopyFixture("hyperliquid","GRIFFAIN","bybit","GRIFFAINUSDT"))?.Contains("\"buyEx\": \"hl\"",StringComparison.Ordinal)==true,"bare HL symbol supported on buy side");
+        Check(OpportunityModel.CopyStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","SOL")) is null,"different assets cannot become same-coin strategy");
+        Check(OpportunityModel.CopyStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"contract multiplier not silently removed");
         Check(OpportunityModel.Radar(JsonSerializer.SerializeToElement(new{radarUrl="https://evil.example/radar/"})) is null,"foreign radar rejected");
         Check(OpportunityModel.Percent(.0001,.01)=="+0.01%"&&OpportunityModel.Percent(19)=="+0.19%","correct funding and basis units");
         var detail=OpportunityModel.Get(raw,"details");var transfers=OpportunityBoard.Transfers(OpportunityModel.Array(detail,"legs",2),OpportunityModel.Array(detail,"transferWallets",20),now);

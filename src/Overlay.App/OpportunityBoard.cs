@@ -59,11 +59,11 @@ internal sealed class OpportunityModel
         var buy=Text(legs[0],"exchange");var sell=Text(legs[1],"exchange");
         if(!allowed.Contains(buy)||!allowed.Contains(sell)||strategy=="FS"&&sell is "aster" or "hyperliquid")return null;
         if(True(legs[0],"spot")!=(strategy=="SF")||True(legs[1],"spot")!=(strategy=="FS"))return null;
-        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+-USDT-SWAP$"))s=s[..^5];return Regex.Replace(s,"[_/\\-]","");}
+        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+-USDT-SWAP$"))s=s[..^5];s=Regex.Replace(s,"[_/\\-]","");if(Text(leg,"exchange")=="hyperliquid"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+$")&&!s.EndsWith("USDT",StringComparison.Ordinal))s+="USDT";return s;}
         var a=Symbol(legs[0]);if(a!=Symbol(legs[1])||!Regex.IsMatch(a,"^[A-Z0-9]+USDT$"))return null;
         var payload=new Dictionary<string,string>{{"type",strategy},{"name",a[..^4]},{"buyEx",buy=="hyperliquid"?"hl":buy},{"sellEx",sell=="hyperliquid"?"hl":sell}};
         if(strategy=="FS")payload["spotMarginType"]="cross";
-        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true});
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
     }
 }
 
