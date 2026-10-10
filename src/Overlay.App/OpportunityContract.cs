@@ -11,7 +11,7 @@ public partial class MainWindow
     {
         var now=DateTimeOffset.UtcNow;var checks=new List<string>();
         void Check(bool condition,string name){if(!condition)throw new InvalidOperationException(name);checks.Add(name);}
-        object Card(string id,string asset="GRIFFAIN")=>new{id,pair=id,asset,strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-6),updatedAt=now,validUntil=now.AddSeconds(120),v2Residual=new{level=0,bps=47},radarUrl="https://leida.shenmiren.work/radar/?fixture=synthetic",details=new{netBps=19,marketBps=45,p75Bps=49,indexBps=-2,legs=new[]{new{exchange="bybit",spot=false,symbol=asset+"USDT",rate=.0001,hours=4,volume=2920000,oi=787650},new{exchange="hyperliquid",spot=false,symbol=asset,rate=.0003,hours=1,volume=1760000,oi=3950000}},transferWallets=new[]{new{key="bybit:"+asset,text="BYBIT【官方名单｜无现货｜现货目录】：该平台无现货，暂无充提数据",checkedAt=now,expiresAt=now.AddMinutes(30),refreshFailed=false}}}};
+        object Card(string id,string asset="GRIFFAIN")=>new{id,pair=id,asset,strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-6),updatedAt=now,validUntil=now.AddSeconds(120),v2Residual=new{level=0,bps=47},radarUrl="https://leida.shenmiren.work/radar/?fixture=synthetic",details=new{netBps=19,marketBps=45,p75Bps=49,indexBps=-2,legs=new[]{new{exchange="bybit",spot=false,symbol=asset+"USDT",rate=.0001,hours=8,volume=2920000,oi=787650},new{exchange="hyperliquid",spot=false,symbol=asset,rate=.0003,hours=4,volume=1760000,oi=3950000}},transferWallets=new[]{new{key="bybit:"+asset,text="BYBIT【官方名单｜无现货｜现货目录】：该平台无现货，暂无充提数据",checkedAt=now,expiresAt=now.AddMinutes(30),refreshFailed=false}}}};
         JsonElement Envelope(object[] cards,DateTimeOffset sample,bool complete=true)=>JsonSerializer.SerializeToElement(new{status="connected",receivedAt=sample,snapshot=new{sampledAt=sample,complete,active=cards}});
         var envelope=Envelope(new[]{Card("one"),Card("two","ORCA")},now);
         var model=new OpportunityModel();model.Ingest(envelope,true,now);
@@ -28,6 +28,10 @@ public partial class MainWindow
         Check(OpportunityModel.CopyStrategy(CopyFixture("hyperliquid","GRIFFAIN","bybit","GRIFFAINUSDT"))?.Contains("\"buyEx\": \"hl\"",StringComparison.Ordinal)==true,"bare HL symbol supported on buy side");
         Check(OpportunityModel.CopyStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","SOL")) is null,"different assets cannot become same-coin strategy");
         Check(OpportunityModel.CopyStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"contract multiplier not silently removed");
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","GRIFFAIN"))=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"FF\",\n  \"name\": \"GRIFFAIN\",\n  \"buyEx\": \"gc-binance\",\n  \"sellEx\": \"gc-hl\"\n}","GC matches user supplied clipboard exactly");
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("gate","MAGIC_USDT","bybit","MAGICUSDT"))?.Contains("\"sellEx\": \"gc-bybit\"",StringComparison.Ordinal)==true,"Gate Bybit GC pair");
+        Check(new[]{"bitget","okx","aster","unknown"}.All(ex=>OpportunityModel.CopyGcStrategy(CopyFixture(ex,"GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null),"unsupported and unverified GC exchanges rejected");
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"GC mismatched contract rejected");
         Check(OpportunityModel.Radar(JsonSerializer.SerializeToElement(new{radarUrl="https://evil.example/radar/"})) is null,"foreign radar rejected");
         Check(OpportunityModel.Percent(.0001,.01)=="+0.01%"&&OpportunityModel.Percent(19)=="+0.19%","correct funding and basis units");
         var detail=OpportunityModel.Get(raw,"details");var transfers=OpportunityBoard.Transfers(OpportunityModel.Array(detail,"legs",2),OpportunityModel.Array(detail,"transferWallets",20),now);
@@ -40,14 +44,21 @@ public partial class MainWindow
         for(var i=0;i<100&&(displayed.Count!=1||opportunityBoard.ActiveCount!=2);i++){await Task.Delay(20);await ReadAsync();}
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
-        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=340&&OpportunityArea.ActualWidth<=360&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
+        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=290&&OpportunityArea.ActualWidth<=310&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
         Check(OpportunityArea.TranslatePoint(new Point(),this).X<MessageArea.TranslatePoint(new Point(),this).X,"cards left and messages right");
         Check(initialFit&&!timer.IsEnabled,"original message auto-fit and event-driven reads preserved");
         HomeClick(this,new RoutedEventArgs());await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
         Check(initialFit,"home restores original message fit");
-        Height=680;Width=710;UpdateLayout();
+        Height=680;Width=660;UpdateLayout();
+        IEnumerable<System.Windows.Controls.Button> Buttons(DependencyObject parent){for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);if(child is System.Windows.Controls.Button b)yield return b;foreach(var nested in Buttons(child))yield return nested;}}
+        var actions=Buttons(OpportunityArea).Where(b=>b.Content is string text&&text is "复制" or "复制 GC" or "雷达 ↗").ToArray();
+        Check(actions.Length==6&&actions.All(b=>Math.Abs(b.ActualHeight-20)<.1),"all footer buttons share exact twenty DIP height");
+        Check(actions.Chunk(3).All(row=>row.Max(b=>b.TranslatePoint(new Point(),this).Y)-row.Min(b=>b.TranslatePoint(new Point(),this).Y)<.1),"copy GC and radar buttons have aligned top and bottom edges");
         Check(Background is SolidColorBrush background&&background.Color.A==0&&OpportunityArea.Background is null,"card pane has no large backdrop");
         var image=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);image.Render(this);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=File.Create(output+".png"))encoder.Save(file);
+        var longCard=opportunityBoard.Build(new OpportunityModel.Entry(JsonSerializer.SerializeToElement(Card("long","LONGASSETNAME123456"))),now);
+        longCard.Measure(new Size(300,double.PositiveInfinity));longCard.Arrange(new Rect(0,0,300,longCard.DesiredSize.Height));longCard.UpdateLayout();
+        var longImage=new RenderTargetBitmap(300,(int)Math.Ceiling(longCard.ActualHeight),96,96,PixelFormats.Pbgra32);longImage.Render(longCard);var longEncoder=new PngBitmapEncoder();longEncoder.Frames.Add(BitmapFrame.Create(longImage));using(var longFile=File.Create(output+"-long.png"))longEncoder.Save(longFile);
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));
     }
 }

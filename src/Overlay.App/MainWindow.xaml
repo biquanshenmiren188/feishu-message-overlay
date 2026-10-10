@@ -44,7 +44,7 @@
    <CheckBox x:Name="SettingsReading" Content="自动逐条停留（手动滚动暂停）" Click="AutoScrollClick" Margin="0,0,0,12"/>
    <TextBlock Foreground="#111111" Text="连接与运行" FontWeight="SemiBold"/><WrapPanel Margin="0,8,0,0"><Button Content="连接飞书" Click="ConnectClick"/><Button Content="已有扫码应用" Click="LoadSavedClick"/><Button Content="扫码创建应用" Click="RegistrationClick"/></WrapPanel>
    <WrapPanel><Button Content="模拟演示" Click="DemoClick"/><Button Content="暂停" Click="PauseClick"/><Button Content="清空" Click="ClearClick"/></WrapPanel>
-   <CheckBox x:Name="SettingsSound" IsChecked="{Binding IsChecked, ElementName=Sound, Mode=TwoWay}" Content="声音提醒（跟随系统音量）" Margin="0,8" Click="PreferenceChanged"/><WrapPanel><Button Content="导入本地音频" Click="ImportAudioClick"/><Button Content="系统提示音" Click="ResetAudioClick"/><Button Content="试听" Click="SoundClick"/></WrapPanel>
+   <CheckBox x:Name="SettingsSound" IsChecked="{Binding IsChecked, ElementName=Sound, Mode=TwoWay}" Content="声音提醒（跟随系统音量）" Margin="0,8" Click="PreferenceChanged"/><WrapPanel><Button Content="导入本地音频" Click="ImportAudioClick"/><Button Content="默认提示音" Click="ResetAudioClick"/><Button Content="试听" Click="SoundClick"/></WrapPanel>
    <TextBlock Foreground="#111111" x:Name="AudioLabel" Text="系统提示音" FontSize="12" TextTrimming="CharacterEllipsis"/>
    <TextBlock Text="置顶群（顶部固定最新一条，下方独立三条轮播）" TextWrapping="Wrap" Margin="0,8,0,4"/>
    <ComboBox x:Name="PinnedGroup" DisplayMemberPath="Value" SelectedValuePath="Key" SelectionChanged="PinnedGroupChanged"/>

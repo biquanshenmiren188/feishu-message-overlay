@@ -1,5 +1,5 @@
 import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005fill1';
-import {strategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261006copy2';
+import {strategyCopy,gcStrategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261010gc1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -62,7 +62,10 @@ export function cardNode(c, matrix) {
     try{await navigator.clipboard.writeText(payload);copy.textContent='已复制';copy.setAttribute('aria-label',`${copyKind}已复制`);}
     catch{showDetails(`复制${copyKind}`,payload,copy);}
   };
-  footer.append(copy);const radar=safeRadar(d.radarUrl);if(radar){const link=el('a','bp-radar','雷达 ↗');link.href=radar;link.target='_blank';link.rel='noopener noreferrer';link.dataset.action='radar';footer.append(link);}
+  footer.append(copy);
+  const gcPayload=gcStrategyCopy(d);
+  if(gcPayload){const gc=el('button','','复制 GC');gc.type='button';gc.dataset.action='copy-gc';gc.title='复制 Gate Crossex 代码';gc.setAttribute('aria-live','polite');gc.onclick=async()=>{try{await navigator.clipboard.writeText(gcPayload);gc.textContent='GC 已复制';}catch{showDetails('复制 GC 代码',gcPayload,gc);}};footer.append(gc);}
+  const radar=safeRadar(d.radarUrl);if(radar){const link=el('a','bp-radar','雷达 ↗');link.href=radar;link.target='_blank';link.rel='noopener noreferrer';link.dataset.action='radar';footer.append(link);}
   card.append(footer);
   return {card,age,stamp:JSON.stringify([d,matrix])};
 }

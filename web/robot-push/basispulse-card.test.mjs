@@ -1,7 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
-import {strategyCopy,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
+import {strategyCopy,gcStrategyCopy,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
+const gcFixture=(buy='binance',sell='hyperliquid',symbol='GRIFFAIN')=>({strategy:'FF',details:{legs:[{exchange:buy,symbol:'GRIFFAINUSDT',spot:false},{exchange:sell,symbol,spot:false}]}});
+test('GC matches supplied clipboard exactly and leaves normal Astro copy unchanged',()=>{
+ const d=gcFixture();
+ assert.equal(gcStrategyCopy(d),'ASTRO-QUICK-COPY:\n{\n  "type": "FF",\n  "name": "GRIFFAIN",\n  "buyEx": "gc-binance",\n  "sellEx": "gc-hl"\n}');
+ assert.equal(JSON.parse(strategyCopy(d).split('\n').slice(1).join('\n')).sellEx,'hl');
+ assert.equal(JSON.parse(gcStrategyCopy(gcFixture('gate','bybit','GRIFFAINUSDT')).split('\n').slice(1).join('\n')).sellEx,'gc-bybit');
+});
+test('GC rejects unsupported exchanges, modes, malformed legs and mismatched contracts',()=>{
+ for(const d of [gcFixture('bitget'),gcFixture('okx'),gcFixture('aster'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
+ const d=gcFixture();d.details.legs[0].spot=true;assert.equal(gcStrategyCopy(d),null);
+});
 const now=1791162796000;
 test('period warning excludes spot, missing and equal periods',()=>{
  assert.equal(periodWarning([{spot:false,hours:4},{spot:false,hours:1}]),'周期 4h/1h');

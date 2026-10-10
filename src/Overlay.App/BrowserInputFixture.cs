@@ -25,17 +25,18 @@ internal static class BrowserInputFixture
     {
         using var ready=EventWaitHandle.OpenExisting(token+"-ready");using var next=EventWaitHandle.OpenExisting(token+"-next");using var done=EventWaitHandle.OpenExisting(token+"-done");
         var text=new System.Windows.Controls.TextBox{Text="Synthetic input only; no network",Margin=new Thickness(12)};
+        System.Windows.Input.InputMethod.SetIsInputMethodEnabled(text,false);
         var window=new Window{Title="Synthetic browser-input verification",Width=340,Height=200,Left=80,Top=100,ShowInTaskbar=false,Content=text};
         window.Show();window.Activate();text.Focus();var hwnd=new WindowInteropHelper(window).Handle;
         await Task.Delay(600);ready.Set();
-        for(var step=0;step<4;step++)
+        for(var step=0;step<8;step++)
         {
             if(!await Task.Run(()=>next.WaitOne(15000)))throw new InvalidOperationException("Test command timed out");
             if(DragYield.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Synthetic window lost foreground; no input sent");
             var point=text.PointToScreen(new Point(25,25));SetCursorPos((int)point.X,(int)point.Y);
             // Recheck immediately before dispatch, never type into another foreground window.
             if(DragYield.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Foreground changed; no input sent");
-            Input[] input=step==1?[new(){data=new(){mouse=new(){data=120,flags=0x800}}}]:step==2?
+            Input[] input=step is 0 or 6?[new(){data=new(){mouse=new(){x=10,flags=1}}}]:step is 1 or 4?[new(){data=new(){mouse=new(){data=120,flags=0x800}}}]:step is 2 or 5?
                 [new(){type=1,data=new(){key=new(){key=0x41}}},new(){type=1,data=new(){key=new(){key=0x41,flags=2}}}]:
                 [new(){data=new(){mouse=new(){flags=2}}},new(){data=new(){mouse=new(){flags=4}}}];
             if(SendInput((uint)input.Length,input,Marshal.SizeOf<Input>())!=input.Length)throw new InvalidOperationException("Synthetic input rejected");

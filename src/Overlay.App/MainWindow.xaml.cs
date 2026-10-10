@@ -387,73 +387,7 @@ public partial class MainWindow : Window
         SetStatus("Synthetic disconnected");Assert(State1.Fill==State2.Fill && State2.Fill==State3.Fill && State1.Fill.ToString()=="#FF777777");
         Pin.IsChecked = false; PreferenceChanged(this, new()); Assert(!Topmost);
         Pin.IsChecked = true; PreferenceChanged(this, new()); Assert(Topmost);
-        App.SmokeStage="drag_yield";
-        Assert(dragYield is {IsHooked:true,NativeTopmost:true});
-        var yieldEvidence=new List<object>();
-        foreach(var action in new[]{"move","size","cancel","manualOff"})
-        {
-            Pin.IsChecked=true;PreferenceChanged(this,new());
-            var stages=new List<string>();nint foreground=0;var stableFocus=true;var topOff=false;var topRestored=false;
-            var geometry=System.Text.Json.JsonSerializer.Serialize(WindowPlacement.Snapshot(this));
-            void Observed(string stage)
-            {
-                stages.Add(stage);
-                if(stage=="yielded")
-                {
-                    foreground=DragYield.GetForegroundWindow();topOff=!dragYield!.NativeTopmost;
-                    if(action=="manualOff"){Pin.IsChecked=false;PreferenceChanged(this,new());}
-                }
-                else {stableFocus&=dragYield!.RestoreKeptForeground;topRestored=dragYield.NativeTopmost;}
-            }
-            dragYield!.Changed+=Observed;
-            var fixture=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!,"--drag-yield-fixture "+(action=="manualOff"?"move":action)){UseShellExecute=false,CreateNoWindow=true})!;
-            await fixture.WaitForExitAsync();await Task.Delay(450);dragYield.Changed-=Observed;
-            File.WriteAllText(Path.Combine(output,"drag-yield-last.json"),System.Text.Json.JsonSerializer.Serialize(new{action,stages,topOff,topRestored,stableFocus,currentTopmost=dragYield.NativeTopmost}));
-            Assert(fixture.ExitCode==0 && stages.Contains("yielded") && topOff);
-            Assert(action=="manualOff"?!dragYield.NativeTopmost:stages.Contains("restored") && topRestored && stableFocus);
-            Assert(geometry==System.Text.Json.JsonSerializer.Serialize(WindowPlacement.Snapshot(this)));
-            yieldEvidence.Add(new{action,stages,topOff,topRestored,stableFocus,geometryUnchanged=true});fixture.Dispose();
-        }
-        Pin.IsChecked=true;PreferenceChanged(this,new());
-        File.WriteAllText(Path.Combine(output,"drag-yield-runtime.json"),System.Text.Json.JsonSerializer.Serialize(yieldEvidence));
-        var ownEvents=0;void OwnEvent(string stage){ownEvents++;}
-        dragYield!.Changed+=OwnEvent;await DragYieldFixture.RunAsync("move");dragYield.Changed-=OwnEvent;
-        Assert(ownEvents==0 && dragYield.NativeTopmost);
-        File.WriteAllText(Path.Combine(output,"drag-yield-own-window.txt"),"PASS same-process synthetic window move emits no yield; own and settings windows share this exclusion.");
-        App.SmokeStage="browser_input_yield";
-        var token="Local\\OverlaySynthetic-"+Guid.NewGuid().ToString("N");
-        using(var inputReady=new EventWaitHandle(false,EventResetMode.AutoReset,token+"-ready"))
-        using(var inputNext=new EventWaitHandle(false,EventResetMode.AutoReset,token+"-next"))
-        using(var inputDone=new EventWaitHandle(false,EventResetMode.AutoReset,token+"-done"))
-        {
-            var test=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!,"--browser-input-fixture "+token){UseShellExecute=false,CreateNoWindow=true})!;
-            DragYield.SyntheticBrowserProcessId=test.Id;
-            try
-            {
-                Assert(await Task.Run(()=>inputReady.WaitOne(5000)));dragYield.OwnInput();await Task.Delay(600);
-                Assert(dragYield.BrowserWatchActive && dragYield.NativeTopmost);
-                var inputEvidence=new List<object>();
-                for(var input=0;input<3;input++)
-                {
-                    inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
-                    Assert(dragYield.Yielding && !dragYield.NativeTopmost && dragYield.BrowserWatchActive);
-                    inputEvidence.Add(new{input,at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding,topmost=dragYield.NativeTopmost});
-                }
-                // The fixture acknowledges 50ms after SendInput; 600ms sampling already elapsed.
-                await Task.Delay(4150);Assert(dragYield.Yielding && !dragYield.NativeTopmost);
-                inputEvidence.Add(new{input=3,phase="underFiveSeconds",at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding});
-                await Task.Delay(800);Assert(!dragYield.Yielding && dragYield.NativeTopmost && dragYield.RestoreKeptForeground);
-                inputEvidence.Add(new{input=4,phase="idleRestored",at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding});
-                inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
-                Pin.IsChecked=false;PreferenceChanged(this,new());await Task.Delay(5500);
-                Assert(!dragYield.NativeTopmost && !dragYield.BrowserWatchActive);
-                Pin.IsChecked=true;PreferenceChanged(this,new());BrowserInputFixture.ClickSyntheticWindow(this,test.Id);await Task.Delay(600);
-                Assert(!dragYield.Yielding && !dragYield.BrowserWatchActive && dragYield.NativeTopmost);
-                Hide();Assert(!dragYield.BrowserWatchActive);Show();
-                File.WriteAllText(Path.Combine(output,"browser-yield-runtime.json"),System.Text.Json.JsonSerializer.Serialize(new{inputEvidence,alreadyForegroundClick=true,wheelAndKeyExtend=true,manualOffCancels=true,ownWindowExcluded=true,hiddenStopsWatch=true,fixture="synthetic native window classified as browser in smoke mode only; no real browser or private page accessed"}));
-            }
-            finally {inputNext.Set();await test.WaitForExitAsync();DragYield.SyntheticBrowserProcessId=0;test.Dispose();}
-        }
+        await RunYieldContractAsync(output);
         App.SmokeStage="ui";
         Width = 500; Height = 620; Assert(Width == 500 && Height == 620);
         FontScale.Value = 20; Assert(MessageList.FontSize == 20);
@@ -697,7 +631,7 @@ public partial class MainWindow : Window
     {
         if(OpportunityArea.Visibility==Visibility.Visible)return;
         OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(1,GridUnitType.Star);
-        var work=CurrentWorkArea();var cardWidth=Math.Min(350,Math.Max(300,work.Width-376));
+        var work=CurrentWorkArea();var cardWidth=Math.Min(300,Math.Max(280,work.Width-376));
         CardsColumn.Width=new GridLength(cardWidth);
         // Preserve the text pane's original fit policy; only add horizontal card space.
         var textWidth=Width>=720?360:Width;
@@ -785,7 +719,7 @@ public partial class MainWindow : Window
         if(!AlertAudio.IsSupported(picker.FileName)){SetStatus("音频无效 · 仅支持 2MB 以内 WAV / MP3");return;}
         audio.PathName=picker.FileName;AudioLabel.Text=Path.GetFileName(picker.FileName);SavePreferences();
     }
-    private void ResetAudioClick(object sender,RoutedEventArgs e){audio.PathName="";AudioLabel.Text="系统提示音";SavePreferences();}
+    private void ResetAudioClick(object sender,RoutedEventArgs e){audio.PathName="";AudioLabel.Text=audio.PathName.Length==0?"系统提示音":Path.GetFileName(audio.PathName);SavePreferences();}
     private async void LoadSavedClick(object sender,RoutedEventArgs e)
     {
         var saved=CredentialVault.LoadOnUserRequest();if(saved is null){SetStatus("本地加密配置不可用 · 不会重新创建应用");return;}

@@ -6,4 +6,4 @@ const title=document.createElement('h1');title.className='feed-pane-title';title
 feedPane.append(title,...main.children);
 const basisPane=document.createElement('section');basisPane.id='basis-pane';basisPane.setAttribute('aria-label','BasisPulse 机会卡片');
 main.append(feedPane,basisPane);
-await Promise.all([import('./page.js?v=push-traffic-20261009'),import('./basispulse.js?v=push-traffic-20261009')]);
+await Promise.all([import('./page.js?v=push-traffic-20261009'),import('./basispulse.js?v=20261010gc1')]);

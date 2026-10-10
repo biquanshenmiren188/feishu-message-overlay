@@ -20,11 +20,24 @@ export function strategyCopy(data) {
   const symbol=leg=>{
     const raw=String(leg.symbol || '').toUpperCase();
     const pair=leg.exchange==='okx' && leg.spot===false && /^[A-Z0-9]+-USDT-SWAP$/.test(raw)?raw.slice(0,-5):raw;
-    return pair.replace(/[_/\-]/g,'');
+    const normalized=pair.replace(/[_/\-]/g,'');
+    return leg.exchange==='hyperliquid' && leg.spot===false && /^[A-Z0-9]+$/.test(normalized) && !normalized.endsWith('USDT')?normalized+'USDT':normalized;
   };
   const a=symbol(buy), b=symbol(sell);
   if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange==='hyperliquid'?'hl':buy.exchange,sellEx:sell.exchange==='hyperliquid'?'hl':sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
+}
+
+// Confirmed against the source trader GC button and its actual clipboard sample.
+// Unverified exchanges and spot modes deliberately have no GC action.
+export function gcStrategyCopy(data) {
+  const legs=data.details?.legs;
+  const supported=new Set(['binance','bybit','gate','hyperliquid']);
+  if(data.strategy!=='FF' || legs?.length!==2 || legs.some(l=>l.spot!==false || !supported.has(l.exchange)))return null;
+  const normal=strategyCopy(data);if(!normal)return null;
+  const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));
+  payload.buyEx='gc-'+payload.buyEx;payload.sellEx='gc-'+payload.sellEx;
+  return 'ASTRO-QUICK-COPY:\n'+JSON.stringify(payload,null,2);
 }
 
 export function fundingWarnings(legs, news=[]) {

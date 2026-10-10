@@ -51,6 +51,16 @@ internal sealed class OpportunityModel
     {foreach(var pair in Cards.ToArray())if(now>=Expires(pair.Value).AddSeconds(30))Cards.Remove(pair.Key);}
     internal static DateTimeOffset Expires(Entry entry)=>entry.Missing is {} missing && missing<Date(entry.Data,"validUntil")?missing:Date(entry.Data,"validUntil");
     internal string State(Entry entry,DateTimeOffset now)=>entry.Missing is not null?"已失效":!Connected||now-Received>=TimeSpan.FromSeconds(20)||now-Sample>=TimeSpan.FromSeconds(20)?"待恢复":now<Expires(entry)?"ACTIVE":"待确认";
+    internal static string? CopyGcStrategy(JsonElement data)
+    {
+        var legs=Array(Get(data,"details"),"legs",3);
+        var supported=new[]{"binance","bybit","gate","hyperliquid"};
+        if(Text(data,"strategy")!="FF"||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind!=JsonValueKind.False||!supported.Contains(Text(l,"exchange"))))return null;
+        var normal=CopyStrategy(data);if(normal is null)return null;
+        var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
+        payload["buyEx"]="gc-"+payload["buyEx"];payload["sellEx"]="gc-"+payload["sellEx"];
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+    }
     internal static string? CopyStrategy(JsonElement data)
     {
         var legs=Array(Get(data,"details"),"legs",3);var strategy=Text(data,"strategy");
@@ -91,7 +101,7 @@ internal sealed class OpportunityBoard : DockPanel
         Children.Add(cards);
     }
     private static Brush Brush(string hex)=>new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-    private static TextBlock Label(string text,double size=12,bool bold=false,string color="#263238")=>new(){Text=text,TextWrapping=TextWrapping.Wrap,FontSize=size,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,Foreground=Brush(color),Margin=new Thickness(1,2,1,2)};
+    private static TextBlock Label(string text,double size=12,bool bold=false,string color="#263238")=>new(){Text=text,TextWrapping=TextWrapping.Wrap,FontSize=size,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,Foreground=Brush(color),Margin=new Thickness(1,1,1,1)};
     private static Border Box(UIElement child,string background="#F8FAFB")=>new(){Child=child,Background=Brush(background),BorderBrush=Brush("#DCE3EA"),BorderThickness=new Thickness(.6),CornerRadius=new CornerRadius(4),Padding=new Thickness(7),Margin=new Thickness(0,0,0,7)};
     internal void Update(JsonElement? envelope,bool healthy,DateTimeOffset now,bool visible)
     {
@@ -117,24 +127,26 @@ internal sealed class OpportunityBoard : DockPanel
     internal Border Build(OpportunityModel.Entry entry,DateTimeOffset now)
     {
         var data=entry.Data;var detail=OpportunityModel.Get(data,"details");var residual=OpportunityModel.Get(data,"v2Residual");var level=OpportunityModel.Number(residual,"level");var state=Model.State(entry,now);
+        var rank=level>=10?"#E3444E":level>=6?"#E47C23":level>=4?"#C49500":level>=2?"#4085DF":"#8B95A5";
+        var rankText=level>=10?"#B72136":level>=6?"#9C490C":level>=4?"#866400":level>=2?"#245B9E":"#596271";
         var stack=new StackPanel();
         var age=Math.Max(0,(int)(now-OpportunityModel.Date(data,"enteredAt")).TotalSeconds);
-        var title=new Grid{Margin=new Thickness(0,0,0,5)};title.ColumnDefinitions.Add(new());title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var name=new StackPanel{Orientation=Orientation.Horizontal};name.Children.Add(Label(OpportunityModel.Asset(data),14,true));name.Children.Add(new Border{Child=Label(OpportunityModel.Text(data,"strategy"),8,color:"#476371"),Background=Brush("#E9EDEB"),Margin=new Thickness(3,2,0,2),Padding=new Thickness(1)});title.Children.Add(name);
+        var title=new Grid{Margin=new Thickness(0,0,0,3)};title.ColumnDefinitions.Add(new());title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        var name=Label("",13,true);name.Inlines.Add(new System.Windows.Documents.Run(OpportunityModel.Asset(data)));var strategyBadge=new Border{Child=Label(OpportunityModel.Text(data,"strategy"),8,color:"#476371"),Background=Brush("#E9EDEB"),Margin=new Thickness(3,0,0,0),Padding=new Thickness(1),VerticalAlignment=VerticalAlignment.Center};name.Inlines.Add(new System.Windows.Documents.InlineUIContainer(strategyBadge){BaselineAlignment=BaselineAlignment.Center});title.Children.Add(name);
         var status=Label((state=="ACTIVE"?"● ACTIVE "+age+"s":state)+" · "+(OpportunityModel.Text(data,"trigger")=="v2_price_window"?"V2收敛":OpportunityModel.Text(data,"trigger")),8,true,state=="ACTIVE"?"#28765B":"#A16910");status.VerticalAlignment=VerticalAlignment.Center;status.Margin=new Thickness(3,0,4,0);Grid.SetColumn(status,1);title.Children.Add(status);
-        var badge=new Border{Child=Label($"R{(level?.ToString(CultureInfo.InvariantCulture)??"—")} {OpportunityModel.Percent(OpportunityModel.Number(residual,"bps"))}",10,true,"#596578"),BorderBrush=Brush("#8794AC"),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(4),Padding=new Thickness(3,1,3,1)};Grid.SetColumn(badge,2);title.Children.Add(badge);stack.Children.Add(title);
-        var legs=OpportunityModel.Array(detail,"legs",2);var legGrid=new Grid{Margin=new Thickness(0,0,0,4),MinHeight=50};legGrid.ColumnDefinitions.Add(new());legGrid.ColumnDefinitions.Add(new());
+        var badge=new Border{Child=Label($"R{(level?.ToString(CultureInfo.InvariantCulture)??"—")} {OpportunityModel.Percent(OpportunityModel.Number(residual,"bps"))}",10,true,rankText),Background=Brush("#F7F9FB"),BorderBrush=Brush(rankText),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(4),Padding=new Thickness(3,1,3,1)};Grid.SetColumn(badge,2);title.Children.Add(badge);stack.Children.Add(title);
+        var legs=OpportunityModel.Array(detail,"legs",2);var legGrid=new Grid{Margin=new Thickness(0,0,0,4),MinHeight=44};legGrid.ColumnDefinitions.Add(new());legGrid.ColumnDefinitions.Add(new());
         for(var i=0;i<legs.Length;i++)
         {
             var leg=legs[i];var spot=OpportunityModel.True(leg,"spot");var panel=new Grid{Margin=new Thickness(i==0?0:5,0,i==0?5:0,0)};panel.ColumnDefinitions.Add(new());panel.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var main=new StackPanel();main.Children.Add(Label((i==0?"买 ":"卖 ")+Exchange(leg)+(spot?" 现货":" 永续"),11,true));
-            if(!spot){var rate=new StackPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),17,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hourly=OpportunityModel.Number(leg,"hours")==1;rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:hourly?"#AC4C12":"#7031A7"),BorderBrush=Brush(hourly?"#ED8936":"#9A62C8"),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(hourly?"#FFF1DF":"#F1E8FF"),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
+            if(!spot){var rate=new StackPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),15,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hours=OpportunityModel.Number(leg,"hours");var cycle=hours==1?("#9A3900","#FFF0E1","#D06A15"):hours==8?("#155CAD","#E7F1FF","#4383C5"):hours is >0?("#7031A7","#F1E8FF","#9A62C8"):("#657B89","#00FFFFFF","#DCE3E8");rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:cycle.Item1),BorderBrush=Brush(cycle.Item3),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(cycle.Item2),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
             var stats=new StackPanel{Margin=new Thickness(2,1,0,0)};
             foreach(var metric in spot?new[]{("24H","volume")}:new[]{("24H","volume"),("OI","oi")}){var caption=Label(metric.Item1,8,color:"#747570");caption.TextAlignment=TextAlignment.Right;caption.Margin=new Thickness(0);stats.Children.Add(caption);var value=Label(OpportunityModel.Money(OpportunityModel.Number(leg,metric.Item2)),9);value.FontFamily=new FontFamily("Consolas");value.TextAlignment=TextAlignment.Right;value.Margin=new Thickness(0);stats.Children.Add(value);}Grid.SetColumn(stats,1);panel.Children.Add(stats);Grid.SetColumn(panel,i);legGrid.Children.Add(panel);
         }stack.Children.Add(legGrid);
         var metrics=new Grid{Margin=new Thickness(0,0,0,4)};for(var i=0;i<4;i++)metrics.ColumnDefinitions.Add(new());
         var names=new[]{"净收益均值","盘口差均值","盘口差 P75","指数差均值"};var keys=new[]{"netBps","marketBps","p75Bps","indexBps"};
-        for(var i=0;i<4;i++){var column=new StackPanel();var caption=Label(names[i],11,color:"#536977");caption.TextAlignment=TextAlignment.Center;column.Children.Add(caption);var text=OpportunityModel.Percent(OpportunityModel.Number(detail,keys[i]));var value=Label(i==0?text.TrimStart('+'):text,12,true);value.TextAlignment=TextAlignment.Center;value.FontFamily=new FontFamily("Consolas");column.Children.Add(value);var cell=new Border{Child=column,BorderBrush=Brush("#DCE3EA"),BorderThickness=new Thickness(.4),Background=Brushes.White,Padding=new Thickness(1,2,1,2)};Grid.SetColumn(cell,i);metrics.Children.Add(cell);}stack.Children.Add(metrics);
+        for(var i=0;i<4;i++){var column=new StackPanel();var caption=Label(names[i],10,color:"#536977");caption.TextAlignment=TextAlignment.Center;column.Children.Add(caption);var text=OpportunityModel.Percent(OpportunityModel.Number(detail,keys[i]));var value=Label(i==0?text.TrimStart('+'):text,12,true);value.TextAlignment=TextAlignment.Center;value.FontFamily=new FontFamily("Consolas");column.Children.Add(value);var cell=new Border{Child=column,BorderBrush=Brush("#DCE3EA"),BorderThickness=new Thickness(.4),Background=Brushes.White,Padding=new Thickness(1,2,1,2)};Grid.SetColumn(cell,i);metrics.Children.Add(cell);}stack.Children.Add(metrics);
         var warnings=new List<string>();foreach(var news in OpportunityModel.Array(detail,"newsWarnings",20)){var text=OpportunityModel.Text(news,"summary");if(text.Length>0)warnings.Add(OpportunityModel.Text(news,"exchange").ToUpperInvariant()+" "+text+(OpportunityModel.Text(news,"status")=="postponed"?"（已延期，时间未定）":OpportunityModel.Text(news,"status")=="uncertain"?"（待确认）":""));}
         if(legs.Length==2&&!OpportunityModel.True(legs[0],"spot")&&!OpportunityModel.True(legs[1],"spot")&&OpportunityModel.Number(legs[0],"hours") is >0 and var h0&&OpportunityModel.Number(legs[1],"hours") is >0 and var h1&&h0!=h1)warnings.Add($"周期 {h0}h/{h1}h");
         if(legs.Any(l=>OpportunityModel.Text(l,"exchange")=="bybit"&&!OpportunityModel.True(l,"spot")&&OpportunityModel.Number(l,"hours")==1))warnings.Add("Bybit 1h 计算不同");
@@ -147,12 +159,16 @@ internal sealed class OpportunityBoard : DockPanel
         TextBlock Center(string text,bool bold=false,string color="#263238"){var t=Label(text,9,bold,color);t.TextAlignment=TextAlignment.Center;t.Margin=new Thickness(0,1,0,1);return t;}
         Cell(Center("链",false,"#536977"),0,0);for(var j=0;j<chains.Length;j++)Cell(Center(chains[j],false,"#536977"),0,j+1);
         for(var i=0;i<rows.Length;i++){Cell(Center(rows[i][0],true),i+1,0);var body=rows[i].ElementAtOrDefault(1)??"";for(var j=0;j<chains.Length;j++){var clause=body.Split('；').FirstOrDefault(c=>c.StartsWith(chains[j]+"   ",StringComparison.Ordinal));var statusText=clause is not null?clause.Split("   ",2)[1]:body.Contains("无现货",StringComparison.Ordinal)?"— / —":"? / ?";var pair=statusText.Split('/');var pairGrid=new Grid();pairGrid.ColumnDefinitions.Add(new());pairGrid.ColumnDefinitions.Add(new());for(var k=0;k<2;k++){var token=(pair.ElementAtOrDefault(k)??"?").Trim().Split(' ')[0];var label=Center(token,true,token=="?"?"#896925":token=="✓"?"#286E72":"#5E6664");Grid.SetColumn(label,k);pairGrid.Children.Add(label);}Cell(pairGrid,i+1,j+1);}}stack.Children.Add(table);
-        var footer=new DockPanel{Margin=new Thickness(0,4,0,0)};var copy=new Button{Content="复制",Padding=new Thickness(7,2,7,2),FontSize=10,MinHeight=24,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Left};
+        Button FooterButton(string text)=>new(){Content=text,Padding=new Thickness(7,2,7,2),Margin=new Thickness(0,0,6,6),FontSize=10,MinHeight=20,Height=20,VerticalAlignment=VerticalAlignment.Top,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Left};
+        var footer=new DockPanel{Margin=new Thickness(0,2,0,0)};var copy=FooterButton("复制");
         copy.Click+=(_,_)=>{try{Clipboard.SetText(OpportunityModel.CopyStrategy(data)??string.Join('\n',VisibleText(stack))+"\n"+OpportunityModel.Radar(data));copy.Content="已复制";}catch{copy.Content="复制失败，请重试";}};
         SetDock(copy,Dock.Left);footer.Children.Add(copy);
-        if(OpportunityModel.Radar(data) is {} url){var button=new Button{Content="雷达 ↗",Padding=new Thickness(7,2,7,2),FontSize=10,MinHeight=24,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Right};button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
-        var result=Box(stack,level>=10?"#FFF2F2":level>=6?"#FFF6EE":level>=4?"#FFFCED":level>=2?"#F1F7FF":"#F8FAFB");
-        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(8,7,8,7);result.BorderBrush=Brush("#8794AC");result.BorderThickness=new Thickness(.7);
+        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=FooterButton("复制 GC");gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
+        if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
+        var rankColor=(Color)ColorConverter.ConvertFromString(rank);
+        byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);
+        var result=Box(stack);result.Background=new SolidColorBrush(Color.FromRgb(Wash(rankColor.R),Wash(rankColor.G),Wash(rankColor.B)));
+        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(6,4,6,4);result.BorderBrush=Brush(rank);result.BorderThickness=new Thickness(.7);
         result.ToolTip=$"进入：{OpportunityModel.Date(data,"enteredAt").ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss} UTC+8\n更新：{OpportunityModel.Date(data,"updatedAt").ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8";return result;
     }
     private static string Exchange(JsonElement leg)=>OpportunityModel.Text(leg,"exchange")=="hyperliquid"?"HL":OpportunityModel.Text(leg,"exchange").ToUpperInvariant();
