@@ -16,6 +16,7 @@ public partial class MainWindow : Window
 {
     private readonly MessageStore store = new();
     private readonly OpportunityBoard opportunityBoard=new();
+    private readonly DispatcherTimer opportunityTimer=new(){Interval=TimeSpan.FromSeconds(1)};
     private readonly PublicWebPublisher webPublisher=new();
     private readonly TimedMessageReader reader=new();
     private readonly DispatcherTimer readingTimer=new();
@@ -68,6 +69,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         OpportunityArea.Child=opportunityBoard;
+        opportunityTimer.Tick+=(_,_)=>{if(source is CloudMessageSource cloud)opportunityBoard.Update(cloud.Opportunities,cloud.TransportConnected,DateTimeOffset.UtcNow,IsVisible);};
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
         Height = double.IsFinite(prefs.Height) ? Math.Clamp(prefs.Height, 120, 1200) : 460;
@@ -99,7 +101,7 @@ public partial class MainWindow : Window
     }
     private async Task StopAsync(string status)
     {
-        generation++; timer.Stop(); var old = source; source = null;
+        generation++; timer.Stop(); opportunityTimer.Stop(); var old = source; source = null;
         opportunityBoard.Update(null,false,DateTimeOffset.UtcNow,IsVisible);
         pinnedHoldChats=!exiting && old is OfficialBotSource {State:LinkState.Connected or LinkState.Reconnecting}?new(selectedChats,StringComparer.Ordinal):[];
         selectedChats.Clear(); previousLinkState = null;
@@ -340,9 +342,9 @@ public partial class MainWindow : Window
     }
     private void HomeClick(object sender,RoutedEventArgs e)
     {
-        if(OpportunityArea.Visibility==Visibility.Visible){initialFit=false;Width=Math.Min(1000,CurrentWorkArea().Width-16);Height=Math.Min(760,CurrentWorkArea().Height-16);PlaceTopRight();SavePreferences();return;}
         initialFit=true;var work=CurrentWorkArea();fittingWindow=true;
-        Width=Math.Clamp(Width,300,Math.Max(300,Math.Min(680,work.Width-16)));fittingWindow=false;
+        var cardsWidth=OpportunityArea.Visibility==Visibility.Visible?CardsColumn.ActualWidth:0;
+        Width=cardsWidth+Math.Clamp(Width-cardsWidth,300,Math.Max(300,Math.Min(680,work.Width-cardsWidth-16)));fittingWindow=false;
         Dispatcher.BeginInvoke(()=>{FitThreeMessages();PlaceTopRight();SavePreferences();},DispatcherPriority.Loaded);
     }
     private void FitThreeMessages() => MeasureContentHeight();
@@ -688,12 +690,20 @@ public partial class MainWindow : Window
         AutoJoined.IsChecked=true;AutoJoined.IsEnabled=false;
         EnableOpportunityBoard();
         store.Start(DateTimeOffset.UtcNow.AddMinutes(-30));
-        var cloud=new CloudMessageSource();source=cloud;cloud.Activity+=ScheduleRead;timer.Start();await ReadAsync();
+        var cloud=new CloudMessageSource();source=cloud;cloud.Activity+=ScheduleRead;opportunityTimer.Start();await ReadAsync();
     }
     private void EnableOpportunityBoard()
     {
-        OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(360);CardsColumn.Width=new GridLength(1,GridUnitType.Star);
-        initialFit=false;MinWidth=720;var work=CurrentWorkArea();Width=Math.Min(Math.Max(Width,960),Math.Max(720,work.Width-16));Height=Math.Min(Math.Max(Height,620),Math.Max(120,work.Height-16));PlaceTopRight();
+        if(OpportunityArea.Visibility==Visibility.Visible)return;
+        OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(1,GridUnitType.Star);
+        var work=CurrentWorkArea();var cardWidth=Math.Min(600,Math.Max(360,work.Width-376));
+        CardsColumn.Width=new GridLength(cardWidth);
+        // Preserve the text pane's original fit policy; only add horizontal card space.
+        var textWidth=Width>=720?360:Width;
+        fittingWindow=true;
+        try{MinWidth=cardWidth+300;Width=Math.Min(cardWidth+textWidth,Math.Max(MinWidth,work.Width-16));}
+        finally{fittingWindow=false;}
+        RequestContentLayout();PlaceTopRight();
     }
     internal async Task RestoreConfiguredConnectionAsync()
     {

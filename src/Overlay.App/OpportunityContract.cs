@@ -35,6 +35,10 @@ public partial class MainWindow
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
         Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>450&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
+        Check(OpportunityArea.TranslatePoint(new Point(),this).X<MessageArea.TranslatePoint(new Point(),this).X,"cards left and messages right");
+        Check(initialFit&&!timer.IsEnabled,"original message auto-fit and event-driven reads preserved");
+        HomeClick(this,new RoutedEventArgs());await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+        Check(initialFit,"home restores original message fit");
         var image=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);image.Render(this);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=File.Create(output+".png"))encoder.Save(file);
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));
     }
