@@ -51,6 +51,16 @@ internal sealed class OpportunityModel
     {foreach(var pair in Cards.ToArray())if(now>=Expires(pair.Value).AddSeconds(30))Cards.Remove(pair.Key);}
     internal static DateTimeOffset Expires(Entry entry)=>entry.Missing is {} missing && missing<Date(entry.Data,"validUntil")?missing:Date(entry.Data,"validUntil");
     internal string State(Entry entry,DateTimeOffset now)=>entry.Missing is not null?"已失效":!Connected||now-Received>=TimeSpan.FromSeconds(20)||now-Sample>=TimeSpan.FromSeconds(20)?"待恢复":now<Expires(entry)?"ACTIVE":"待确认";
+    internal static string? CopyGcStrategy(JsonElement data)
+    {
+        var legs=Array(Get(data,"details"),"legs",3);
+        var supported=new[]{"binance","bybit","gate","hyperliquid"};
+        if(Text(data,"strategy")!="FF"||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind!=JsonValueKind.False||!supported.Contains(Text(l,"exchange"))))return null;
+        var normal=CopyStrategy(data);if(normal is null)return null;
+        var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
+        payload["buyEx"]="gc-"+payload["buyEx"];payload["sellEx"]="gc-"+payload["sellEx"];
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+    }
     internal static string? CopyStrategy(JsonElement data)
     {
         var legs=Array(Get(data,"details"),"legs",3);var strategy=Text(data,"strategy");
@@ -152,6 +162,7 @@ internal sealed class OpportunityBoard : DockPanel
         var footer=new DockPanel{Margin=new Thickness(0,2,0,0)};var copy=new Button{Content="复制",Padding=new Thickness(7,2,7,2),FontSize=10,MinHeight=20,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Left};
         copy.Click+=(_,_)=>{try{Clipboard.SetText(OpportunityModel.CopyStrategy(data)??string.Join('\n',VisibleText(stack))+"\n"+OpportunityModel.Radar(data));copy.Content="已复制";}catch{copy.Content="复制失败，请重试";}};
         SetDock(copy,Dock.Left);footer.Children.Add(copy);
+        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=new Button{Content="复制 GC",ToolTip="复制 Gate Crossex 代码",Padding=new Thickness(7,2,7,2),Margin=new Thickness(4,0,0,0),FontSize=10,MinHeight=20,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Left};gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
         if(OpportunityModel.Radar(data) is {} url){var button=new Button{Content="雷达 ↗",Padding=new Thickness(7,2,7,2),FontSize=10,MinHeight=20,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Right};button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);
