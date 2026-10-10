@@ -56,7 +56,8 @@ public partial class MainWindow
             DragYield.SyntheticBrowserProcessId=test.Id;
             try
             {
-                Assert(await Task.Run(()=>inputReady.WaitOne(5000)));dragYield!.OwnInput();await Task.Delay(600);
+                Assert(await Task.Run(()=>inputReady.WaitOne(5000)));dragYield!.OwnInput();dragYield.IntentChanged();await Task.Delay(600);
+                File.WriteAllText(Path.Combine(output,"initial-click-state.json"),System.Text.Json.JsonSerializer.Serialize(new{dragYield.BrowserWatchActive,dragYield.NativeTopmost,dragYield.ClickWatchActive,dragYield.Yielding}));
                 Assert(dragYield.BrowserWatchActive && dragYield.NativeTopmost && dragYield.ClickWatchActive);
                 var inputEvidence=new List<object>();
                 for(var input=0;input<3;input++)
