@@ -40,12 +40,12 @@ public partial class MainWindow
         for(var i=0;i<100&&(displayed.Count!=1||opportunityBoard.ActiveCount!=2);i++){await Task.Delay(20);await ReadAsync();}
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
-        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=340&&OpportunityArea.ActualWidth<=360&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
+        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=290&&OpportunityArea.ActualWidth<=310&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
         Check(OpportunityArea.TranslatePoint(new Point(),this).X<MessageArea.TranslatePoint(new Point(),this).X,"cards left and messages right");
         Check(initialFit&&!timer.IsEnabled,"original message auto-fit and event-driven reads preserved");
         HomeClick(this,new RoutedEventArgs());await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
         Check(initialFit,"home restores original message fit");
-        Height=680;Width=710;UpdateLayout();
+        Height=680;Width=660;UpdateLayout();
         Check(Background is SolidColorBrush background&&background.Color.A==0&&OpportunityArea.Background is null,"card pane has no large backdrop");
         var image=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);image.Render(this);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=File.Create(output+".png"))encoder.Save(file);
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));

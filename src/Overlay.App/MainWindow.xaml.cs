@@ -697,7 +697,7 @@ public partial class MainWindow : Window
     {
         if(OpportunityArea.Visibility==Visibility.Visible)return;
         OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(1,GridUnitType.Star);
-        var work=CurrentWorkArea();var cardWidth=Math.Min(350,Math.Max(300,work.Width-376));
+        var work=CurrentWorkArea();var cardWidth=Math.Min(300,Math.Max(280,work.Width-376));
         CardsColumn.Width=new GridLength(cardWidth);
         // Preserve the text pane's original fit policy; only add horizontal card space.
         var textWidth=Width>=720?360:Width;
