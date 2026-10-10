@@ -3,11 +3,12 @@ using System.Windows;
 namespace Overlay.App;
 public partial class MainWindow
 {
-    internal async Task RunYieldContractAsync(string output)
+    internal async Task RunYieldContractAsync(string output,bool inputOnly=false,bool dragOnly=false)
     {
         Directory.CreateDirectory(output);
         void Assert(bool condition,[System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string? expression=null){if(!condition)throw new InvalidOperationException(expression);}
         Pin.IsChecked=true;PreferenceChanged(this,new());
+        if(!inputOnly){
         App.SmokeStage="drag_yield";
         Assert(dragYield is {IsHooked:true,NativeTopmost:true});
         var yieldEvidence=new List<object>();
@@ -43,6 +44,8 @@ public partial class MainWindow
         dragYield!.Changed+=OwnEvent;await DragYieldFixture.RunAsync("move");dragYield.Changed-=OwnEvent;
         Assert(ownEvents==0 && dragYield.NativeTopmost);
         File.WriteAllText(Path.Combine(output,"drag-yield-own-window.txt"),"PASS same-process synthetic window move emits no yield; own and settings windows share this exclusion.");
+        }
+        if(dragOnly){await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"PASS drag/resize/cancel, five-second delay, manual pin off, own-window exclusion and foreground retention.");return;}
         App.SmokeStage="browser_input_yield";
         var token="Local\\OverlaySynthetic-"+Guid.NewGuid().ToString("N");
         using(var inputReady=new EventWaitHandle(false,EventResetMode.AutoReset,token+"-ready"))
@@ -53,12 +56,20 @@ public partial class MainWindow
             DragYield.SyntheticBrowserProcessId=test.Id;
             try
             {
-                Assert(await Task.Run(()=>inputReady.WaitOne(5000)));dragYield.OwnInput();await Task.Delay(600);
-                Assert(dragYield.BrowserWatchActive && dragYield.NativeTopmost);
+                Assert(await Task.Run(()=>inputReady.WaitOne(5000)));dragYield!.OwnInput();await Task.Delay(600);
+                Assert(dragYield.BrowserWatchActive && dragYield.NativeTopmost && dragYield.ClickWatchActive);
                 var inputEvidence=new List<object>();
                 for(var input=0;input<3;input++)
                 {
                     inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
+                    File.WriteAllText(Path.Combine(output,"click-state.json"),System.Text.Json.JsonSerializer.Serialize(new{phase="noClick",input,dragYield.ObservedClicks,dragYield.ExternalClicks,dragYield.Yielding,dragYield.NativeTopmost,dragYield.BrowserWatchActive}));
+                    Assert(!dragYield.Yielding && dragYield.NativeTopmost);
+                    inputEvidence.Add(new{input,phase="moveWheelKeyDoNotInitiate",at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding});
+                }
+                for(var input=0;input<3;input++)
+                {
+                    inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
+                    File.WriteAllText(Path.Combine(output,"click-state.json"),System.Text.Json.JsonSerializer.Serialize(new{phase="clicked",input,dragYield.ObservedClicks,dragYield.ExternalClicks,dragYield.Yielding,dragYield.NativeTopmost,dragYield.BrowserWatchActive}));
                     Assert(dragYield.Yielding && !dragYield.NativeTopmost && dragYield.BrowserWatchActive);
                     inputEvidence.Add(new{input,at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding,topmost=dragYield.NativeTopmost});
                 }
@@ -68,15 +79,19 @@ public partial class MainWindow
                 await Task.Delay(800);Assert(!dragYield.Yielding && dragYield.NativeTopmost && dragYield.RestoreKeptForeground);
                 inputEvidence.Add(new{input=4,phase="idleRestored",at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding});
                 inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
+                Assert(!dragYield.Yielding && dragYield.NativeTopmost);
+                inputEvidence.Add(new{input=6,phase="moveAfterRestoreStaysTopmost",at=DateTimeOffset.UtcNow,yielding=dragYield.Yielding});
+                inputNext.Set();Assert(await Task.Run(()=>inputDone.WaitOne(3000)));await Task.Delay(600);
+                Assert(dragYield.Yielding && !dragYield.NativeTopmost);
                 Pin.IsChecked=false;PreferenceChanged(this,new());await Task.Delay(5500);
-                Assert(!dragYield.NativeTopmost && !dragYield.BrowserWatchActive);
+                Assert(!dragYield.NativeTopmost && !dragYield.BrowserWatchActive && !dragYield.ClickWatchActive);
                 Pin.IsChecked=true;PreferenceChanged(this,new());BrowserInputFixture.ClickSyntheticWindow(this,test.Id);await Task.Delay(600);
                 Assert(!dragYield.Yielding && !dragYield.BrowserWatchActive && dragYield.NativeTopmost);
-                Hide();Assert(!dragYield.BrowserWatchActive);Show();
+                Hide();Assert(!dragYield.BrowserWatchActive && !dragYield.ClickWatchActive);Show();
                 File.WriteAllText(Path.Combine(output,"browser-yield-runtime.json"),System.Text.Json.JsonSerializer.Serialize(new{inputEvidence,alreadyForegroundClick=true,wheelAndKeyExtend=true,manualOffCancels=true,ownWindowExcluded=true,hiddenStopsWatch=true,fixture="synthetic ordinary native window exercising the shared external-window input policy; no private window contents accessed"}));
             }
             finally {inputNext.Set();await test.WaitForExitAsync();DragYield.SyntheticBrowserProcessId=0;test.Dispose();}
         }
-        await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"PASS external native window mouse, wheel, keyboard, idle restoration, drag/resize/cancel, manual pin off, own window exclusion and foreground retention.");
+        await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"PASS click-only external yield; move/wheel/key cannot initiate yield; movement after restoration stays topmost; input extends five-second idle; manual pin off, hook cleanup, own window exclusion and foreground retention."+(inputOnly?"":" Drag/resize/cancel also passed."));
     }
 }

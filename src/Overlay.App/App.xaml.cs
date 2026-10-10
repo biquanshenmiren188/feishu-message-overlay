@@ -23,7 +23,7 @@ public partial class App : Application
             Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"yield-ui-"+Guid.NewGuid().ToString("N")+".json");
             var output=e.Args.Last();Directory.CreateDirectory(output);
             var fixture=new MainWindow();MainWindow=fixture;fixture.Show();
-            try{await fixture.RunYieldContractAsync(output);await fixture.ExitAsync();}
+            try{await fixture.RunYieldContractAsync(output,e.Args.Contains("--input-only"),e.Args.Contains("--drag-only"));await fixture.ExitAsync();}
             catch(Exception error){await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"FAIL "+error);Shutdown(1);}return;
         }
         if(e.Args.Contains("--opportunity-contract"))
@@ -116,9 +116,14 @@ public partial class App : Application
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
             var args=e.Args.SkipWhile(a=>a!="--audio-check").Skip(1).ToArray();
             if(args.Length!=2){Shutdown(2);return;}
+            using var audio=new AlertAudio();audio.PathName="";
+            var bundledDefault=audio.PathName==AlertAudio.BundledPath && AlertAudio.IsSupported(audio.PathName);
+            audio.PathName=args[0];var customSelected=audio.PathName==Path.GetFullPath(args[0]);
+            audio.PathName=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".wav");
+            var missingCustomFallsBack=audio.PathName==AlertAudio.BundledPath;
             var accepted=AlertAudio.PlayWave(args[0]);
-            File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(new{accepted,outputDevice=AlertAudio.HasOutputDevice}));
-            await Task.Delay(900);Shutdown(accepted?0:1);return;
+            File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(new{accepted,outputDevice=AlertAudio.HasOutputDevice,bundledDefault,customSelected,missingCustomFallsBack}));
+            await Task.Delay(900);Shutdown(accepted && bundledDefault && customSelected && missingCustomFallsBack?0:1);return;
         }
         if(e.Args.Contains("--configure-audio"))
         {
