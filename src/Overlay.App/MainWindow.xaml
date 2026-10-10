@@ -28,7 +28,7 @@
     <Button Style="{StaticResource IconButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="隐藏到托盘" AutomationProperties.Name="隐藏到托盘" Click="HideClick"><Path Stroke="#686868" StrokeThickness="1.2" Data="M 1,1 L 11,11 M 11,1 L 1,11"/></Button>
    </StackPanel>
   </Grid>
-  <Border x:Name="OpportunityArea" Grid.Column="0" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed" BorderThickness="0" Background="{x:Null}"/>
+  <Border x:Name="OpportunityArea" shell:WindowChrome.IsHitTestVisibleInChrome="True" Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" BorderThickness="0" Background="{x:Null}"/>
   <ScrollViewer x:Name="PinnedArea" Grid.Column="1" Grid.Row="1" Visibility="Collapsed" Margin="7,0,3,4" MaxHeight="240" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="PinnedCard" ContentTemplate="{Binding ItemTemplate,ElementName=MessageList}" FontFamily="{Binding FontFamily,ElementName=MessageList}" FontSize="{Binding FontSize,ElementName=MessageList}"/></ScrollViewer>
   <Grid x:Name="MessageArea" Grid.Column="1" Grid.Row="2" Margin="7,0,3,6" MouseMove="MessageMouseMove" PreviewMouseWheel="MessageWheel" PreviewKeyDown="MessageKey">
    <TextBlock x:Name="EmptyHint" Text="暂无新消息" Foreground="#969696" HorizontalAlignment="Center" VerticalAlignment="Center"/>

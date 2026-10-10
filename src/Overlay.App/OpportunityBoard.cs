@@ -77,11 +77,15 @@ internal sealed class OpportunityBoard : DockPanel
     internal int VisibleCount{get;private set;}
     internal OpportunityBoard()
     {
-        heading.Visibility=Visibility.Collapsed;Margin=new Thickness(6,0,6,4);LastChildFill=true;SetDock(heading,Dock.Top);Children.Add(heading);
+        heading.Visibility=Visibility.Collapsed;Margin=new Thickness(0);LastChildFill=true;SetDock(heading,Dock.Top);Children.Add(heading);
         ScrollViewer.SetHorizontalScrollBarVisibility(cards,ScrollBarVisibility.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(cards,ScrollBarVisibility.Hidden);
         ScrollViewer.SetCanContentScroll(cards,true);VirtualizingPanel.SetIsVirtualizing(cards,true);VirtualizingPanel.SetVirtualizationMode(cards,VirtualizationMode.Recycling);
         var factory=new FrameworkElementFactory(typeof(OpportunityPresenter));cards.ItemTemplate=new DataTemplate{VisualTree=factory};
-        var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));cards.ItemContainerStyle=style;
+        cards.Padding=new Thickness(0);
+        var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.FocusableProperty,false));style.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty,null));
+        var presenter=new FrameworkElementFactory(typeof(ContentPresenter));
+        style.Setters.Add(new Setter(Control.TemplateProperty,new ControlTemplate(typeof(ListBoxItem)){VisualTree=presenter}));cards.ItemContainerStyle=style;
         Children.Add(cards);
     }
     private static Brush Brush(string hex)=>new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
