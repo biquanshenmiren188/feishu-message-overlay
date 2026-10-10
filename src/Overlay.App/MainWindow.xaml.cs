@@ -719,7 +719,7 @@ public partial class MainWindow : Window
         if(!AlertAudio.IsSupported(picker.FileName)){SetStatus("音频无效 · 仅支持 2MB 以内 WAV / MP3");return;}
         audio.PathName=picker.FileName;AudioLabel.Text=Path.GetFileName(picker.FileName);SavePreferences();
     }
-    private void ResetAudioClick(object sender,RoutedEventArgs e){audio.PathName="";AudioLabel.Text="系统提示音";SavePreferences();}
+    private void ResetAudioClick(object sender,RoutedEventArgs e){audio.PathName="";AudioLabel.Text=audio.PathName.Length==0?"系统提示音":Path.GetFileName(audio.PathName);SavePreferences();}
     private async void LoadSavedClick(object sender,RoutedEventArgs e)
     {
         var saved=CredentialVault.LoadOnUserRequest();if(saved is null){SetStatus("本地加密配置不可用 · 不会重新创建应用");return;}
