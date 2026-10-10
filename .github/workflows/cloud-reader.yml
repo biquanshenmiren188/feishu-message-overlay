@@ -1,0 +1,24 @@
+name: Cloud reader authorization
+on:
+  push:
+    paths:
+      - 'web/robot-push/publisher/**'
+      - '.github/workflows/cloud-reader.yml'
+  pull_request:
+    paths:
+      - 'web/robot-push/publisher/**'
+      - '.github/workflows/cloud-reader.yml'
+permissions:
+  contents: read
+jobs:
+  authorization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install cryptography
+      - run: python web/robot-push/publisher/reader_auth_test.py
+      - run: python web/robot-push/publisher/cloud_config_test.py
+      - run: python web/robot-push/publisher/cloud_receiver_test.py

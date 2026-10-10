@@ -1,4 +1,6 @@
-# Deployment reconciliation — 2026-10-03
+> 2026-10-10：当前 Windows 安装和云端读者授权请看 [CLOUD-SETUP.md](../../CLOUD-SETUP.md)。本文件下面的逐项哈希一致结论仅适用于当时部署；新增只读授权后 server.py 已变化，旧 source-hashes 不能作为当前整体一致的证明。
+
+# Deployment reconciliation — 2026-10-03（历史记录）
 
 Current web release: carousel-20261003m. Mobile five ordinary summaries plus independent pin; desktop three ordinary full-text cards plus independent pin. Static files page.js, carousel.js, style.css, index.html, feed-color.js exactly match the running site. page.mjs mirrors page.js for source tooling; index.html loads page.js. demo.js is the non-private fixture dependency. Do not restore the older page.mjs-only deployment recipe.
 

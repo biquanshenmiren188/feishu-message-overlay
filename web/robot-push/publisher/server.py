@@ -77,17 +77,33 @@ class Publisher:
     def authenticate(self,headers,body,now,route=ROUTE):
         if len(body)>MAX_BODY: raise Rejected(413,'request_limit')
         stamp=headers.get('X-Publish-Time','');nonce=headers.get('X-Publish-Nonce','')
-        if headers.get('X-Publish-Key')!=self.key_id: raise Rejected(401,'unknown_key')
+        requested_key=headers.get('X-Publish-Key','')
+        verify_key=self.public_key
+        reader=requested_key!=self.key_id
+        if reader:
+            if not re.fullmatch(r'[0-9a-f]{16}',requested_key) or route!=CONTROL_ROUTE:
+                raise Rejected(401,'unknown_key')
+            try: read_only=json.loads(body)=={'action':'state'}
+            except (ValueError,UnicodeError): read_only=False
+            if not read_only: raise Rejected(403,'reader_state_only')
+            verify_key=self.public_key.parent/('desktop-reader-'+requested_key+'.pem')
+            if not verify_key.is_file(): raise Rejected(401,'unknown_key')
         if not re.fullmatch(r'[0-9]{10,11}',stamp) or abs(now-int(stamp))>60 or not re.fullmatch(r'[0-9a-f]{32}',nonce): raise Rejected(401,'expired_or_invalid')
+        signed_nonce=nonce
+        if reader: nonce=requested_key+':'+nonce
         self.db.execute('DELETE FROM nonces WHERE accepted<?',(now-125,));self.db.commit()
         if self.db.execute('SELECT 1 FROM nonces WHERE nonce=?',(nonce,)).fetchone(): raise Rejected(409,'replay')
-        if self.db.execute('SELECT count(*) FROM nonces WHERE accepted>?',(now-60,)).fetchone()[0]>=30: raise Rejected(429,'rate_limit')
+        if reader:
+            rate=self.db.execute('SELECT count(*) FROM nonces WHERE accepted>? AND nonce LIKE ?',(now-60,requested_key+':%')).fetchone()[0]
+        else:
+            rate=self.db.execute("SELECT count(*) FROM nonces WHERE accepted>? AND nonce NOT LIKE '%:%'",(now-60,)).fetchone()[0]
+        if rate>=30: raise Rejected(429,'rate_limit')
         try: signature=base64.b64decode(headers.get('X-Publish-Signature',''),validate=True)
         except (ValueError,TypeError): raise Rejected(401,'invalid_signature')
         if not 64<=len(signature)<=80: raise Rejected(401,'invalid_signature')
         with tempfile.TemporaryDirectory(prefix='robot-verify-') as temporary:
             sig=Path(temporary)/'signature.der';sig.write_bytes(signature)
-            result=subprocess.run(['openssl','dgst','-sha256','-verify',str(self.public_key),'-signature',str(sig)],input=canonical(stamp,nonce,body,route),capture_output=True,timeout=3)
+            result=subprocess.run(['openssl','dgst','-sha256','-verify',str(verify_key),'-signature',str(sig)],input=canonical(stamp,signed_nonce,body,route),capture_output=True,timeout=3)
         if result.returncode: raise Rejected(401,'invalid_signature')
         return nonce
 
