@@ -25,6 +25,8 @@
 
 ## 在另一台 Windows 电脑安装
 
+优先从 [最新版下载页](https://github.com/biquanshenmiren188/feishu-message-overlay/releases/latest) 下载 Windows x64 ZIP，完整解压到目标程序目录。它是已构建的软件，不需要再编译；云端模式可直接使用。包内含本文和 `scripts/install-desktop-launcher.ps1`，从下面第 3 步继续。发行包不包含任何电脑的授权私钥，新电脑仍须完成第 4 步与服务器公钥授权。只有下载源代码时才执行第 1–2 步。
+
 1. 从 main 下载源代码，安装 .NET 10 SDK 和 Node 22 或兼容版本。在源代码根目录执行：
 
    ```powershell
