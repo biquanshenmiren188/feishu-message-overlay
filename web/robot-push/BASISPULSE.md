@@ -75,3 +75,5 @@ Chromium 390×844：全部卡片展开、搜索筛选通过，页面 scrollWidth
 
 格式沿用 `ASTRO-QUICK-COPY:`，两腿使用 `gc-binance`、`gc-bybit`、`gc-gate`、`gc-hl`。已按用户提供的 Binance / HL GRIFFAIN 示例逐字验证。仅复制策略描述，不提交交易；当前白名单并不代表已查询每个币在 GC 的实时可交易目录。
 
+本次实际部署入口位于 `push-traffic-v2-20261009/`（线上 index 引用该目录）。只更新其两个卡片模块及模块版本引用，保留现有推送订阅与文字页面入口；没有以仓库根目录静态文件覆盖线上全部页面。服务器备份：`/opt/robot-push/backups/gc-copy-20261010-182108`。线上真实 Gate/Bybit 卡片出现 GC 按钮并反馈“GC 已复制”，Bitget/HL 没有 GC 按钮。网页 19 项、桌面卡片 24 项、核心 45 项、诊断 30 项及 WPF 阅读回归通过。
+
