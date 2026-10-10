@@ -178,13 +178,14 @@ public partial class MainWindow : Window
     }
     internal void PaintPanelBackground(double value)
     {
+        void Apply(Brush brush){if(OpportunityArea.Visibility==Visibility.Visible){Background=Brushes.Transparent;MessageBackdrop.Background=brush;MessageBackdrop.BorderBrush=Brushes.LightGray;MessageBackdrop.BorderThickness=new Thickness(.5);WindowFrame.BorderBrush=Brushes.Transparent;}else Background=brush;}
         var alpha=(byte)Math.Round(Math.Clamp(value,.6,1)*255);var white=Color.FromArgb(alpha,255,255,255);
-        if(PinnedArea.Visibility!=Visibility.Visible || PinnedArea.ActualHeight<=0){Background=new SolidColorBrush(white);return;}
+        if(PinnedArea.Visibility!=Visibility.Visible || PinnedArea.ActualHeight<=0){Apply(new SolidColorBrush(white));return;}
         var height=Math.Max(1,ActualHeight>0?ActualHeight:Height);var top=Math.Clamp(28/height,0,1);var bottom=Math.Clamp((28+PinnedArea.ActualHeight)/height,top,1);
         var gray=Color.FromArgb(alpha,231,231,232);
         var fill=new LinearGradientBrush{StartPoint=new Point(0,0),EndPoint=new Point(0,1)};
         foreach(var stop in new[]{new GradientStop(white,0),new GradientStop(white,top),new GradientStop(gray,top),new GradientStop(gray,bottom),new GradientStop(white,bottom),new GradientStop(white,1)})fill.GradientStops.Add(stop);
-        fill.Freeze();Background=fill;
+        fill.Freeze();Apply(fill);
     }
     private void Render()
     {
@@ -696,14 +697,14 @@ public partial class MainWindow : Window
     {
         if(OpportunityArea.Visibility==Visibility.Visible)return;
         OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(1,GridUnitType.Star);
-        var work=CurrentWorkArea();var cardWidth=Math.Min(600,Math.Max(360,work.Width-376));
+        var work=CurrentWorkArea();var cardWidth=Math.Min(350,Math.Max(300,work.Width-376));
         CardsColumn.Width=new GridLength(cardWidth);
         // Preserve the text pane's original fit policy; only add horizontal card space.
         var textWidth=Width>=720?360:Width;
         fittingWindow=true;
         try{MinWidth=cardWidth+300;Width=Math.Min(cardWidth+textWidth,Math.Max(MinWidth,work.Width-16));}
         finally{fittingWindow=false;}
-        RequestContentLayout();PlaceTopRight();
+        RequestContentLayout();WindowAlpha.Set(this,OpacityScale.Value/100);PlaceTopRight();
     }
     internal async Task RestoreConfiguredConnectionAsync()
     {
