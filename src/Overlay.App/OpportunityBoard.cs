@@ -83,7 +83,9 @@ internal sealed class OpportunityBoard : DockPanel
         ScrollViewer.SetCanContentScroll(cards,true);VirtualizingPanel.SetIsVirtualizing(cards,true);VirtualizingPanel.SetVirtualizationMode(cards,VirtualizationMode.Recycling);
         var factory=new FrameworkElementFactory(typeof(OpportunityPresenter));cards.ItemTemplate=new DataTemplate{VisualTree=factory};
         cards.Padding=new Thickness(0);
-        var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.FocusableProperty,false));style.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty,null));
+        // The default ListBox template adds a one-pixel ScrollViewer margin.
+        var viewport=new FrameworkElementFactory(typeof(ScrollViewer));viewport.SetValue(ScrollViewer.CanContentScrollProperty,true);viewport.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty,ScrollBarVisibility.Hidden);viewport.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);viewport.SetValue(Control.PaddingProperty,new Thickness(0));viewport.SetValue(FrameworkElement.MarginProperty,new Thickness(0));viewport.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter)));cards.Template=new ControlTemplate(typeof(ListBox)){VisualTree=viewport};
+        var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));style.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.FocusableProperty,false));style.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty,null));
         var presenter=new FrameworkElementFactory(typeof(ContentPresenter));
         style.Setters.Add(new Setter(Control.TemplateProperty,new ControlTemplate(typeof(ListBoxItem)){VisualTree=presenter}));cards.ItemContainerStyle=style;
         Children.Add(cards);
@@ -150,7 +152,7 @@ internal sealed class OpportunityBoard : DockPanel
         SetDock(copy,Dock.Left);footer.Children.Add(copy);
         if(OpportunityModel.Radar(data) is {} url){var button=new Button{Content="雷达 ↗",Padding=new Thickness(7,2,7,2),FontSize=10,MinHeight=24,Background=Brushes.White,BorderBrush=Brush("#DCE3EA"),HorizontalAlignment=HorizontalAlignment.Right};button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var result=Box(stack,level>=10?"#FFF2F2":level>=6?"#FFF6EE":level>=4?"#FFFCED":level>=2?"#F1F7FF":"#F8FAFB");
-        result.Padding=new Thickness(8,7,8,7);result.BorderBrush=Brush("#8794AC");result.BorderThickness=new Thickness(.7);
+        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(8,7,8,7);result.BorderBrush=Brush("#8794AC");result.BorderThickness=new Thickness(.7);
         result.ToolTip=$"进入：{OpportunityModel.Date(data,"enteredAt").ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss} UTC+8\n更新：{OpportunityModel.Date(data,"updatedAt").ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8";return result;
     }
     private static string Exchange(JsonElement leg)=>OpportunityModel.Text(leg,"exchange")=="hyperliquid"?"HL":OpportunityModel.Text(leg,"exchange").ToUpperInvariant();
