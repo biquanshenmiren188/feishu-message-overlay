@@ -105,7 +105,7 @@ internal sealed class OpportunityBoard : DockPanel
         heading.ToolTip=Model.Connected?$"同步中 · {Model.Sample.ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8"+(Model.Complete?"":" · 数据暂不完整"):"正在连接卡片数据源 · 旧数据不计入活跃机会";
         if(signature==lastRender)return;lastRender=signature;VisibleCount=ordered.Length;
         var scroller=FindScroll(cards);var offset=scroller?.VerticalOffset??0;
-        cards.ItemsSource=ordered.Length>0?ordered.Select(entry=>(object)new OpportunityItem(this,entry,now)).ToArray():new object[]{Model.Connected?"当前没有活跃机会":"正在连接卡片数据源，恢复后自动显示"};
+        cards.ItemsSource=ordered.Length>0?ordered.Select(entry=>(object)new OpportunityItem(this,entry,now)).ToArray():System.Array.Empty<object>();
         if(scroller is not null)Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,new Action(()=>scroller.ScrollToVerticalOffset(offset)));
     }
     internal static ScrollViewer? FindScroll(DependencyObject parent)
