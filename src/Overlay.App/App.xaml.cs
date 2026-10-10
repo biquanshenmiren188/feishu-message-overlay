@@ -17,6 +17,15 @@ public partial class App : Application
             try{await WeixinContract.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
         }
         base.OnStartup(e);
+        if(e.Args.Contains("--yield-contract"))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"yield-ui-"+Guid.NewGuid().ToString("N")+".json");
+            var output=e.Args.Last();Directory.CreateDirectory(output);
+            var fixture=new MainWindow();MainWindow=fixture;fixture.Show();
+            try{await fixture.RunYieldContractAsync(output);await fixture.ExitAsync();}
+            catch(Exception error){await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"FAIL "+error);Shutdown(1);}return;
+        }
         if(e.Args.Contains("--opportunity-contract"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;

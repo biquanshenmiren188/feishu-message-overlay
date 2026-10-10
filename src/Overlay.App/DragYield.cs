@@ -25,7 +25,7 @@ internal sealed class DragYield : IDisposable
     private readonly Window window;
     private readonly Func<bool> intended;
     private readonly WinEvent callback;
-    private readonly DispatcherTimer restore=new(){Interval=TimeSpan.FromMilliseconds(300)};
+    private readonly DispatcherTimer restore=new(){Interval=TimeSpan.FromSeconds(5)};
     private readonly DispatcherTimer recovery=new(){Interval=TimeSpan.FromSeconds(2)};
     private readonly DispatcherTimer browserWatch=new(){Interval=TimeSpan.FromMilliseconds(500)};
     private nint hook,foregroundHook,other,browser;
@@ -71,7 +71,7 @@ internal sealed class DragYield : IDisposable
         if(!intended() || !window.IsVisible || window.WindowState==WindowState.Minimized || GetAncestor(hwnd,2)!=hwnd)return;
         var thread=GetWindowThreadProcessId(hwnd,out var process);if(process==(uint)Environment.ProcessId)return;
         restore.Stop();other=hwnd;otherThread=thread;moving=true;
-        if(IsBrowser(hwnd)){browser=hwnd;browserYield=true;lastInput=InputTime();browserWatch.Start();}
+        if(IsExternalWindow(hwnd)){browser=hwnd;browserYield=true;lastInput=InputTime();browserWatch.Start();}
         Apply();recovery.Start();Changed?.Invoke("yielded");
     }
     private void End(){recovery.Stop();restore.Stop();if(moving)restore.Start();}
@@ -79,17 +79,16 @@ internal sealed class DragYield : IDisposable
     private void Cancel(){restore.Stop();recovery.Stop();browserWatch.Stop();other=0;browser=0;moving=false;browserYield=false;lastInput=InputTime();Apply();}
     private static uint InputTime(){var info=new LastInput{size=8};return GetLastInputInfo(ref info)?info.time:unchecked((uint)Environment.TickCount64);}
     private bool Available=>!disposed && intended() && window.IsVisible && window.WindowState!=WindowState.Minimized && !ownMenu;
-    private static bool IsBrowser(nint hwnd)
+    private static bool IsExternalWindow(nint hwnd)
     {
         GetWindowThreadProcessId(hwnd,out var pid);if(pid==0 || pid==(uint)Environment.ProcessId)return false;
         if(App.SmokeMode)return pid==SyntheticBrowserProcessId;
-        try {using var process=System.Diagnostics.Process.GetProcessById((int)pid);return process.ProcessName.ToLowerInvariant() is "chrome" or "msedge" or "firefox" or "brave" or "opera" or "vivaldi";}
-        catch(System.ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return false;}catch(InvalidOperationException){return false;}
+        return IsWindow(hwnd) && IsWindowVisible(hwnd) && !IsIconic(hwnd);
     }
     private void RefreshBrowser()
     {
         var foreground=GetForegroundWindow();
-        if(!Available || !IsBrowser(foreground))
+        if(!Available || !IsExternalWindow(foreground))
         {
             browserWatch.Stop();browser=0;lastInput=InputTime();
             if(browserYield){browserYield=false;RestoreWithoutActivation();}return;
@@ -99,7 +98,6 @@ internal sealed class DragYield : IDisposable
     private void CheckBrowserInput()
     {
         if(!Available || GetForegroundWindow()!=browser){RefreshBrowser();return;}
-        if(Application.Current.Windows.OfType<Window>().Any(w=>w.IsMouseOver)){OwnInput();return;}
         var input=InputTime();
         if(input!=lastInput)
         {
