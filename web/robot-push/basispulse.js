@@ -14,12 +14,13 @@ const model=new Opportunities(), nodes=new Map(); let envelope=null, failed=fals
 // Commit ordinary card value changes together; connection recovery is immediate.
 // Transfer evidence comes with the push; do not start per-coin API polling.
 const DISPLAY_REFRESH_MS=10_000;
-let hasRendered=false;
+let lastValuesAt=-Infinity;
 const time = value => { const d = new Date(value); return Number.isFinite(+d) ? d.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—'; };
 function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? n>=3600?`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`:n>=60?`${Math.floor(n/60)}m ${n%60}s`:`${n}s` : '—'; }
 function render() {
-  const now=Date.now(), rows=model.tick(now);
-  const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000;
+  const now=Date.now(), rows=model.tick(now),commitValues=now-lastValuesAt>=DISPLAY_REFRESH_MS;
+  if(commitValues)lastValuesAt=now;
+  const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000 && Date.parse(envelope.receivedAt)<=now+30000 && Date.parse(envelope.snapshot?.sampledAt)<=now+30000;
   const text=healthy ? `同步中 · 源时间 ${time(envelope.snapshot.sampledAt)} · UTC+8${envelope.snapshot.complete?'':' · 数据暂不完整'}` : envelope?.status==='auth_required' ? '接口授权失效 · 后台正在重试' : '正在自动重连 · 旧数据不计入活跃机会';
   count.title=text; count.setAttribute('aria-label',text);
   count.dataset.connected=String(healthy);
@@ -29,12 +30,13 @@ function render() {
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
     const matrix=radarMatrix(c.data.details?.legs || [],()=>null,now,c.data.details?.transferWallets || []);
-    if(!node || node.stamp!==JSON.stringify([c.data,matrix])) {
+    const matrixStamp=JSON.stringify(matrix);
+    if(!node || node.matrixStamp!==matrixStamp || commitValues&&node.stamp!==JSON.stringify([c.data,matrix])) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
-      const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
+      const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next;node.matrixStamp=matrixStamp; nodes.set(id,node);
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
-    node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; node.age.textContent=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';
+    node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; const ageText=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';if(node.age.textContent!==ageText)node.age.textContent=ageText;
     const desired=board.children[shown-1]; if(desired!==node.card)board.insertBefore(node.card,desired || null);
   }
   for(const [id,node]of nodes)if(!keep.has(id)){node.card.remove();nodes.delete(id);}
@@ -43,10 +45,9 @@ function render() {
 }
 subscribePush('basispulse',{
   data(next){
-    const recovering=failed||!envelope||envelope.status!=='connected'||Date.now()-Date.parse(envelope.receivedAt)>=20000||Date.now()-Date.parse(envelope.snapshot?.sampledAt)>=20000;
     envelope=next;failed=false;model.ingest(envelope);
-    if(!hasRendered||recovering){render();hasRendered=true;}
+    render();
   },
   error(){failed=true;render();}
 });
-setInterval(()=>{if(!document.hidden)render()},DISPLAY_REFRESH_MS);
+setInterval(()=>{if(!document.hidden)render()},1000);

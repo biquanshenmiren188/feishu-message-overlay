@@ -9,11 +9,11 @@ export class Opportunities {
   constructor() { this.cards = new Map(); this.lastSample = -Infinity; this.nextSort = 0; this.order = []; }
   ingest(envelope, now = Date.now()) {
     const s = envelope?.snapshot, stamp = Date.parse(s?.sampledAt);
-    if (!s || !Array.isArray(s.active) || !Number.isFinite(stamp) || stamp <= this.lastSample) return;
+    if (!s || !Array.isArray(s.active) || !Number.isFinite(stamp) || stamp <= this.lastSample || stamp>now+30000) return;
     this.lastSample = stamp;
     const present = new Set();
-    for (const data of s.active) {
-      if (!data || typeof data.id !== 'string') continue;
+    for (const data of s.active.slice(0,1000)) {
+      if (!data || typeof data.id !== 'string' || !Number.isFinite(Date.parse(data.validUntil))) continue;
       // A re-entered span replaces the same market pair's grey card.
       const key = data.pair || (data.longMarketKey && data.shortMarketKey ? `${data.longMarketKey}>${data.shortMarketKey}` : data.id);
       present.add(key);
