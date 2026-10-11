@@ -104,7 +104,7 @@ public partial class MainWindow
     private void ReadingTick()
     {
         readingTimer.Stop();
-        if(contentLayoutPending || followingPaused || browsingHistory || !IsVisible || AutoScroll.IsChecked!=true){ScheduleReading();return;}
+        if(contentLayoutPending || followingPaused || !IsVisible || AutoScroll.IsChecked!=true){ScheduleReading();return;}
         var id=reader.Advance(DateTimeOffset.UtcNow,true,false);
         if(id is not null)ShowReadingMessage(id);
         ScheduleReading();

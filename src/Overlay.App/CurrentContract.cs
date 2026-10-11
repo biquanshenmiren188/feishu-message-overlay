@@ -12,6 +12,7 @@ public partial class MainWindow
         ProcessLifecycle.Contract(output);
         LocalStorage.LocationContract();
         await RunManualUpdateContractAsync(output);
+        RunCloudLayoutContract(output);
         void Check(bool ok,string reason){if(!ok)throw new InvalidOperationException(reason);}
         var clock=new MessageTime();
         foreach(var entry in new[]{("2026-10-01T00:00:00Z","2026-10-01 08:00:00 UTC+8"),("2026-10-01T16:00:00Z","2026-10-02 00:00:00 UTC+8"),("2026-10-01T23:59:59Z","2026-10-02 07:59:59 UTC+8"),("2026-10-01T01:00:00-07:00","2026-10-01 16:00:00 UTC+8")})
