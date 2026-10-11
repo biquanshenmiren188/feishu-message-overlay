@@ -7,7 +7,13 @@ using Overlay.Core;
 
 namespace Overlay.App;
 
-internal sealed class GitHubUpdateTransport : IDisposable
+internal interface IDesktopUpdateTransport : IDisposable
+{
+    Task<(string Json,bool Private)> LatestAsync(CancellationToken ct);
+    Task DownloadAsync(DesktopRelease release,bool isPrivate,string zip,CancellationToken ct);
+}
+
+internal sealed class GitHubUpdateTransport : IDesktopUpdateTransport
 {
     private readonly HttpClient client=new(new HttpClientHandler{AllowAutoRedirect=true}){Timeout=TimeSpan.FromSeconds(20)};
     internal GitHubUpdateTransport()
@@ -15,7 +21,7 @@ internal sealed class GitHubUpdateTransport : IDisposable
         client.DefaultRequestHeaders.UserAgent.ParseAdd("FeishuMessageOverlay/"+DesktopAutoUpdate.CurrentVersion[1..]);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
-    internal async Task<(string Json,bool Private)> LatestAsync(CancellationToken ct)
+    public async Task<(string Json,bool Private)> LatestAsync(CancellationToken ct)
     {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(30));
         using var response=await client.GetAsync($"https://api.github.com/repos/{DesktopUpdates.Repository}/releases/latest",HttpCompletionOption.ResponseHeadersRead,timeout.Token);
@@ -30,7 +36,7 @@ internal sealed class GitHubUpdateTransport : IDisposable
         await CopyBoundedAsync(await response.Content.ReadAsStreamAsync(timeout.Token),metadata,1024*1024,timeout.Token);
         return (Encoding.UTF8.GetString(metadata.ToArray()),false);
     }
-    internal async Task DownloadAsync(DesktopRelease release,bool isPrivate,string zip,CancellationToken ct)
+    public async Task DownloadAsync(DesktopRelease release,bool isPrivate,string zip,CancellationToken ct)
     {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromMinutes(5));
         if(isPrivate)

@@ -10,17 +10,24 @@ public partial class MainWindow
     internal void StartDesktopUpdates()
     {
         if(App.SmokeMode)return;
-        try{desktopUpdates=new(this);}catch{SetStatus("自动更新暂不可用，当前程序继续运行");}
+        try{desktopUpdates=new(this);desktopUpdates.Changed+=RefreshUpdateMenu;RefreshUpdateMenu();}catch{SetStatus("手动更新暂不可用，当前程序继续运行");}
+    }
+    private System.Windows.Forms.ToolStripMenuItem? updateStatusItem,updateCheckItem,updateInstallItem;
+    private void RefreshUpdateMenu()
+    {
+        if(updateStatusItem is not null)updateStatusItem.Text=desktopUpdates?.Status??"仅手动更新";
+        if(updateCheckItem is not null)updateCheckItem.Enabled=desktopUpdates is {Busy:false};
+        if(updateInstallItem is not null)updateInstallItem.Enabled=desktopUpdates?.CanInstall??false;
     }
     private void AddUpdateMenu(System.Windows.Forms.ContextMenuStrip menu)
     {
         var version=new System.Windows.Forms.ToolStripMenuItem("版本 "+DesktopAutoUpdate.CurrentVersion){Enabled=false};
-        var status=new System.Windows.Forms.ToolStripMenuItem("等待检查更新"){Enabled=false};
-        var automatic=new System.Windows.Forms.ToolStripMenuItem("自动更新（空闲时安装）");
-        automatic.Click+=(_,_)=>Dispatcher.Invoke(()=>{try{desktopUpdates?.SetEnabled(!(desktopUpdates?.Enabled??false));}catch{SetStatus("更新设置保存失败");}});
-        var check=new System.Windows.Forms.ToolStripMenuItem("立即检查更新");
-        check.Click+=async(_,_)=>{if(desktopUpdates is not null)await Dispatcher.InvokeAsync(()=>desktopUpdates.CheckAsync(true)).Task.Unwrap();};
-        menu.Opening+=(_,_)=>{automatic.Checked=desktopUpdates?.Enabled??false;status.Text=desktopUpdates?.Status??"自动更新尚未就绪";};
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());menu.Items.AddRange([version,status,automatic,check]);
+        updateStatusItem=new("仅手动更新"){Enabled=false};
+        updateCheckItem=new("检查更新");
+        updateInstallItem=new("下载并安装更新（重启小窗）"){Enabled=false};
+        updateCheckItem.Click+=async(_,_)=>{if(desktopUpdates is not null)await Dispatcher.InvokeAsync(()=>desktopUpdates.CheckAsync()).Task.Unwrap();};
+        updateInstallItem.Click+=async(_,_)=>{if(desktopUpdates is not null)await Dispatcher.InvokeAsync(()=>desktopUpdates.InstallManuallyAsync()).Task.Unwrap();};
+        menu.Opening+=(_,_)=>RefreshUpdateMenu();
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());menu.Items.AddRange([version,updateStatusItem,updateCheckItem,updateInstallItem]);
     }
 }

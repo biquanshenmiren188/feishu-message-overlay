@@ -49,6 +49,7 @@ foreach($mode in @('healthy','crash','bad-receipt','corrupt-download')){
   if($running.Count -ne 1){throw 'Failed child was not stopped before rollback'}
   if((Get-Content -LiteralPath (Join-Path $install 'storage-location.json') -Raw) -ne 'synthetic pointer, not real settings'){throw 'Settings pointer overwritten'}
   $saved=Get-Content -LiteralPath $state -Raw|ConvertFrom-Json
+  if($saved.Enabled){throw 'Installer re-enabled automatic updates'}
   if(($mode -eq 'healthy' -and $saved.FailedTag) -or ($mode -ne 'healthy' -and $saved.FailedTag -ne 'v2026.10.12.1')){throw 'Incorrect failed-version retry state'}
   $results+=@{case=$mode;passed=$true;running=$launch.mode;exitCode=$runner.ExitCode}
   Write-Output "PASS updater process: $mode, configuration preserved, expected process running"

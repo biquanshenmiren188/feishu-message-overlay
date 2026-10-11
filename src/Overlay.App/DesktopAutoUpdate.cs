@@ -1,75 +1,81 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Windows.Threading;
 using Overlay.Core;
 
 namespace Overlay.App;
 
-internal sealed record DesktopUpdateState(bool Enabled=true,DateTimeOffset NextCheck=default,string? FailedTag=null,string Status="等待检查");
+internal sealed record DesktopUpdateState(bool Enabled=false,DateTimeOffset NextCheck=default,string? FailedTag=null,string Status="仅手动更新，请点击检查更新");
 internal sealed record DesktopUpdatePlan(string Install,string Package,string Tag,string Zip,string Hash,long Size,int OldPid,long OldStartTicks,string Receipt,bool Background,string StatePath);
 
 internal sealed class DesktopAutoUpdate : IDisposable
 {
     internal static string CurrentVersion=>typeof(App).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().First(a=>a.Key=="UpdateVersion").Value!;
     private readonly MainWindow window;
-    private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
     private readonly CancellationTokenSource stop=new();
-    private readonly string directory=Path.Combine(LocalStorage.DirectoryPath,"updates");
-    private readonly GitHubUpdateTransport transport=new();
+    private readonly string directory;
+    private readonly IDesktopUpdateTransport transport;
     private DesktopUpdateState state;
     private DesktopUpdatePlan? prepared;
+    private DesktopRelease? available;
+    private bool privateRelease;
     private bool busy;
-    internal bool Enabled=>state.Enabled;
+    internal bool Enabled=>false;
+    internal bool Busy=>busy;
+    internal bool CanInstall=>!busy&&available is not null;
+    internal event Action? Changed;
     internal string Status=>state.Status;
     private string StatePath=>Path.Combine(directory,"state.json");
-    internal DesktopAutoUpdate(MainWindow window)
+    internal DesktopAutoUpdate(MainWindow window,IDesktopUpdateTransport? transport=null,string? updateDirectory=null)
     {
         this.window=window;
+        this.transport=transport??new GitHubUpdateTransport();
+        directory=updateDirectory??Path.Combine(LocalStorage.DirectoryPath,"updates");
         try{state=File.Exists(StatePath)?JsonSerializer.Deserialize<DesktopUpdateState>(File.ReadAllText(StatePath))??new(false):new();}
         catch{state=new(false,Status:"更新配置不可读，请手动检查");}
-        timer.Tick+=async(_,_)=>{await CheckAsync(false);await ApplyWhenIdleAsync();};timer.Start();
-        _=CheckAsync(false);
+        // Migrate legacy opt-in state. Startup never checks, downloads or installs.
+        state=state with{Enabled=false,NextCheck=default,Status="仅手动更新，请点击检查更新"};Save();
     }
-    private void Save(){LocalStorage.AtomicWrite(StatePath,JsonSerializer.SerializeToUtf8Bytes(state));}
-    internal void SetEnabled(bool enabled){var previous=state;try{state=state with{Enabled=enabled};Save();}catch{state=previous;throw;}}
-    internal async Task CheckAsync(bool manual)
+    private void Save(){LocalStorage.AtomicWrite(StatePath,JsonSerializer.SerializeToUtf8Bytes(state));Changed?.Invoke();}
+    internal async Task CheckAsync()
     {
-        if(busy||stop.IsCancellationRequested||(!manual&&(!state.Enabled||state.NextCheck>DateTimeOffset.UtcNow))||prepared is not null)return;
+        if(busy||stop.IsCancellationRequested||prepared is not null)return;
         busy=true;
         try
         {
-            state=state with{Status="正在检查更新",NextCheck=DateTimeOffset.UtcNow.AddHours(1)};Save();
+            available=null;
+            state=state with{Status="正在检查更新"};Save();
             var metadata=await transport.LatestAsync(stop.Token);
-            var release=DesktopUpdates.SelectRelease(metadata.Json,CurrentVersion);
-            if(release is null){state=state with{Status="已是最新版本",NextCheck=DateTimeOffset.UtcNow.AddHours(6)};Save();return;}
-            if(!manual&&state.FailedTag==release.Tag){state=state with{Status="此版本更新失败，保留旧版；可手动重试",NextCheck=DateTimeOffset.UtcNow.AddHours(6)};Save();return;}
-            state=state with{Status="正在下载 "+release.Tag};Save();
-            var session=Path.Combine(directory,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(session);
-            var zip=Path.Combine(session,"package.zip");
-            await transport.DownloadAsync(release,metadata.Private,zip,stop.Token);
-            var package=Path.Combine(session,"package");
-            await Task.Run(()=>DesktopUpdates.ExtractVerified(zip,package,release.Tag,release.Sha256,release.Size),stop.Token);
-            using var self=Process.GetCurrentProcess();
-            prepared=new(AppContext.BaseDirectory,package,release.Tag,zip,release.Sha256,release.Size,self.Id,self.StartTime.ToUniversalTime().Ticks,Path.Combine(session,"healthy.json"),!window.IsVisible,StatePath);
-            state=state with{Status=release.Tag+(Enabled?" 已就绪，空闲时自动安装":" 已就绪，开启自动更新后安装")};Save();
+            available=DesktopUpdates.SelectRelease(metadata.Json,CurrentVersion);privateRelease=metadata.Private;
+            state=state with{Status=available is null?"已是最新版本":$"发现 {available.Tag}，请点击下载并安装"};Save();
         }
-        catch(OperationCanceledException){if(!stop.IsCancellationRequested){state=state with{Status="更新检查超时，稍后自动重试"};try{Save();}catch{}}}
+        catch(OperationCanceledException){if(!stop.IsCancellationRequested){state=state with{Status="更新检查超时，请手动重试"};try{Save();}catch{}}}
         catch{state=state with{Status="更新检查或校验失败；请检查网络及 GitHub 登录，当前版本继续运行"};try{Save();}catch{}}
-        finally{busy=false;}
+        finally{busy=false;Changed?.Invoke();}
     }
-    [StructLayout(LayoutKind.Sequential)]private struct LastInput{public uint Size;public uint Tick;}
-    [DllImport("user32.dll")]private static extern bool GetLastInputInfo(ref LastInput input);
-    private static bool Idle(){var input=new LastInput{Size=(uint)Marshal.SizeOf<LastInput>()};return GetLastInputInfo(ref input)&&unchecked((uint)Environment.TickCount-input.Tick)>=30000;}
-    private async Task ApplyWhenIdleAsync()
+    internal async Task InstallManuallyAsync()
     {
-        if(busy||prepared is null||!Enabled||!Idle()||!window.CanApplyDesktopUpdate)return;
+        if(!CanInstall||stop.IsCancellationRequested)return;
+        if(!window.CanApplyDesktopUpdate){state=state with{Status="请关闭设置或其他对话框后，再点击安装"};Save();return;}
         busy=true;
         try
         {
-            if(!window.FlushForSessionEnding())return;
+            if(prepared is null)
+            {
+                var release=available!;
+                state=state with{Status="正在下载并校验 "+release.Tag};Save();
+                var sessionPath=Path.Combine(directory,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(sessionPath);
+                var zip=Path.Combine(sessionPath,"package.zip");
+                await transport.DownloadAsync(release,privateRelease,zip,stop.Token);
+                var package=Path.Combine(sessionPath,"package");
+                await Task.Run(()=>DesktopUpdates.ExtractVerified(zip,package,release.Tag,release.Sha256,release.Size),stop.Token);
+                using var self=Process.GetCurrentProcess();
+                prepared=new(AppContext.BaseDirectory,package,release.Tag,zip,release.Sha256,release.Size,self.Id,self.StartTime.ToUniversalTime().Ticks,Path.Combine(sessionPath,"healthy.json"),!window.IsVisible,StatePath);
+            }
+            // User may have opened settings during the download; require another click then.
+            if(!window.CanApplyDesktopUpdate){state=state with{Status="下载已完成，请关闭设置后再次点击安装"};Save();return;}
+            if(!window.FlushForSessionEnding()){state=state with{Status="设置保存失败，请处理后再次点击安装"};Save();return;}
             var plan=prepared with{Background=!window.IsVisible};
             var session=Path.GetDirectoryName(plan.Zip)!;var runner=Path.Combine(session,"runner");Directory.CreateDirectory(runner);
             // Run the current trusted updater from outside the directory being replaced.
@@ -78,12 +84,12 @@ internal sealed class DesktopAutoUpdate : IDisposable
             var start=new ProcessStartInfo(Path.Combine(runner,"FeishuMessageOverlay.exe")){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=runner};
             start.ArgumentList.Add("--apply-desktop-update");start.ArgumentList.Add(planPath);
             if(Process.Start(start) is null)throw new IOException("Updater did not start");
-            ProcessLifecycle.ExitReason="automatic_update";await window.ExitAsync();
+            ProcessLifecycle.ExitReason="manual_update";await window.ExitAsync();
         }
-        catch{state=state with{Status="无法安装更新，当前版本继续运行",FailedTag=prepared.Tag};prepared=null;try{Save();}catch{}}
-        finally{busy=false;}
+        catch{state=state with{Status="下载、校验或安装失败，当前版本继续运行；可手动重试",FailedTag=available?.Tag};prepared=null;try{Save();}catch{}}
+        finally{busy=false;Changed?.Invoke();}
     }
-    public void Dispose(){timer.Stop();stop.Cancel();transport.Dispose();}
+    public void Dispose(){stop.Cancel();transport.Dispose();}
 
     internal static async Task<int> RunInstallerAsync(string planPath)
     {
@@ -151,7 +157,7 @@ internal sealed class DesktopAutoUpdate : IDisposable
     private static void WriteResult(DesktopUpdatePlan plan,bool success,string? status=null)
     {
         var state=JsonSerializer.Deserialize<DesktopUpdateState>(File.ReadAllText(plan.StatePath))??new();
-        LocalStorage.AtomicWrite(plan.StatePath,JsonSerializer.SerializeToUtf8Bytes(state with{FailedTag=success?null:plan.Tag,Status=status??(success?"已更新到 "+plan.Tag:"更新失败，已恢复旧版"),NextCheck=DateTimeOffset.UtcNow.AddHours(6)}));
+        LocalStorage.AtomicWrite(plan.StatePath,JsonSerializer.SerializeToUtf8Bytes(state with{Enabled=false,FailedTag=success?null:plan.Tag,Status=status??(success?"已更新到 "+plan.Tag:"更新失败，已恢复旧版"),NextCheck=default}));
     }
     internal static void WriteHealthReceipt(string path)
     {
