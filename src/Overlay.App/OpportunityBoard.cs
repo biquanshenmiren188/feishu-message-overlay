@@ -15,7 +15,8 @@ public sealed class OpportunityPresenter : ContentControl
 // The existing signed cloud response carries this credential-free cache. No new upstream poller.
 internal sealed class OpportunityModel
 {
-    internal sealed class Entry(JsonElement data) {internal JsonElement Data=data;internal DateTimeOffset? Missing;}
+    private static long nextContentVersion;
+    internal sealed class Entry(JsonElement data) {internal JsonElement Data=data;internal readonly string Content=data.GetRawText();internal readonly long ContentVersion=Interlocked.Increment(ref nextContentVersion);internal DateTimeOffset? Missing;}
     internal readonly Dictionary<string,Entry> Cards=new(StringComparer.Ordinal);
     internal DateTimeOffset Sample=DateTimeOffset.MinValue,Received=DateTimeOffset.MinValue;
     internal bool Connected,Complete;
@@ -42,7 +43,8 @@ internal sealed class OpportunityModel
         {
             var id=Text(data,"id");if(id.Length is 0 or >512||Date(data,"validUntil")==DateTimeOffset.MinValue)continue;
             var pair=Text(data,"pair");var key=pair.Length>0?pair:id;present.Add(key);
-            Cards[key]=new(data.Clone());
+            if(Cards.TryGetValue(key,out var existing)&&existing.Content==data.GetRawText())existing.Missing=null;
+            else Cards[key]=new(data.Clone());
         }
         if(Complete)foreach(var pair in Cards)if(!present.Contains(pair.Key))pair.Value.Missing??=now;
         Prune(now);
@@ -83,6 +85,11 @@ internal sealed class OpportunityBoard : DockPanel
     private readonly TextBlock heading=new(){FontSize=14,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,6,4,8)};
     private readonly ListBox cards=new(){BorderThickness=new Thickness(0),Background=Brushes.Transparent,HorizontalContentAlignment=HorizontalAlignment.Stretch};
     private string? lastRender;
+    private string? lastStates;
+    private DateTimeOffset lastValues;
+    private long lastAgeTick=-1;
+    private readonly List<(WeakReference<TextBlock> Label,OpportunityModel.Entry Entry)> ages=[];
+    internal int RenderCount{get;private set;}
     internal int ActiveCount{get;private set;}
     internal int VisibleCount{get;private set;}
     internal OpportunityBoard()
@@ -110,13 +117,30 @@ internal sealed class OpportunityBoard : DockPanel
         if(!visible)return;
         // Values are committed at most once per ten seconds; expiry/connection changes remain immediate.
         var ordered=Model.Cards.Values.OrderBy(c=>OpportunityModel.Asset(c.Data),StringComparer.Ordinal).ThenByDescending(c=>OpportunityModel.Number(OpportunityModel.Get(c.Data,"v2Residual"),"level")??-1).ToArray();
-        var signature=string.Join('|',ordered.Select(c=>OpportunityModel.Text(c.Data,"id")+Model.State(c,now)))+"/"+now.ToUnixTimeSeconds()/10+"/"+Model.Connected;
+        var states=JsonSerializer.Serialize(ordered.Select(c=>new{id=OpportunityModel.Text(c.Data,"id"),state=Model.State(c,now),transfers=Transfers(OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"legs",2),OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"transferWallets",20),now)}));
+        var signature=string.Join(',',ordered.Select(c=>c.ContentVersion))+states;
         heading.Text=$"卡片推送   {ActiveCount} ACTIVE";
         heading.ToolTip=Model.Connected?$"同步中 · {Model.Sample.ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8"+(Model.Complete?"":" · 数据暂不完整"):"正在连接卡片数据源 · 旧数据不计入活跃机会";
-        if(signature==lastRender)return;lastRender=signature;VisibleCount=ordered.Length;
+        // Update the age label alone; do not rebuild card controls just because time passed.
+        var ageTick=now.ToUnixTimeSeconds()/10;
+        if(ageTick!=lastAgeTick)
+        {
+            lastAgeTick=ageTick;
+            for(var i=ages.Count-1;i>=0;i--)
+                if(ages[i].Label.TryGetTarget(out var label))label.Text=StatusText(ages[i].Entry,now);
+                else ages.RemoveAt(i);
+        }
+        if(signature==lastRender||(states==lastStates&&now-lastValues<TimeSpan.FromSeconds(10)))return;
+        lastRender=signature;lastStates=states;lastValues=now;VisibleCount=ordered.Length;RenderCount++;ages.Clear();
         var scroller=FindScroll(cards);var offset=scroller?.VerticalOffset??0;
         cards.ItemsSource=ordered.Length>0?ordered.Select(entry=>(object)new OpportunityItem(this,entry,now)).ToArray():System.Array.Empty<object>();
         if(scroller is not null)Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,new Action(()=>scroller.ScrollToVerticalOffset(offset)));
+    }
+    private string StatusText(OpportunityModel.Entry entry,DateTimeOffset now)
+    {
+        var state=Model.State(entry,now);var data=entry.Data;
+        var age=Math.Max(0,(int)(now-OpportunityModel.Date(data,"enteredAt")).TotalSeconds);
+        return (state=="ACTIVE"?"● ACTIVE "+age+"s":state)+" · "+(OpportunityModel.Text(data,"trigger")=="v2_price_window"?"V2收敛":OpportunityModel.Text(data,"trigger"));
     }
     internal static ScrollViewer? FindScroll(DependencyObject parent)
     {
@@ -130,10 +154,9 @@ internal sealed class OpportunityBoard : DockPanel
         var rank=level>=10?"#E3444E":level>=6?"#E47C23":level>=4?"#C49500":level>=2?"#4085DF":"#8B95A5";
         var rankText=level>=10?"#B72136":level>=6?"#9C490C":level>=4?"#866400":level>=2?"#245B9E":"#596271";
         var stack=new StackPanel();
-        var age=Math.Max(0,(int)(now-OpportunityModel.Date(data,"enteredAt")).TotalSeconds);
         var title=new Grid{Margin=new Thickness(0,0,0,3)};title.ColumnDefinitions.Add(new());title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var name=Label("",13,true);name.Inlines.Add(new System.Windows.Documents.Run(OpportunityModel.Asset(data)));var strategyBadge=new Border{Child=Label(OpportunityModel.Text(data,"strategy"),8,color:"#476371"),Background=Brush("#E9EDEB"),Margin=new Thickness(3,0,0,0),Padding=new Thickness(1),VerticalAlignment=VerticalAlignment.Center};name.Inlines.Add(new System.Windows.Documents.InlineUIContainer(strategyBadge){BaselineAlignment=BaselineAlignment.Center});title.Children.Add(name);
-        var status=Label((state=="ACTIVE"?"● ACTIVE "+age+"s":state)+" · "+(OpportunityModel.Text(data,"trigger")=="v2_price_window"?"V2收敛":OpportunityModel.Text(data,"trigger")),8,true,state=="ACTIVE"?"#28765B":"#A16910");status.VerticalAlignment=VerticalAlignment.Center;status.Margin=new Thickness(3,0,4,0);Grid.SetColumn(status,1);title.Children.Add(status);
+        var status=Label(StatusText(entry,now),8,true,state=="ACTIVE"?"#28765B":"#A16910");ages.Add((new(status),entry));status.VerticalAlignment=VerticalAlignment.Center;status.Margin=new Thickness(3,0,4,0);Grid.SetColumn(status,1);title.Children.Add(status);
         var badge=new Border{Child=Label($"R{(level?.ToString(CultureInfo.InvariantCulture)??"—")} {OpportunityModel.Percent(OpportunityModel.Number(residual,"bps"))}",10,true,rankText),Background=Brush("#F7F9FB"),BorderBrush=Brush(rankText),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(4),Padding=new Thickness(3,1,3,1)};Grid.SetColumn(badge,2);title.Children.Add(badge);stack.Children.Add(title);
         var legs=OpportunityModel.Array(detail,"legs",2);var legGrid=new Grid{Margin=new Thickness(0,0,0,4),MinHeight=44};legGrid.ColumnDefinitions.Add(new());legGrid.ColumnDefinitions.Add(new());
         for(var i=0;i<legs.Length;i++)

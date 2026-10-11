@@ -11,7 +11,7 @@ internal sealed class PublicWebPublisher : IAsyncDisposable
     private const string Endpoint="https://47.79.37.237"+PublishPath;
     internal const string CloudControlEndpoint="https://leida.shenmiren.work/radar/api/robot-push/control";
     private static readonly JsonSerializerOptions Json=new(){PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
-    private static readonly HttpClient ControlHttp=new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(15)};
+    private static readonly HttpClient ControlHttp=new(new HttpClientHandler{AllowAutoRedirect=false,AutomaticDecompression=System.Net.DecompressionMethods.GZip}){Timeout=TimeSpan.FromSeconds(15)};
     private static string KeyPath=>Path.Combine(LocalStorage.DirectoryPath,"publisher-signing.dpapi");
     internal record ActionLink(string Label,string Url);
     internal record WebMessage(string Id,string GroupId,string SenderType,string SentAt,string Title,string Body,ActionLink[] Actions);
@@ -28,7 +28,7 @@ internal sealed class PublicWebPublisher : IAsyncDisposable
     internal bool RemotePinned{get;private set;}
     internal static string Digest(string value)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     internal static byte[] Canonical(string stamp,string nonce,byte[] body,string path=PublishPath)=>Encoding.UTF8.GetBytes($"robot-push-v1\nPOST\n{path}\n{stamp}\n{nonce}\n{Convert.ToHexStringLower(SHA256.HashData(body))}");
-    internal static async Task<JsonDocument> SendControlAsync(string path,object payload)
+    internal static async Task<JsonDocument> SendControlAsync(string path,object payload,CancellationToken cancellationToken=default)
     {
         if(path is not ("/radar/api/robot-push/configure" or "/radar/api/robot-push/control"))throw new InvalidOperationException();
         var body=JsonSerializer.SerializeToUtf8Bytes(payload,Json);
@@ -46,9 +46,9 @@ internal sealed class PublicWebPublisher : IAsyncDisposable
             request.Headers.Add("X-Publish-Key",Convert.ToHexStringLower(SHA256.HashData(key.ExportSubjectPublicKeyInfo()))[..16]);
             request.Headers.Add("X-Publish-Time",stamp);request.Headers.Add("X-Publish-Nonce",nonce);
             request.Headers.Add("X-Publish-Signature",Convert.ToBase64String(key.SignData(Canonical(stamp,nonce,body,path),HashAlgorithmName.SHA256,DSASignatureFormat.Rfc3279DerSequence)));
-            using var response=await ControlHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
+            using var response=await ControlHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellationToken);
             if(!response.IsSuccessStatusCode)throw new HttpRequestException("Control request rejected",null,response.StatusCode);
-            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);timeout.CancelAfter(TimeSpan.FromSeconds(10));
             await using var stream=await response.Content.ReadAsStreamAsync(timeout.Token);
             using var output=new MemoryStream();var buffer=new byte[4096];int count;
             var limit=path.EndsWith("/control",StringComparison.Ordinal)?8*1024*1024:32768;

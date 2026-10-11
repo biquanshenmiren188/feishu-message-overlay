@@ -38,6 +38,17 @@ public partial class MainWindow
         Check(transfers[0].Contains("无现货",StringComparison.Ordinal)&&transfers[1].Contains("未知",StringComparison.Ordinal),"no spot and unknown distinct");
         var many=Envelope(Enumerable.Range(0,125).Select(i=>Card("many"+i)).ToArray(),now);
         var all=new OpportunityBoard();all.Update(many,true,now,true);Check(all.VisibleCount==125,"all cards offered without first-page cap");
+        var idle=new OpportunityBoard();
+        for(var second=0;second<=60;second++)idle.Update(Envelope(new[]{Card("idle")},now.AddSeconds(second)),true,now.AddSeconds(second),true);
+        Check(idle.RenderCount==1,"sixty seconds unchanged cards never rebuild including age ticks");
+        idle.Update(Envelope(new[]{Card("idle","CHANGED")},now.AddSeconds(61)),true,now.AddSeconds(61),true);
+        Check(idle.RenderCount==2,"same ID content change renders");
+        idle.Update(Envelope(new[]{Card("idle","CHANGED")},now.AddSeconds(61)),false,now.AddSeconds(62),true);
+        Check(idle.RenderCount==3,"connection loss renders immediately within throttle");
+        idle.Update(Envelope([],now.AddSeconds(63)),true,now.AddSeconds(63),true);
+        Check(idle.RenderCount==4,"complete removal renders immediately");
+        idle.Update(Envelope([],now.AddSeconds(94)),true,now.AddSeconds(94),true);
+        Check(idle.VisibleCount==0,"expired cards disappear without forced periodic render");
         var group=PublicWebPublisher.Digest("oc_fixture");
         var snapshot=JsonSerializer.Serialize(new{cloudMode=true,sourceConnected=true,groups=new[]{new{id="oc_fixture",groupId=group,name="Synthetic group"}},messages=new[]{new{id=PublicWebPublisher.Digest("fixture-message"),groupId=group,senderType="bot",sentAt=now.AddSeconds(-20),title="飞书机器人消息 · 合成验收",headerTone="blue",body="文字消息与左侧卡片同时显示。\n原有消息接收、阅读和置顶功能保留。\n此图仅使用合成数据。",actions=System.Array.Empty<object>()}},pinned=(object?)null,pinnedGroupId="",opportunities=envelope});
         var cloud=new CloudMessageSource(_=>Task.FromResult(JsonDocument.Parse(snapshot)),TimeSpan.FromMilliseconds(100));source=cloud;cloud.Activity+=ScheduleRead;store.Start(now.AddMinutes(-30));EnableOpportunityBoard();Width=960;Height=680;Left=-12000;Top=-12000;

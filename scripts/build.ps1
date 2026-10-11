@@ -48,6 +48,12 @@ $diagnostic = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirecto
 if ($diagnostic.ExitCode -ne 0) { throw 'Diagnostic contracts failed' }
 $opportunity = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--opportunity-contract', ('"' + (Join-Path $root 'artifacts/verification/opportunity-contract.json') + '"')) -WindowStyle Hidden -PassThru -Wait
 if ($opportunity.ExitCode -ne 0) { throw 'Opportunity card contracts failed' }
+foreach($contract in @('cloud-source','cloud-window')){
+ $report=Join-Path $root "artifacts/verification/$contract-contract.json"
+ if(Test-Path -LiteralPath $report){Remove-Item -LiteralPath $report}
+ $check=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @("--$contract-contract",('"'+$report+'"')) -WindowStyle Hidden -PassThru -Wait
+ if($check.ExitCode -ne 0 -or !(Test-Path -LiteralPath $report) -or !(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).passed){throw "$contract contract failed"}
+}
 & (Join-Path $PSScriptRoot 'test-update-process.ps1') -AppDirectory (Join-Path $root $OutputDirectory)
 # No installation, signing, certificate trust, startup registration, or system permissions.
 & (Join-Path $PSScriptRoot 'write-update-manifest.ps1') -Directory (Join-Path $root $OutputDirectory) -Version $UpdateVersion
