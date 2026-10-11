@@ -12,6 +12,17 @@ public partial class App : Application
     internal static string SmokeStage { get; set; } = "ui";
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if(e.Args.Length==2&&e.Args[0]=="--verify-update-source")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            try{await GitHubUpdateTransport.VerifySourceAsync(e.Args[1]);Shutdown();}
+            catch(Exception error){Directory.CreateDirectory(e.Args[1]);File.WriteAllText(Path.Combine(e.Args[1],"update-source-check.json"),System.Text.Json.JsonSerializer.Serialize(new{passed=false,type=error.GetType().Name}));Shutdown(1);}return;
+        }
+        if(e.Args.Length==2&&e.Args[0]=="--apply-desktop-update")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            Shutdown(await DesktopAutoUpdate.RunInstallerAsync(e.Args[1]));return;
+        }
         if(e.Args.Contains("--weixin-contract")){
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
             try{await WeixinContract.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
@@ -254,7 +265,14 @@ public partial class App : Application
             SetupReceipt = e.Args.SkipWhile(a => a != "--setup").Skip(1).FirstOrDefault();
             await window.ShowRegistrationAsync(true); return;
         }
-        if (!SmokeMode) {await window.RestoreConfiguredConnectionAsync();return;}
+        if (!SmokeMode) {
+            if(e.Args.Contains("--update-health-receipt")){
+                var receipt=e.Args.SkipWhile(a=>a!="--update-health-receipt").Skip(1).FirstOrDefault();
+                if(receipt is not null&&Preferences.LoadState is "loaded" or "missing")DesktopAutoUpdate.WriteHealthReceipt(receipt);
+            }
+            window.StartDesktopUpdates();
+            await window.RestoreConfiguredConnectionAsync();return;
+        }
         var smokeOutput = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
         if (string.IsNullOrEmpty(smokeOutput)) { Shutdown(2); return; }
         try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, strict three-container reading range and real timer visual progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
