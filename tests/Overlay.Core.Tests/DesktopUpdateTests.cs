@@ -78,6 +78,15 @@ internal static class DesktopUpdateTests
             check(await DesktopUpdates.InstallAsync(healthy,package,next,path=>{starts++;return Task.FromResult(File.ReadAllText(Path.Combine(path,"FeishuMessageOverlay.exe"))=="new application");},_=>{restores++;return Task.CompletedTask;}),"updater: successful transaction");
             check(starts==1&&restores==0&&File.ReadAllText(Path.Combine(healthy,"storage-location.json"))=="private local pointer"&&File.ReadAllText(Path.Combine(healthy,"custom.wav"))=="user sound","updater: preserve settings pointer and custom sound");
             check(Directory.GetDirectories(root,"healthy.backup-*").Length==1,"updater: retain previous program backup");
+            if(OperatingSystem.IsWindows())
+            {
+                var delayed=Install("delayed-image-release");
+                using var imageHandle=new FileStream(Path.Combine(delayed,"FeishuMessageOverlay.exe"),FileMode.Open,FileAccess.Read,FileShare.Read);
+                var releaseHandle=Task.Run(async()=>{await Task.Delay(1000);imageHandle.Dispose();});
+                check(await DesktopUpdates.InstallAsync(delayed,package,next,_=>Task.FromResult(true),_=>Task.CompletedTask),"updater: tolerate delayed Windows image handle release");
+                await releaseHandle;
+                check(File.ReadAllText(Path.Combine(delayed,"FeishuMessageOverlay.exe"))=="new application","updater: install after temporary rename lock clears");
+            }
             foreach(var failure in new[]{"unhealthy","launch-exception"})
             {
                 var old=Install(failure);restores=0;

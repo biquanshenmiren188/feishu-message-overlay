@@ -129,7 +129,7 @@ public static class DesktopUpdates
         try
         {
             CopyTree(install,stage);CopyTree(package,stage);
-            Directory.Move(install,backup);displaced=true;Directory.Move(stage,install);installed=true;
+            await MoveAfterExitAsync(install,backup);displaced=true;await MoveAfterExitAsync(stage,install);installed=true;
             if(!await startAndVerify(install))throw new IOException("Updated application did not become healthy");
             return true;
         }
