@@ -24,7 +24,7 @@ internal static class ProcessLifecycle
     {
         if(!enabled&&TestPath is null)return;
         if(kind is not ("start" or "exit_requested" or "exit" or "exception" or "session_query"))return;
-        if(reason is not ("background" or "visible" or "unclassified" or "tray_exit" or "session_ending" or "dispatcher" or "app_domain" or "unobserved_task"))return;
+        if(reason is not ("background" or "visible" or "unclassified" or "tray_exit" or "session_ending" or "automatic_update" or "dispatcher" or "app_domain" or "unobserved_task"))return;
         try
         {
             var frames=exception is null?Array.Empty<string>():new StackTrace(exception,false).GetFrames()

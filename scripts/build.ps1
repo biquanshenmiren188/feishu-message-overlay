@@ -1,12 +1,17 @@
-param([switch]$SelfContained,[string]$OutputDirectory="artifacts/app")
+param([switch]$SelfContained,[string]$OutputDirectory="artifacts/app",[string]$UpdateVersion='')
 $ErrorActionPreference = 'Stop'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 $root = Split-Path -Parent $PSScriptRoot
+if (!$UpdateVersion) {
+ $projectXml=[xml](Get-Content -LiteralPath (Join-Path $root 'src/Overlay.App/Overlay.App.csproj') -Raw)
+ $UpdateVersion=[string]($projectXml.Project.PropertyGroup.UpdateVersion | Where-Object { $_ } | Select-Object -First 1).'#text'
+}
+if ($UpdateVersion -notmatch '^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{1,6}$') { throw 'Expected release version vYYYY.MM.DD.N' }
 if (!(Test-Path -LiteralPath (Join-Path $root 'bridge/node_modules/@larksuiteoapi/node-sdk/package.json'))) { throw 'Run npm ci --prefix bridge --ignore-scripts first (official SDK dependency)' }
 dotnet run --project (Join-Path $root 'tests/Overlay.Core.Tests') -c Release -p:BuildInParallel=false -p:UseSharedCompilation=false
 if ($LASTEXITCODE -ne 0) { throw 'Core checks failed' }
-dotnet publish (Join-Path $root 'src/Overlay.App') -c Release -r win-x64 --self-contained $SelfContained.IsPresent -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=$($SelfContained.IsPresent.ToString().ToLowerInvariant()) -p:BuildInParallel=false -p:UseSharedCompilation=false -m:1 -o (Join-Path $root $OutputDirectory)
+dotnet publish (Join-Path $root 'src/Overlay.App') -c Release -r win-x64 --self-contained $SelfContained.IsPresent -p:PublishSingleFile=true -p:UpdateVersion=$UpdateVersion -p:EnableCompressionInSingleFile=$($SelfContained.IsPresent.ToString().ToLowerInvariant()) -p:BuildInParallel=false -p:UseSharedCompilation=false -m:1 -o (Join-Path $root $OutputDirectory)
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
 $bridgeTarget = Join-Path $root (Join-Path $OutputDirectory "bridge")
 New-Item -ItemType Directory -Path $bridgeTarget -Force | Out-Null
@@ -43,7 +48,9 @@ $diagnostic = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirecto
 if ($diagnostic.ExitCode -ne 0) { throw 'Diagnostic contracts failed' }
 $opportunity = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--opportunity-contract', ('"' + (Join-Path $root 'artifacts/verification/opportunity-contract.json') + '"')) -WindowStyle Hidden -PassThru -Wait
 if ($opportunity.ExitCode -ne 0) { throw 'Opportunity card contracts failed' }
+& (Join-Path $PSScriptRoot 'test-update-process.ps1') -AppDirectory (Join-Path $root $OutputDirectory)
 # No installation, signing, certificate trust, startup registration, or system permissions.
+& (Join-Path $PSScriptRoot 'write-update-manifest.ps1') -Directory (Join-Path $root $OutputDirectory) -Version $UpdateVersion
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $packagePath = Join-Path $root 'artifacts/FeishuMessageOverlay-win-x64.zip'
 [System.IO.File]::Delete($packagePath)
