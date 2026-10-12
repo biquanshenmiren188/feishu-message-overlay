@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -92,16 +92,34 @@ internal sealed class OpportunityBoard : DockPanel
     internal int RenderCount{get;private set;}
     internal int ActiveCount{get;private set;}
     internal int VisibleCount{get;private set;}
+    internal int MaximumColumns{get;set;}=1;
+    internal int ColumnCount{get;private set;}=1;
+    internal event Action<int>? ColumnsChanged;
+    internal void ReportColumns(int count)
+    {
+        if(count==ColumnCount)return;
+        ColumnCount=count;
+        Dispatcher.BeginInvoke(new Action(()=>ColumnsChanged?.Invoke(ColumnCount)));
+    }
+    internal void RefreshColumnLayout()=>FindColumns(cards)?.InvalidateMeasure();
+    private static OpportunityColumnsPanel? FindColumns(DependencyObject parent)
+    {
+        if(parent is OpportunityColumnsPanel panel)return panel;
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++)if(FindColumns(VisualTreeHelper.GetChild(parent,i)) is {} found)return found;
+        return null;
+    }
     internal OpportunityBoard()
     {
         heading.Visibility=Visibility.Collapsed;Margin=new Thickness(0);LastChildFill=true;SetDock(heading,Dock.Top);Children.Add(heading);
         ScrollViewer.SetHorizontalScrollBarVisibility(cards,ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(cards,ScrollBarVisibility.Hidden);
-        ScrollViewer.SetCanContentScroll(cards,true);VirtualizingPanel.SetIsVirtualizing(cards,true);VirtualizingPanel.SetVirtualizationMode(cards,VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(cards,false);VirtualizingPanel.SetIsVirtualizing(cards,false);
+        cards.ItemsPanel=new ItemsPanelTemplate(new FrameworkElementFactory(typeof(OpportunityColumnsPanel)));
+        SizeChanged+=(_,_)=>RefreshColumnLayout();
         var factory=new FrameworkElementFactory(typeof(OpportunityPresenter));cards.ItemTemplate=new DataTemplate{VisualTree=factory};
         cards.Padding=new Thickness(0);
         // The default ListBox template adds a one-pixel ScrollViewer margin.
-        var viewport=new FrameworkElementFactory(typeof(ScrollViewer));viewport.SetValue(ScrollViewer.CanContentScrollProperty,true);viewport.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty,ScrollBarVisibility.Hidden);viewport.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);viewport.SetValue(Control.PaddingProperty,new Thickness(0));viewport.SetValue(FrameworkElement.MarginProperty,new Thickness(0));viewport.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter)));cards.Template=new ControlTemplate(typeof(ListBox)){VisualTree=viewport};
+        var viewport=new FrameworkElementFactory(typeof(ScrollViewer));viewport.SetValue(ScrollViewer.CanContentScrollProperty,false);viewport.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty,ScrollBarVisibility.Hidden);viewport.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);viewport.SetValue(Control.PaddingProperty,new Thickness(0));viewport.SetValue(FrameworkElement.MarginProperty,new Thickness(0));viewport.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter)));cards.Template=new ControlTemplate(typeof(ListBox)){VisualTree=viewport};
         var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));style.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.FocusableProperty,false));style.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty,null));
         var presenter=new FrameworkElementFactory(typeof(ContentPresenter));
         style.Setters.Add(new Setter(Control.TemplateProperty,new ControlTemplate(typeof(ListBoxItem)){VisualTree=presenter}));cards.ItemContainerStyle=style;
@@ -163,7 +181,7 @@ internal sealed class OpportunityBoard : DockPanel
         {
             var leg=legs[i];var spot=OpportunityModel.True(leg,"spot");var panel=new Grid{Margin=new Thickness(i==0?0:5,0,i==0?5:0,0)};panel.ColumnDefinitions.Add(new());panel.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var main=new StackPanel();main.Children.Add(Label((i==0?"买 ":"卖 ")+Exchange(leg)+(spot?" 现货":" 永续"),11,true));
-            if(!spot){var rate=new StackPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),15,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hours=OpportunityModel.Number(leg,"hours");var cycle=hours==1?("#9A3900","#FFF0E1","#D06A15"):hours==8?("#155CAD","#E7F1FF","#4383C5"):hours is >0?("#7031A7","#F1E8FF","#9A62C8"):("#657B89","#00FFFFFF","#DCE3E8");rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:cycle.Item1),BorderBrush=Brush(cycle.Item3),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(cycle.Item2),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
+            if(!spot){var rate=new WrapPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),15,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hours=OpportunityModel.Number(leg,"hours");var cycle=hours==1?("#9A3900","#FFF0E1","#D06A15"):hours==8?("#155CAD","#E7F1FF","#4383C5"):hours is >0?("#7031A7","#F1E8FF","#9A62C8"):("#657B89","#00FFFFFF","#DCE3E8");rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:cycle.Item1),BorderBrush=Brush(cycle.Item3),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(cycle.Item2),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
             var stats=new StackPanel{Margin=new Thickness(2,1,0,0)};
             foreach(var metric in spot?new[]{("24H","volume")}:new[]{("24H","volume"),("OI","oi")}){var caption=Label(metric.Item1,8,color:"#747570");caption.TextAlignment=TextAlignment.Right;caption.Margin=new Thickness(0);stats.Children.Add(caption);var value=Label(OpportunityModel.Money(OpportunityModel.Number(leg,metric.Item2)),9);value.FontFamily=new FontFamily("Consolas");value.TextAlignment=TextAlignment.Right;value.Margin=new Thickness(0);stats.Children.Add(value);}Grid.SetColumn(stats,1);panel.Children.Add(stats);Grid.SetColumn(panel,i);legGrid.Children.Add(panel);
         }stack.Children.Add(legGrid);
@@ -174,7 +192,7 @@ internal sealed class OpportunityBoard : DockPanel
         if(legs.Length==2&&!OpportunityModel.True(legs[0],"spot")&&!OpportunityModel.True(legs[1],"spot")&&OpportunityModel.Number(legs[0],"hours") is >0 and var h0&&OpportunityModel.Number(legs[1],"hours") is >0 and var h1&&h0!=h1)warnings.Add($"周期 {h0}h/{h1}h");
         if(legs.Any(l=>OpportunityModel.Text(l,"exchange")=="bybit"&&!OpportunityModel.True(l,"spot")&&OpportunityModel.Number(l,"hours")==1))warnings.Add("Bybit 1h 计算不同");
         if(warnings.Count>0)stack.Children.Add(new Border{Child=Label("⚠ "+string.Join(" · ",warnings),10,true,"#BA2948"),Background=Brush("#FFF0F4"),Padding=new Thickness(5,1,5,1),Margin=new Thickness(0,0,0,4),BorderBrush=Brush("#E0294A"),BorderThickness=new Thickness(2,0,0,0)});
-        var transferHeading=new StackPanel{Orientation=Orientation.Horizontal};transferHeading.Children.Add(Label("现货充提",12,true,"#476371"));transferHeading.Children.Add(Label(" 充 / 提 · ✓开 ×关 ?未知 —无数据",8,color:"#647E8D"));stack.Children.Add(transferHeading);
+        var transferHeading=new WrapPanel{Orientation=Orientation.Horizontal};transferHeading.Children.Add(Label("现货充提",12,true,"#476371"));transferHeading.Children.Add(Label(" 充 / 提 · ✓开 ×关 ?未知 —无数据",8,color:"#647E8D"));stack.Children.Add(transferHeading);
         var transfers=Transfers(legs,OpportunityModel.Array(detail,"transferWallets",20),now);
         var rows=transfers.Select(t=>t.Split("   ",2)).ToArray();var chains=rows.SelectMany(r=>r.Length<2?[]:r[1].Split('；').Select(c=>c.Split("   ",2)).Where(c=>c.Length==2).Select(c=>c[0])).Distinct().ToArray();if(chains.Length==0)chains=["状态"];
         var table=new Grid{Margin=new Thickness(0,0,0,4)};table.ColumnDefinitions.Add(new(){Width=new GridLength(66)});foreach(var chain in chains)table.ColumnDefinitions.Add(new());for(var i=0;i<=rows.Length;i++)table.RowDefinitions.Add(new(){Height=GridLength.Auto});

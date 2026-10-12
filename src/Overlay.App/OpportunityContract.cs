@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -55,7 +55,7 @@ public partial class MainWindow
         for(var i=0;i<100&&(displayed.Count!=1||opportunityBoard.ActiveCount!=2);i++){await Task.Delay(20);await ReadAsync();}
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
-        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=290&&OpportunityArea.ActualWidth<=310&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
+        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=319&&OpportunityArea.ActualWidth<=321&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
         Check(OpportunityArea.TranslatePoint(new Point(),this).X<MessageArea.TranslatePoint(new Point(),this).X,"cards left and messages right");
         Check(initialFit&&!timer.IsEnabled,"original message auto-fit and event-driven reads preserved");
         HomeClick(this,new RoutedEventArgs());await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
@@ -70,6 +70,52 @@ public partial class MainWindow
         var longCard=opportunityBoard.Build(new OpportunityModel.Entry(JsonSerializer.SerializeToElement(Card("long","LONGASSETNAME123456"))),now);
         longCard.Measure(new Size(300,double.PositiveInfinity));longCard.Arrange(new Rect(0,0,300,longCard.DesiredSize.Height));longCard.UpdateLayout();
         var longImage=new RenderTargetBitmap(300,(int)Math.Ceiling(longCard.ActualHeight),96,96,PixelFormats.Pbgra32);longImage.Render(longCard);var longEncoder=new PngBitmapEncoder();longEncoder.Frames.Add(BitmapFrame.Create(longImage));using(var longFile=File.Create(output+"-long.png"))longEncoder.Save(longFile);
+        // Real WPF measurement: eight dense cards must wrap left without cutting their controls.
+        var columnsBoard=new OpportunityBoard{MaximumColumns=3};
+        var columnsWindow=new Window{Content=columnsBoard,Width=960,Height=1100,WindowStyle=WindowStyle.None,ShowInTaskbar=false,Left=-12000,Top=-12000};
+        columnsWindow.Show();
+        object DenseCard(int i)=>new{id="dense"+i,pair="dense"+i,asset=i==7?"LONGASSETNAME123456":"RSR",strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-20999),updatedAt=now,validUntil=now.AddMinutes(10),v2Residual=new{level=2,bps=135},details=new{netBps=103,marketBps=136,p75Bps=147,indexBps=1,legs=new[]{new{exchange=i%2==0?"hyperliquid":"bybit",spot=false,symbol="RSRUSDT",rate=-.0024,hours=1,volume=5330000,oi=1390000},new{exchange="binance",spot=false,symbol="RSRUSDT",rate=-.02,hours=8,volume=374090000,oi=14570000}},transferWallets=System.Array.Empty<object>()}};
+        columnsBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).ToArray(),now),true,now,true);
+        await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        Check(columnsBoard.ColumnCount==2,"eight dense cards fill two columns at 1100 DIP height");
+        var panels=new List<OpportunityPresenter>();
+        void Collect(DependencyObject root){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);if(child is OpportunityPresenter p)panels.Add(p);Collect(child);}}
+        Collect(columnsBoard);
+        Check(panels.Count==8,"all eight cards have actual WPF presenters");
+        var rects=panels.Select(p=>new Rect(p.TranslatePoint(new Point(),columnsBoard),new Size(p.ActualWidth,p.ActualHeight))).ToArray();
+        Check(rects.All(r=>r.Left>=0&&r.Right<=columnsBoard.ActualWidth+.1&&r.Bottom<=columnsBoard.ActualHeight+.1),"all eight cards fit without bottom or side clipping");
+        Check(rects[0].X>rects[^1].X,"extra cards appear in column to the left");
+        foreach(var p in panels)
+        {
+            foreach(var b in Buttons(p)){var xy=b.TranslatePoint(new Point(),p);Check(xy.X>=-.1&&xy.X+b.ActualWidth<=p.ActualWidth+.1&&xy.Y+b.ActualHeight<=p.ActualHeight+.1,"card action bounds fit");}
+        }
+        void Capture(FrameworkElement visual,string suffix,double scale=1)
+        {
+            var bmp=new RenderTargetBitmap((int)Math.Ceiling(visual.ActualWidth*scale),(int)Math.Ceiling(visual.ActualHeight*scale),96*scale,96*scale,PixelFormats.Pbgra32);bmp.Render(visual);
+            var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using var file=File.Create(output+suffix);png.Save(file);
+        }
+        Capture(columnsBoard,"-eight.png");Capture(columnsBoard,"-eight-150.png",1.5);
+        columnsWindow.Height=600;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        Check(columnsBoard.ColumnCount==3,"shorter window uses a third column within monitor budget");
+        Capture(columnsBoard,"-short.png");
+        columnsBoard.MaximumColumns=1;columnsWindow.Width=320;columnsBoard.RefreshColumnLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        var overflowScroll=OpportunityBoard.FindScroll(columnsBoard)!;
+        Check(columnsBoard.ColumnCount==1&&overflowScroll.ScrollableHeight>0,"narrow screen retains remaining cards through scrolling");
+        overflowScroll.ScrollToEnd();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        Check(overflowScroll.VerticalOffset>0,"last retained cards remain reachable");
+        columnsWindow.Close();
+        source=null;await cloud.DisposeAsync();initialFit=false;
+        Height=1100;Width=680;CardsColumn.Width=new GridLength(320);Left=-12000;
+        UpdateLayout();var textBefore=Width-CardsColumn.Width.Value;var rightBefore=Left+Width;
+        opportunityBoard.Model.Cards.Clear();
+        opportunityBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).ToArray(),now.AddSeconds(1)),true,now.AddSeconds(1),true);
+        for(var i=0;i<4;i++){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
+        Check(opportunityBoard.ColumnCount==2&&Math.Abs(CardsColumn.Width.Value-640)<.1,$"live window widens for second card column: columns={opportunityBoard.ColumnCount}, width={CardsColumn.Width.Value}, actualHeight={OpportunityArea.ActualHeight}, count={opportunityBoard.VisibleCount}");
+        Check(Math.Abs((Width-CardsColumn.Width.Value)-textBefore)<.1,"message pane width unchanged during column expansion");
+        Check(Width<=CurrentWorkArea().Width&&Left>=CurrentWorkArea().Left,"expanded window stays within working area");
+        Capture(this,"-combined-150.png",1.5);
+        var savedMessageWidth=Width-CardsColumn.Width.Value;
+        Check(Math.Abs(new Preferences{Width=Width,MessagePaneWidth=savedMessageWidth}.CloudTextWidth(Width,320)-savedMessageWidth)<.1,"restart reads separate message width without accumulating card columns");
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));
     }
 }

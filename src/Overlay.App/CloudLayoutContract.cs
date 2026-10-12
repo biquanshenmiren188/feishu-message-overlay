@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using System.Windows;
 namespace Overlay.App;
@@ -19,11 +19,11 @@ public partial class MainWindow
                 try
                 {
                     window.EnableOpportunityBoard();
-                    var expected=restart==2?720:660;
+                    var expected=restart==2?740:680;
                     if(Math.Abs(window.Width-expected)>.01 || window.FontScale.Value!=13 || window.OpacityScale.Value!=95)throw new InvalidOperationException("Cloud restart changed saved layout");
                     window.EnableOpportunityBoard();if(Math.Abs(window.Width-expected)>.01)throw new InvalidOperationException("Repeated connection widened layout");
                     passes.Add(new{restart,totalWidth=window.Width,textWidth=window.Width-window.CardsColumn.Width.Value});
-                    if(restart==1)window.Width=720; // A real user resize must round-trip too.
+                    if(restart==1)window.Width=740; // A real user resize must round-trip too.
                     if(!window.FlushForSessionEnding())throw new IOException("Layout flush failed");
                     if(Preferences.Load().MessagePaneWidth!=(restart>=1?420:360))throw new InvalidOperationException("Text pane width not saved independently");
                 }
