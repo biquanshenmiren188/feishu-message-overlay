@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -9,7 +9,7 @@ namespace Overlay.App;
 internal record OpportunityItem(OpportunityBoard Board,OpportunityModel.Entry Entry,DateTimeOffset Now);
 public sealed class OpportunityPresenter : ContentControl
 {
-    public OpportunityPresenter(){HorizontalContentAlignment=HorizontalAlignment.Stretch;DataContextChanged+=(_,_)=>Content=DataContext is OpportunityItem item?item.Board.Build(item.Entry,item.Now):new TextBlock{Text=DataContext as string??"",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(5)};}
+    public OpportunityPresenter(){LayoutTransform=new ScaleTransform(OpportunityColumnsPanel.CardScale,OpportunityColumnsPanel.CardScale);HorizontalContentAlignment=HorizontalAlignment.Stretch;DataContextChanged+=(_,_)=>Content=DataContext is OpportunityItem item?item.Board.Build(item.Entry,item.Now):new TextBlock{Text=DataContext as string??"",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(5)};}
 }
 
 // The existing signed cloud response carries this credential-free cache. No new upstream poller.

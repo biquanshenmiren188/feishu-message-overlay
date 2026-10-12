@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -55,7 +55,7 @@ public partial class MainWindow
         for(var i=0;i<100&&(displayed.Count!=1||opportunityBoard.ActiveCount!=2);i++){await Task.Delay(20);await ReadAsync();}
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
-        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=319&&OpportunityArea.ActualWidth<=321&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
+        Check(MessageArea.ActualWidth>300&&OpportunityArea.ActualWidth>=255&&OpportunityArea.ActualWidth<=257&&OpportunityArea.Visibility==Visibility.Visible,"simultaneous panes fit");
         Check(OpportunityArea.TranslatePoint(new Point(),this).X<MessageArea.TranslatePoint(new Point(),this).X,"cards left and messages right");
         Check(initialFit&&!timer.IsEnabled,"original message auto-fit and event-driven reads preserved");
         HomeClick(this,new RoutedEventArgs());await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
@@ -82,9 +82,12 @@ public partial class MainWindow
         void Collect(DependencyObject root){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);if(child is OpportunityPresenter p)panels.Add(p);Collect(child);}}
         Collect(columnsBoard);
         Check(panels.Count==8,"all eight cards have actual WPF presenters");
-        var rects=panels.Select(p=>new Rect(p.TranslatePoint(new Point(),columnsBoard),new Size(p.ActualWidth,p.ActualHeight))).ToArray();
+        var rects=panels.Select(p=>p.TransformToAncestor(columnsBoard).TransformBounds(new Rect(0,0,p.ActualWidth,p.ActualHeight))).ToArray();
         Check(rects.All(r=>r.Left>=0&&r.Right<=columnsBoard.ActualWidth+.1&&r.Bottom<=columnsBoard.ActualHeight+.1),"all eight cards fit without bottom or side clipping");
         Check(rects[0].X>rects[^1].X,"extra cards appear in column to the left");
+        Check(rects.All(r=>Math.Abs(r.Width-256)<.1),"card width is exactly eighty percent of 320 DIP");
+        Check(rects.Count(r=>Math.Abs(r.X-rects[0].X)<.1)==5,"five dense cards fit per column instead of four at 1100 DIP");
+        Check(panels.All(p=>Math.Abs(p.TransformToAncestor(columnsBoard).TransformBounds(new Rect(0,0,p.ActualWidth,p.ActualHeight)).Height-p.ActualHeight*.8)<.1),"card height and contents uniformly scale to eighty percent");
         foreach(var p in panels)
         {
             foreach(var b in Buttons(p)){var xy=b.TranslatePoint(new Point(),p);Check(xy.X>=-.1&&xy.X+b.ActualWidth<=p.ActualWidth+.1&&xy.Y+b.ActualHeight<=p.ActualHeight+.1,"card action bounds fit");}
@@ -98,19 +101,19 @@ public partial class MainWindow
         columnsWindow.Height=600;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         Check(columnsBoard.ColumnCount==3,"shorter window uses a third column within monitor budget");
         Capture(columnsBoard,"-short.png");
-        columnsBoard.MaximumColumns=1;columnsWindow.Width=320;columnsBoard.RefreshColumnLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        columnsBoard.MaximumColumns=1;columnsWindow.Width=256;columnsBoard.RefreshColumnLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         var overflowScroll=OpportunityBoard.FindScroll(columnsBoard)!;
         Check(columnsBoard.ColumnCount==1&&overflowScroll.ScrollableHeight>0,"narrow screen retains remaining cards through scrolling");
         overflowScroll.ScrollToEnd();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         Check(overflowScroll.VerticalOffset>0,"last retained cards remain reachable");
         columnsWindow.Close();
         source=null;await cloud.DisposeAsync();initialFit=false;
-        Height=1100;Width=680;CardsColumn.Width=new GridLength(320);Left=-12000;
+        Height=1100;Width=616;CardsColumn.Width=new GridLength(256);Left=-12000;
         UpdateLayout();var textBefore=Width-CardsColumn.Width.Value;var rightBefore=Left+Width;
         opportunityBoard.Model.Cards.Clear();
         opportunityBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).ToArray(),now.AddSeconds(1)),true,now.AddSeconds(1),true);
         for(var i=0;i<4;i++){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
-        Check(opportunityBoard.ColumnCount==2&&Math.Abs(CardsColumn.Width.Value-640)<.1,$"live window widens for second card column: columns={opportunityBoard.ColumnCount}, width={CardsColumn.Width.Value}, actualHeight={OpportunityArea.ActualHeight}, count={opportunityBoard.VisibleCount}");
+        Check(opportunityBoard.ColumnCount==2&&Math.Abs(CardsColumn.Width.Value-512)<.1,$"live window widens for second card column: columns={opportunityBoard.ColumnCount}, width={CardsColumn.Width.Value}, actualHeight={OpportunityArea.ActualHeight}, count={opportunityBoard.VisibleCount}");
         Check(Math.Abs((Width-CardsColumn.Width.Value)-textBefore)<.1,"message pane width unchanged during column expansion");
         Check(Width<=CurrentWorkArea().Width&&Left>=CurrentWorkArea().Left,"expanded window stays within working area");
         Capture(this,"-combined-150.png",1.5);

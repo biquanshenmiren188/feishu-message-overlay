@@ -8,7 +8,8 @@ namespace Overlay.App;
 // Beyond the monitor's width budget, retain every item in the scrollable last column.
 public sealed class OpportunityColumnsPanel : Panel
 {
-    internal const double CardWidth=320;
+    internal const double CardScale=.8;
+    internal const double CardWidth=320*CardScale;
     private readonly List<Rect> positions=[];
     private int columns=1;
     protected override Size MeasureOverride(Size available)
