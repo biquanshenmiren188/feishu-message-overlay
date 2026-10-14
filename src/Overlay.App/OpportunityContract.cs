@@ -70,6 +70,28 @@ public partial class MainWindow
         Height=680;Width=660;UpdateLayout();
         IEnumerable<System.Windows.Controls.Button> Buttons(DependencyObject parent){for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);if(child is System.Windows.Controls.Button b)yield return b;foreach(var nested in Buttons(child))yield return nested;}}
         var actions=Buttons(OpportunityArea).Where(b=>b.Content is string text&&text is "复制" or "复制 GC" or "雷达 ↗").ToArray();
+        var chineseCard=JsonSerializer.SerializeToElement(new{asset="龙虾",strategy="SF",details=new{legs=new[]{new{exchange="gate",symbol="龙虾_USDT",spot=true},new{exchange="binance",symbol="龙虾USDT",spot=false}}}});
+        var chineseView=opportunityBoard.Build(new OpportunityModel.Entry(chineseCard),now);
+        var chineseCopy=Buttons(chineseView).Single(b=>Equals(b.Content,"复制"));
+        var savedClipboard=Clipboard.GetDataObject();
+        try
+        {
+            chineseCopy.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            var clipboard=Clipboard.GetText();
+            Check(clipboard=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"SF\",\n  \"name\": \"龙虾\",\n  \"buyEx\": \"gate\",\n  \"sellEx\": \"binance\"\n}","real WPF copy click writes Chinese SF strategy to system clipboard, not card text");
+            Check(Equals(chineseCopy.Content,"已复制"),"Chinese copy action confirms success");
+            await File.WriteAllTextAsync(output+"-chinese-clipboard.txt",clipboard);
+        }
+        finally
+        {
+            if(savedClipboard is not null)for(var attempt=0;;attempt++)
+            {
+                try{Clipboard.SetDataObject(savedClipboard,true);break;}
+                catch(System.Runtime.InteropServices.COMException) when(attempt<9){await Task.Delay(100);}
+            }
+        }
+        foreach(var invalidSymbol in new[]{"1000龙虾USDT","龍蝦USDT","龙虾USD","龙虾 USDT","龙虾\nUSDT","龙虾<script>USDT"})
+            Check(OpportunityModel.CopyStrategy(CopyFixture("gate","龙虾_USDT","binance",invalidSymbol)) is null,"Chinese copy rejects different or malformed symbol: "+invalidSymbol);
         Check(actions.Length==6&&actions.All(b=>Math.Abs(b.ActualHeight-20)<.1),"all footer buttons share exact twenty DIP height");
         Check(actions.Chunk(3).All(row=>row.Max(b=>b.TranslatePoint(new Point(),this).Y)-row.Min(b=>b.TranslatePoint(new Point(),this).Y)<.1),"copy GC and radar buttons have aligned top and bottom edges");
         Check(Background is SolidColorBrush background&&background.Color.A==0&&OpportunityArea.Background is null,"card pane has no large backdrop");

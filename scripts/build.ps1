@@ -46,8 +46,10 @@ if ($process.ExitCode -ne 0) {
 if(!(Test-Path -LiteralPath $smokeReport) -or !(Get-Content -LiteralPath $smokeReport -Raw).StartsWith('PASS ')){throw 'WPF smoke did not produce its passing report'}
 $diagnostic = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--diagnostic-contract-tests', ('"' + (Join-Path $root 'artifacts/verification/diagnostic-contract.txt') + '"')) -WindowStyle Hidden -PassThru -Wait
 if ($diagnostic.ExitCode -ne 0) { throw 'Diagnostic contracts failed' }
-$opportunity = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--opportunity-contract', ('"' + (Join-Path $root 'artifacts/verification/opportunity-contract.json') + '"')) -WindowStyle Hidden -PassThru -Wait
-if ($opportunity.ExitCode -ne 0) { throw 'Opportunity card contracts failed' }
+$opportunityReport=Join-Path $root 'artifacts/verification/opportunity-contract.json'
+if(Test-Path -LiteralPath $opportunityReport){Remove-Item -LiteralPath $opportunityReport}
+$opportunity = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--opportunity-contract', ('"' + $opportunityReport + '"')) -WindowStyle Hidden -PassThru -Wait
+if ($opportunity.ExitCode -ne 0 -or !(Test-Path -LiteralPath $opportunityReport) -or !(Get-Content -LiteralPath $opportunityReport -Raw | ConvertFrom-Json).passed) { throw 'Opportunity card contracts failed' }
 foreach($contract in @('cloud-source','cloud-window')){
  $report=Join-Path $root "artifacts/verification/$contract-contract.json"
  if(Test-Path -LiteralPath $report){Remove-Item -LiteralPath $report}

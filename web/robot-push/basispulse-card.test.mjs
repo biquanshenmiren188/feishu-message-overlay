@@ -14,6 +14,15 @@ test('GC rejects unsupported exchanges, modes, malformed legs and mismatched con
  const d=gcFixture();d.details.legs[0].spot=true;assert.equal(gcStrategyCopy(d),null);
 });
 const now=1791162796000;
+test('Chinese assets copy as Astro strategies with exact names and directions',()=>{
+ for(const type of ['SF','FS','FF']){
+  const d={strategy:type,details:{legs:[{exchange:'gate',symbol:'龙虾_USDT',spot:type==='SF'},{exchange:'binance',symbol:'龙虾USDT',spot:type==='FS'}]}};
+  assert.deepEqual(JSON.parse(strategyCopy(d).slice('ASTRO-QUICK-COPY:\n'.length)),{type,name:'龙虾',buyEx:'gate',sellEx:'binance',...(type==='FS'?{spotMarginType:'cross'}:{})});
+  for(const symbol of ['1000龙虾USDT','龍蝦USDT','龙虾USD','龙虾 USDT','龙虾\nUSDT','龙虾<script>USDT'])assert.equal(strategyCopy({...d,details:{legs:[d.details.legs[0],{...d.details.legs[1],symbol}]}}),null);
+ }
+ const d={strategy:'FF',details:{legs:[{exchange:'okx',symbol:'龙虾-USDT-SWAP',spot:false},{exchange:'hyperliquid',symbol:'龙虾',spot:false}]}};
+ assert.equal(JSON.parse(strategyCopy(d).slice('ASTRO-QUICK-COPY:\n'.length)).name,'龙虾');
+});
 test('period warning excludes spot, missing and equal periods',()=>{
  assert.equal(periodWarning([{spot:false,hours:4},{spot:false,hours:1}]),'周期 4h/1h');
  for(const legs of [[{spot:false,hours:4},{spot:false,hours:4}],[{spot:true,hours:4},{spot:false,hours:1}],[{spot:false,hours:null},{spot:false,hours:1}]])assert.equal(periodWarning(legs),null);
