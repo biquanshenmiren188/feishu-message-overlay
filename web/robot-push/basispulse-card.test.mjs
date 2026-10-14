@@ -10,7 +10,7 @@ test('GC matches supplied clipboard exactly and leaves normal Astro copy unchang
  assert.equal(JSON.parse(gcStrategyCopy(gcFixture('gate','bybit','GRIFFAINUSDT')).split('\n').slice(1).join('\n')).sellEx,'gc-bybit');
 });
 test('GC rejects unsupported exchanges, modes, malformed legs and mismatched contracts',()=>{
- for(const d of [gcFixture('bitget'),gcFixture('okx'),gcFixture('aster'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
+ for(const d of [gcFixture('bitget'),gcFixture('aster'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
  const d=gcFixture();d.details.legs[0].spot=true;assert.equal(gcStrategyCopy(d),null);
 });
 const now=1791162796000;
@@ -95,4 +95,19 @@ test('Hyperliquid card strategies use Astro hl identifier and reject unsupported
   assert.equal(parsed[side===0?'buyEx':'sellEx'],'hl');assert.equal(parsed.name,'HYPE');
  }
  assert.equal(strategyCopy({strategy:'FS',details:{legs:[{exchange:'binance',symbol:'HYPEUSDT',spot:false},{exchange:'hyperliquid',symbol:'HYPEUSDT',spot:true}]}}),null);
+});
+
+test('WAL OKX/Binance and BLUR HL/OKX keep exact GC directions and normalize OKX swaps',()=>{
+ for(const [name,buy,buySymbol,sell,sellSymbol] of [['WAL','okx','WAL-USDT-SWAP','binance','WALUSDT'],['BLUR','hyperliquid','BLUR','okx','BLUR-USDT-SWAP']]){
+  const d={strategy:'FF',status:'expired',details:{legs:[{exchange:buy,symbol:buySymbol,spot:false},{exchange:sell,symbol:sellSymbol,spot:false}]}};
+  const payload=JSON.parse(gcStrategyCopy(d).split('\n').slice(1).join('\n'));
+  assert.deepEqual(payload,{type:'FF',name,buyEx:'gc-'+(buy==='hyperliquid'?'hl':buy),sellEx:'gc-'+sell});
+  assert.equal(JSON.parse(strategyCopy(d).split('\n').slice(1).join('\n')).buyEx,buy==='hyperliquid'?'hl':buy);
+ }
+});
+test('OKX participates on either GC leg with every supported venue; malformed and different units remain rejected',()=>{
+ for(const ex of ['binance','bybit','gate','hyperliquid','okx'])for(const reverse of [false,true]){
+  const legs=[{exchange:'okx',symbol:'WAL-USDT-SWAP',spot:false},{exchange:ex,symbol:ex==='hyperliquid'?'WAL':'WALUSDT',spot:false}];if(reverse)legs.reverse();assert.ok(gcStrategyCopy({strategy:'FF',details:{legs}}));
+ }
+ for(const symbol of ['OTHERUSDT','1000WALUSDT','WAL-USD-SWAP','WAL-USDT-FUTURES'])assert.equal(gcStrategyCopy({strategy:'FF',details:{legs:[{exchange:'okx',symbol:'WAL-USDT-SWAP',spot:false},{exchange:'binance',symbol,spot:false}]}}),null);
 });

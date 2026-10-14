@@ -30,7 +30,14 @@ public partial class MainWindow
         Check(OpportunityModel.CopyStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"contract multiplier not silently removed");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","GRIFFAIN"))=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"FF\",\n  \"name\": \"GRIFFAIN\",\n  \"buyEx\": \"gc-binance\",\n  \"sellEx\": \"gc-hl\"\n}","GC matches user supplied clipboard exactly");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("gate","MAGIC_USDT","bybit","MAGICUSDT"))?.Contains("\"sellEx\": \"gc-bybit\"",StringComparison.Ordinal)==true,"Gate Bybit GC pair");
-        Check(new[]{"bitget","okx","aster","unknown"}.All(ex=>OpportunityModel.CopyGcStrategy(CopyFixture(ex,"GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null),"unsupported and unverified GC exchanges rejected");
+        Check(new[]{"bitget","aster","unknown"}.All(ex=>OpportunityModel.CopyGcStrategy(CopyFixture(ex,"GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null),"unsupported and unverified GC exchanges rejected");
+        foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT","gc-okx","gc-binance"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP","gc-hl","gc-okx")})
+        {
+            var text=OpportunityModel.CopyGcStrategy(CopyFixture(fixture.Item2,fixture.Item3,fixture.Item4,fixture.Item5));
+            Check(text is not null,fixture.Item1+" supports GC");
+            var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(text![(text!.IndexOf('\n')+1)..])!;
+            Check(payload["type"]=="FF"&&payload["name"]==fixture.Item1&&payload["buyEx"]==fixture.Item6&&payload["sellEx"]==fixture.Item7,fixture.Item1+" GC direction and normalized name");
+        }
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"GC mismatched contract rejected");
         Check(OpportunityModel.Radar(JsonSerializer.SerializeToElement(new{radarUrl="https://evil.example/radar/"})) is null,"foreign radar rejected");
         Check(OpportunityModel.Percent(.0001,.01)=="+0.01%"&&OpportunityModel.Percent(19)=="+0.19%","correct funding and basis units");
@@ -94,6 +101,14 @@ public partial class MainWindow
             var bmp=new RenderTargetBitmap((int)Math.Ceiling(visual.ActualWidth*scale),(int)Math.Ceiling(visual.ActualHeight*scale),96*scale,96*scale,PixelFormats.Pbgra32);bmp.Render(visual);
             var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using var file=File.Create(output+suffix);png.Save(file);
         }
+        var gcExamples=new System.Windows.Controls.StackPanel{Width=320,Background=Brushes.White};
+        foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP")})
+        {
+            var card=JsonSerializer.SerializeToElement(new{asset=fixture.Item1,strategy="FF",enteredAt=now.AddMinutes(-1),validUntil=now.AddSeconds(-1),v2Residual=new{level=0,bps=47},details=new{legs=new[]{new{exchange=fixture.Item2,symbol=fixture.Item3,spot=false,hours=4,rate=-.0065},new{exchange=fixture.Item4,symbol=fixture.Item5,spot=false,hours=4,rate=-.0058}}}});
+            var view=opportunityBoard.Build(new OpportunityModel.Entry(card),now);gcExamples.Children.Add(view);
+            Check(Buttons(view).Any(b=>Equals(b.Content,"复制 GC")),fixture.Item1+" retained card renders GC button");
+        }
+        gcExamples.Measure(new Size(320,double.PositiveInfinity));gcExamples.Arrange(new Rect(0,0,320,gcExamples.DesiredSize.Height));gcExamples.UpdateLayout();Capture(gcExamples,"-okx-gc.png",1.5);
         Capture(columnsBoard,"-eight.png");Capture(columnsBoard,"-eight-150.png",1.5);
         columnsWindow.Height=600;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         Check(columnsBoard.ColumnCount==3,"shorter window uses a third column within monitor budget");

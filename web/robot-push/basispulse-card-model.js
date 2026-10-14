@@ -32,7 +32,7 @@ export function strategyCopy(data) {
 // Unverified exchanges and spot modes deliberately have no GC action.
 export function gcStrategyCopy(data) {
   const legs=data.details?.legs;
-  const supported=new Set(['binance','bybit','gate','hyperliquid']);
+  const supported=new Set(['binance','bybit','gate','okx','hyperliquid']);
   if(data.strategy!=='FF' || legs?.length!==2 || legs.some(l=>l.spot!==false || !supported.has(l.exchange)))return null;
   const normal=strategyCopy(data);if(!normal)return null;
   const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));

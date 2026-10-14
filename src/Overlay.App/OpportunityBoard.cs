@@ -56,7 +56,7 @@ internal sealed class OpportunityModel
     internal static string? CopyGcStrategy(JsonElement data)
     {
         var legs=Array(Get(data,"details"),"legs",3);
-        var supported=new[]{"binance","bybit","gate","hyperliquid"};
+        var supported=new[]{"binance","bybit","gate","okx","hyperliquid"};
         if(Text(data,"strategy")!="FF"||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind!=JsonValueKind.False||!supported.Contains(Text(l,"exchange"))))return null;
         var normal=CopyStrategy(data);if(normal is null)return null;
         var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
