@@ -49,7 +49,10 @@ if ($diagnostic.ExitCode -ne 0) { throw 'Diagnostic contracts failed' }
 $opportunityReport=Join-Path $root 'artifacts/verification/opportunity-contract.json'
 if(Test-Path -LiteralPath $opportunityReport){Remove-Item -LiteralPath $opportunityReport}
 $opportunity = Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory "FeishuMessageOverlay.exe")) -ArgumentList @('--opportunity-contract', ('"' + $opportunityReport + '"')) -WindowStyle Hidden -PassThru -Wait
-if ($opportunity.ExitCode -ne 0 -or !(Test-Path -LiteralPath $opportunityReport) -or !(Get-Content -LiteralPath $opportunityReport -Raw | ConvertFrom-Json).passed) { throw 'Opportunity card contracts failed' }
+if ($opportunity.ExitCode -ne 0 -or !(Test-Path -LiteralPath $opportunityReport) -or !(Get-Content -LiteralPath $opportunityReport -Raw | ConvertFrom-Json).passed) {
+ if(Test-Path -LiteralPath $opportunityReport){Get-Content -LiteralPath $opportunityReport -Raw | Write-Output}
+ throw 'Opportunity card contracts failed'
+}
 foreach($contract in @('cloud-source','cloud-window')){
  $report=Join-Path $root "artifacts/verification/$contract-contract.json"
  if(Test-Path -LiteralPath $report){Remove-Item -LiteralPath $report}
