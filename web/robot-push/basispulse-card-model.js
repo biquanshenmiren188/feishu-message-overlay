@@ -19,12 +19,12 @@ export function strategyCopy(data) {
   if(Boolean(buy.spot)!==(data.strategy==='SF') || Boolean(sell.spot)!==(data.strategy==='FS'))return null;
   const symbol=leg=>{
     const raw=String(leg.symbol || '').toUpperCase();
-    const pair=leg.exchange==='okx' && leg.spot===false && /^[A-Z0-9]+-USDT-SWAP$/.test(raw)?raw.slice(0,-5):raw;
+    const pair=leg.exchange==='okx' && leg.spot===false && /^[\p{L}\p{Nd}]+-USDT-SWAP$/u.test(raw)?raw.slice(0,-5):raw;
     const normalized=pair.replace(/[_/\-]/g,'');
-    return leg.exchange==='hyperliquid' && leg.spot===false && /^[A-Z0-9]+$/.test(normalized) && !normalized.endsWith('USDT')?normalized+'USDT':normalized;
+    return leg.exchange==='hyperliquid' && leg.spot===false && /^[\p{L}\p{Nd}]+$/u.test(normalized) && !normalized.endsWith('USDT')?normalized+'USDT':normalized;
   };
   const a=symbol(buy), b=symbol(sell);
-  if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
+  if(a!==b || !/^[\p{L}\p{Nd}]+USDT$/u.test(a))return null;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange==='hyperliquid'?'hl':buy.exchange,sellEx:sell.exchange==='hyperliquid'?'hl':sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
 

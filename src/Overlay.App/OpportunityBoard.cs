@@ -61,7 +61,7 @@ internal sealed class OpportunityModel
         var normal=CopyStrategy(data);if(normal is null)return null;
         var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
         payload["buyEx"]="gc-"+payload["buyEx"];payload["sellEx"]="gc-"+payload["sellEx"];
-        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
     }
     internal static string? CopyStrategy(JsonElement data)
     {
@@ -71,11 +71,11 @@ internal sealed class OpportunityModel
         var buy=Text(legs[0],"exchange");var sell=Text(legs[1],"exchange");
         if(!allowed.Contains(buy)||!allowed.Contains(sell)||strategy=="FS"&&sell is "aster" or "hyperliquid")return null;
         if(True(legs[0],"spot")!=(strategy=="SF")||True(legs[1],"spot")!=(strategy=="FS"))return null;
-        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+-USDT-SWAP$"))s=s[..^5];s=Regex.Replace(s,"[_/\\-]","");if(Text(leg,"exchange")=="hyperliquid"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+$")&&!s.EndsWith("USDT",StringComparison.Ordinal))s+="USDT";return s;}
-        var a=Symbol(legs[0]);if(a!=Symbol(legs[1])||!Regex.IsMatch(a,"^[A-Z0-9]+USDT$"))return null;
+        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[\\p{L}\\p{Nd}]+-USDT-SWAP$"))s=s[..^5];s=Regex.Replace(s,"[_/\\-]","");if(Text(leg,"exchange")=="hyperliquid"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[\\p{L}\\p{Nd}]+$")&&!s.EndsWith("USDT",StringComparison.Ordinal))s+="USDT";return s;}
+        var a=Symbol(legs[0]);if(a!=Symbol(legs[1])||!Regex.IsMatch(a,"^[\\p{L}\\p{Nd}]+USDT$"))return null;
         var payload=new Dictionary<string,string>{{"type",strategy},{"name",a[..^4]},{"buyEx",buy=="hyperliquid"?"hl":buy},{"sellEx",sell=="hyperliquid"?"hl":sell}};
         if(strategy=="FS")payload["spotMarginType"]="cross";
-        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
     }
 }
 

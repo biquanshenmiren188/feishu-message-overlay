@@ -70,6 +70,36 @@ public partial class MainWindow
         Height=680;Width=660;UpdateLayout();
         IEnumerable<System.Windows.Controls.Button> Buttons(DependencyObject parent){for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);if(child is System.Windows.Controls.Button b)yield return b;foreach(var nested in Buttons(child))yield return nested;}}
         var actions=Buttons(OpportunityArea).Where(b=>b.Content is string text&&text is "复制" or "复制 GC" or "雷达 ↗").ToArray();
+        var chineseCard=JsonSerializer.SerializeToElement(new{asset="龙虾",strategy="SF",details=new{legs=new[]{new{exchange="gate",symbol="龙虾_USDT",spot=true},new{exchange="binance",symbol="龙虾USDT",spot=false}}}});
+        var chineseView=opportunityBoard.Build(new OpportunityModel.Entry(chineseCard),now);
+        var chineseCopy=Buttons(chineseView).Single(b=>Equals(b.Content,"复制"));
+        async Task<T> ReadClipboard<T>(Func<T> read)
+        {
+            for(var attempt=0;;attempt++)
+            {
+                try{return read();}
+                catch(System.Runtime.InteropServices.COMException) when(attempt<9){await Task.Delay(100);}
+            }
+        }
+        var savedClipboard=await ReadClipboard(Clipboard.GetDataObject);
+        try
+        {
+            chineseCopy.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            var clipboard=await ReadClipboard(()=>Clipboard.GetText());
+            Check(clipboard=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"SF\",\n  \"name\": \"龙虾\",\n  \"buyEx\": \"gate\",\n  \"sellEx\": \"binance\"\n}","real WPF copy click writes Chinese SF strategy to system clipboard, not card text");
+            Check(Equals(chineseCopy.Content,"已复制"),"Chinese copy action confirms success");
+            await File.WriteAllTextAsync(output+"-chinese-clipboard.txt",clipboard);
+        }
+        finally
+        {
+            if(savedClipboard is not null)for(var attempt=0;;attempt++)
+            {
+                try{Clipboard.SetDataObject(savedClipboard,true);break;}
+                catch(System.Runtime.InteropServices.COMException) when(attempt<9){await Task.Delay(100);}
+            }
+        }
+        foreach(var invalidSymbol in new[]{"1000龙虾USDT","龍蝦USDT","龙虾USD","龙虾 USDT","龙虾\nUSDT","龙虾<script>USDT"})
+            Check(OpportunityModel.CopyStrategy(CopyFixture("gate","龙虾_USDT","binance",invalidSymbol)) is null,"Chinese copy rejects different or malformed symbol: "+invalidSymbol);
         Check(actions.Length==6&&actions.All(b=>Math.Abs(b.ActualHeight-20)<.1),"all footer buttons share exact twenty DIP height");
         Check(actions.Chunk(3).All(row=>row.Max(b=>b.TranslatePoint(new Point(),this).Y)-row.Min(b=>b.TranslatePoint(new Point(),this).Y)<.1),"copy GC and radar buttons have aligned top and bottom edges");
         Check(Background is SolidColorBrush background&&background.Color.A==0&&OpportunityArea.Background is null,"card pane has no large backdrop");
@@ -78,13 +108,15 @@ public partial class MainWindow
         longCard.Measure(new Size(300,double.PositiveInfinity));longCard.Arrange(new Rect(0,0,300,longCard.DesiredSize.Height));longCard.UpdateLayout();
         var longImage=new RenderTargetBitmap(300,(int)Math.Ceiling(longCard.ActualHeight),96,96,PixelFormats.Pbgra32);longImage.Render(longCard);var longEncoder=new PngBitmapEncoder();longEncoder.Frames.Add(BitmapFrame.Create(longImage));using(var longFile=File.Create(output+"-long.png"))longEncoder.Save(longFile);
         // Real WPF measurement: eight dense cards must wrap left without cutting their controls.
-        var columnsBoard=new OpportunityBoard{MaximumColumns=3};
-        var columnsWindow=new Window{Content=columnsBoard,Width=960,Height=1100,WindowStyle=WindowStyle.None,ShowInTaskbar=false,Left=-12000,Top=-12000};
+        // Host a fixed logical viewport independently of the CI monitor's native height cap.
+        var columnsBoard=new OpportunityBoard{MaximumColumns=3,Width=960,Height=1100};
+        var columnsHost=new System.Windows.Controls.Canvas();columnsHost.Children.Add(columnsBoard);
+        var columnsWindow=new Window{Content=columnsHost,Width=960,Height=600,WindowStyle=WindowStyle.None,ShowInTaskbar=false,Left=-12000,Top=-12000};
         columnsWindow.Show();
         object DenseCard(int i)=>new{id="dense"+i,pair="dense"+i,asset=i==7?"LONGASSETNAME123456":"RSR",strategy="FF",trigger="v2_price_window",enteredAt=now.AddSeconds(-20999),updatedAt=now,validUntil=now.AddMinutes(10),v2Residual=new{level=2,bps=135},details=new{netBps=103,marketBps=136,p75Bps=147,indexBps=1,legs=new[]{new{exchange=i%2==0?"hyperliquid":"bybit",spot=false,symbol="RSRUSDT",rate=-.0024,hours=1,volume=5330000,oi=1390000},new{exchange="binance",spot=false,symbol="RSRUSDT",rate=-.02,hours=8,volume=374090000,oi=14570000}},transferWallets=System.Array.Empty<object>()}};
         columnsBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).ToArray(),now),true,now,true);
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
-        Check(columnsBoard.ColumnCount==2,"eight dense cards fill two columns at 1100 DIP height");
+        Check(Math.Abs(columnsBoard.ActualHeight-1100)<.1&&columnsBoard.ColumnCount==2,$"eight dense cards fill two columns at 1100 DIP height: actual={columnsBoard.ActualHeight}, columns={columnsBoard.ColumnCount}");
         var panels=new List<OpportunityPresenter>();
         void Collect(DependencyObject root){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);if(child is OpportunityPresenter p)panels.Add(p);Collect(child);}}
         Collect(columnsBoard);
@@ -110,10 +142,10 @@ public partial class MainWindow
         }
         gcExamples.Measure(new Size(320,double.PositiveInfinity));gcExamples.Arrange(new Rect(0,0,320,gcExamples.DesiredSize.Height));gcExamples.UpdateLayout();Capture(gcExamples,"-okx-gc.png",1.5);
         Capture(columnsBoard,"-eight.png");Capture(columnsBoard,"-eight-150.png",1.5);
-        columnsWindow.Height=600;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        columnsBoard.Height=600;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         Check(columnsBoard.ColumnCount==3,"shorter window uses a third column within monitor budget");
         Capture(columnsBoard,"-short.png");
-        columnsBoard.MaximumColumns=1;columnsWindow.Width=320;columnsBoard.RefreshColumnLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
+        columnsBoard.MaximumColumns=1;columnsBoard.Width=320;columnsWindow.Width=320;columnsBoard.RefreshColumnLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
         var overflowScroll=OpportunityBoard.FindScroll(columnsBoard)!;
         Check(columnsBoard.ColumnCount==1&&overflowScroll.ScrollableHeight>0,"narrow screen retains remaining cards through scrolling");
         overflowScroll.ScrollToEnd();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);columnsWindow.UpdateLayout();
@@ -125,7 +157,7 @@ public partial class MainWindow
         opportunityBoard.Model.Cards.Clear();
         opportunityBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).ToArray(),now.AddSeconds(1)),true,now.AddSeconds(1),true);
         for(var i=0;i<4;i++){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
-        Check(opportunityBoard.ColumnCount==2&&Math.Abs(CardsColumn.Width.Value-640)<.1,$"live window widens for second card column: columns={opportunityBoard.ColumnCount}, width={CardsColumn.Width.Value}, actualHeight={OpportunityArea.ActualHeight}, count={opportunityBoard.VisibleCount}");
+        Check((opportunityBoard.ColumnCount>1||opportunityBoard.MaximumColumns==1)&&Math.Abs(CardsColumn.Width.Value-320*opportunityBoard.ColumnCount)<.1&&opportunityBoard.ColumnCount<=opportunityBoard.MaximumColumns,$"live window uses columns allowed by its monitor: columns={opportunityBoard.ColumnCount}, maximum={opportunityBoard.MaximumColumns}, width={CardsColumn.Width.Value}, actualHeight={OpportunityArea.ActualHeight}, count={opportunityBoard.VisibleCount}");
         Check(Math.Abs((Width-CardsColumn.Width.Value)-textBefore)<.1,"message pane width unchanged during column expansion");
         Check(Width<=CurrentWorkArea().Width&&Left>=CurrentWorkArea().Left,"expanded window stays within working area");
         Capture(this,"-combined-150.png",1.5);
