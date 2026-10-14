@@ -30,3 +30,7 @@ ASTRO-QUICK-COPY:
 腾讯云 BOT 定点发布 /opt/funding-radar-web/releases/20261015-unicode-card-copy，前版 /opt/funding-radar-web/releases/20261015-combination-load-cache-v2。新命名空间 robot-push/web-session-unicode-copy-20261015，只改币名正则与入口引用；验证 1422 个其他文件未变，保留组合页加载优化。模块 SHA256：340ae16295993d9cb16bd8db33f54d3a77243879b1210c344be25ef5c208b39b。
 
 回滚网站须确认 current 仍为本版，在 /var/lib/funding-radar-storage/guard.lock 内原子指回前版；桌面退出安装程序后恢复备份四文件。代码依赖 PR12 的 OKX GC 修复，独立 PR 以该分支为基线。
+
+## 合并前 CI 复核
+
+首次 GitHub Windows 检查暴露旧机会布局测试依赖宿主显示器高度：云端原生窗口被小屏幕限制，无法达到假设的 1100 DIP。改为在 Canvas 中提供明确的逻辑测试视口，继续严格验证 1100 高度两列、600 高度三列及窄屏滚动；真实窗口检查依据可用屏幕列数验证边界与消息区宽度。失败报告直接进入控制台，不依赖已达配额的 GitHub artifact 存储。剪贴板测试读回增加有界占用重试；业务复制逻辑不变。本地 72 项卡片检查再次通过。
