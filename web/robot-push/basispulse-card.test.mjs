@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
-import {strategyCopy,gcStrategyCopy,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
+import {strategyCopy,gcStrategyCopy,gcBothLegs,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
 const gcFixture=(buy='binance',sell='hyperliquid',symbol='GRIFFAIN')=>({strategy:'FF',details:{legs:[{exchange:buy,symbol:'GRIFFAINUSDT',spot:false},{exchange:sell,symbol,spot:false}]}});
 test('GC matches supplied clipboard exactly and leaves normal Astro copy unchanged',()=>{
  const d=gcFixture();
@@ -10,7 +10,7 @@ test('GC matches supplied clipboard exactly and leaves normal Astro copy unchang
  assert.equal(JSON.parse(gcStrategyCopy(gcFixture('gate','bybit','GRIFFAINUSDT')).split('\n').slice(1).join('\n')).sellEx,'gc-bybit');
 });
 test('GC rejects unsupported exchanges, modes, malformed legs and mismatched contracts',()=>{
- for(const d of [gcFixture('bitget'),gcFixture('aster'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
+ for(const d of [gcFixture('bitget','aster','GRIFFAINUSDT'),gcFixture('unknown'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
  const d=gcFixture();d.details.legs[0].spot=true;assert.equal(gcStrategyCopy(d),null);
 });
 const now=1791162796000;
@@ -119,4 +119,14 @@ test('OKX participates on either GC leg with every supported venue; malformed an
   const legs=[{exchange:'okx',symbol:'WAL-USDT-SWAP',spot:false},{exchange:ex,symbol:ex==='hyperliquid'?'WAL':'WALUSDT',spot:false}];if(reverse)legs.reverse();assert.ok(gcStrategyCopy({strategy:'FF',details:{legs}}));
  }
  for(const symbol of ['OTHERUSDT','1000WALUSDT','WAL-USD-SWAP','WAL-USDT-FUTURES'])assert.equal(gcStrategyCopy({strategy:'FF',details:{legs:[{exchange:'okx',symbol:'WAL-USDT-SWAP',spot:false},{exchange:'binance',symbol,spot:false}]}}),null);
+});
+
+test('single GC leg keeps the other venue ordinary; only double GC gets a green card',()=>{
+ for(const gc of ['binance','bybit','gate','okx','hyperliquid'])for(const plain of ['aster','bitget'])for(const reverse of [false,true]){
+  const a=reverse?plain:gc,b=reverse?gc:plain,d=gcFixture(a,b,'GRIFFAINUSDT');const normal=strategyCopy(d);
+  const p=JSON.parse(gcStrategyCopy(d).split('\n').slice(1).join('\n'));
+  assert.equal(p.buyEx,reverse?plain:'gc-'+(gc==='hyperliquid'?'hl':gc));assert.equal(p.sellEx,reverse?'gc-'+(gc==='hyperliquid'?'hl':gc):plain);assert.equal(gcBothLegs(d),false);assert.equal(strategyCopy(d),normal);
+ }
+ assert.equal(gcBothLegs(gcFixture()),true);assert.equal(gcBothLegs(gcFixture('bitget','aster','GRIFFAINUSDT')),false);
+ const spot=gcFixture('bitget','bybit','GRIFFAINUSDT');spot.strategy='SF';spot.details.legs[0].spot=true;assert.equal(JSON.parse(gcStrategyCopy(spot).split('\n').slice(1).join('\n')).buyEx,'bitget');
 });

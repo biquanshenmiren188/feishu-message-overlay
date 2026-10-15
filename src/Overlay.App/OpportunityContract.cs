@@ -30,7 +30,15 @@ public partial class MainWindow
         Check(OpportunityModel.CopyStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"contract multiplier not silently removed");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","GRIFFAIN"))=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"FF\",\n  \"name\": \"GRIFFAIN\",\n  \"buyEx\": \"gc-binance\",\n  \"sellEx\": \"gc-hl\"\n}","GC matches user supplied clipboard exactly");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("gate","MAGIC_USDT","bybit","MAGICUSDT"))?.Contains("\"sellEx\": \"gc-bybit\"",StringComparison.Ordinal)==true,"Gate Bybit GC pair");
-        Check(new[]{"bitget","aster","unknown"}.All(ex=>OpportunityModel.CopyGcStrategy(CopyFixture(ex,"GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null),"unsupported and unverified GC exchanges rejected");
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("unknown","GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null,"unknown GC exchange rejected");
+        foreach(var gc in new[]{"binance","bybit","gate","okx","hyperliquid"})foreach(var plain in new[]{"aster","bitget"})foreach(var reverse in new[]{false,true}){
+            var fixture=CopyFixture(reverse?plain:gc,"ZERBROUSDT",reverse?gc:plain,"ZERBROUSDT");var mixedCopy=OpportunityModel.CopyGcStrategy(fixture);Check(mixedCopy is not null,"single GC leg available");
+            var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(mixedCopy![(mixedCopy!.IndexOf('\n')+1)..])!;
+            Check(payload["buyEx"]==(reverse?plain:"gc-"+(gc=="hyperliquid"?"hl":gc))&&payload["sellEx"]==(reverse?"gc-"+(gc=="hyperliquid"?"hl":gc):plain),"mixed GC preserves direction and ordinary venue");
+            Check(!OpportunityModel.GcBothLegs(fixture),"mixed pair has no full GC border");
+        }
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("aster","ZERBROUSDT","bitget","ZERBROUSDT")) is null,"no GC legs rejected");
+        Check(OpportunityModel.GcBothLegs(CopyFixture("bybit","ZERBROUSDT","gate","ZERBROUSDT")),"double GC classified");
         foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT","gc-okx","gc-binance"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP","gc-hl","gc-okx")})
         {
             var text=OpportunityModel.CopyGcStrategy(CopyFixture(fixture.Item2,fixture.Item3,fixture.Item4,fixture.Item5));
@@ -89,6 +97,14 @@ public partial class MainWindow
             Check(clipboard=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"SF\",\n  \"name\": \"龙虾\",\n  \"buyEx\": \"gate\",\n  \"sellEx\": \"binance\"\n}","real WPF copy click writes Chinese SF strategy to system clipboard, not card text");
             Check(Equals(chineseCopy.Content,"已复制"),"Chinese copy action confirms success");
             await File.WriteAllTextAsync(output+"-chinese-clipboard.txt",clipboard);
+            foreach(var reverse in new[]{false,true})
+            {
+                var mixed=CopyFixture(reverse?"aster":"bybit","ZERBROUSDT",reverse?"bybit":"aster","ZERBROUSDT");
+                var mixedView=opportunityBoard.Build(new OpportunityModel.Entry(mixed),now);
+                Buttons(mixedView).Single(b=>Equals(b.Content,"复制 GC")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                var mixedClipboard=await ReadClipboard(()=>Clipboard.GetText());
+                Check(mixedClipboard==OpportunityModel.CopyGcStrategy(mixed),"real mixed GC button writes exact directional payload to clipboard");
+            }
         }
         finally
         {
@@ -134,10 +150,11 @@ public partial class MainWindow
             var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using var file=File.Create(output+suffix);png.Save(file);
         }
         var gcExamples=new System.Windows.Controls.StackPanel{Width=320,Background=Brushes.White};
-        foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP")})
+        foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP"),("ZERBRO","bybit","ZERBROUSDT","aster","ZERBROUSDT")})
         {
             var card=JsonSerializer.SerializeToElement(new{asset=fixture.Item1,strategy="FF",enteredAt=now.AddMinutes(-1),validUntil=now.AddSeconds(-1),v2Residual=new{level=0,bps=47},details=new{legs=new[]{new{exchange=fixture.Item2,symbol=fixture.Item3,spot=false,hours=4,rate=-.0065},new{exchange=fixture.Item4,symbol=fixture.Item5,spot=false,hours=4,rate=-.0058}}}});
             var view=opportunityBoard.Build(new OpportunityModel.Entry(card),now);gcExamples.Children.Add(view);
+            Check(((SolidColorBrush)view.BorderBrush).Color==(Color)ColorConverter.ConvertFromString(fixture.Item1=="ZERBRO"?"#8B95A5":"#008B6B"),"only both GC legs have green outer border");
             Check(Buttons(view).Any(b=>Equals(b.Content,"复制 GC")),fixture.Item1+" retained card renders GC button");
         }
         gcExamples.Measure(new Size(320,double.PositiveInfinity));gcExamples.Arrange(new Rect(0,0,320,gcExamples.DesiredSize.Height));gcExamples.UpdateLayout();Capture(gcExamples,"-okx-gc.png",1.5);

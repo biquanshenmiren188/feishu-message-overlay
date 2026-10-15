@@ -57,11 +57,18 @@ internal sealed class OpportunityModel
     {
         var legs=Array(Get(data,"details"),"legs",3);
         var supported=new[]{"binance","bybit","gate","okx","hyperliquid"};
-        if(Text(data,"strategy")!="FF"||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind!=JsonValueKind.False||!supported.Contains(Text(l,"exchange"))))return null;
+        if(Text(data,"strategy") is not ("SF" or "FF")||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind is not (JsonValueKind.True or JsonValueKind.False))||!legs.Any(l=>supported.Contains(Text(l,"exchange")))||Text(data,"strategy")=="SF"&&Text(legs[0],"exchange")=="hyperliquid")return null;
         var normal=CopyStrategy(data);if(normal is null)return null;
         var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
-        payload["buyEx"]="gc-"+payload["buyEx"];payload["sellEx"]="gc-"+payload["sellEx"];
+        if(supported.Contains(Text(legs[0],"exchange")))payload["buyEx"]="gc-"+payload["buyEx"];
+        if(supported.Contains(Text(legs[1],"exchange")))payload["sellEx"]="gc-"+payload["sellEx"];
         return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
+    }
+    internal static bool GcBothLegs(JsonElement data)
+    {
+        var text=CopyGcStrategy(data);if(text is null)return false;
+        var p=JsonSerializer.Deserialize<Dictionary<string,string>>(text[(text.IndexOf('\n')+1)..])!;
+        return p["buyEx"].StartsWith("gc-",StringComparison.Ordinal)&&p["sellEx"].StartsWith("gc-",StringComparison.Ordinal);
     }
     internal static string? CopyStrategy(JsonElement data)
     {
@@ -209,7 +216,7 @@ internal sealed class OpportunityBoard : DockPanel
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);
         var result=Box(stack);result.Background=new SolidColorBrush(Color.FromRgb(Wash(rankColor.R),Wash(rankColor.G),Wash(rankColor.B)));
-        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(6,4,6,4);result.BorderBrush=Brush(rank);result.BorderThickness=new Thickness(.7);
+        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(6,4,6,4);result.BorderBrush=Brush(OpportunityModel.GcBothLegs(data)?"#008B6B":rank);result.BorderThickness=new Thickness(OpportunityModel.GcBothLegs(data)?1.5:.7);
         result.ToolTip=$"进入：{OpportunityModel.Date(data,"enteredAt").ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss} UTC+8\n更新：{OpportunityModel.Date(data,"updatedAt").ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8";return result;
     }
     private static string Exchange(JsonElement leg)=>OpportunityModel.Text(leg,"exchange")=="hyperliquid"?"HL":OpportunityModel.Text(leg,"exchange").ToUpperInvariant();

@@ -29,14 +29,15 @@ export function strategyCopy(data) {
 }
 
 // Confirmed against the source trader GC button and its actual clipboard sample.
-// Unverified exchanges and spot modes deliberately have no GC action.
+// Mixed pairs convert only supported legs; unsupported ordinary venues stay ordinary.
 export function gcStrategyCopy(data) {
   const legs=data.details?.legs;
   const supported=new Set(['binance','bybit','gate','okx','hyperliquid']);
-  if(data.strategy!=='FF' || legs?.length!==2 || legs.some(l=>l.spot!==false || !supported.has(l.exchange)))return null;
+  if(!['SF','FF'].includes(data.strategy) || legs?.length!==2 || legs.some(l=>typeof l.spot!=='boolean') || !legs.some(l=>supported.has(l.exchange)) || data.strategy==='SF'&&legs[0].exchange==='hyperliquid')return null;
   const normal=strategyCopy(data);if(!normal)return null;
   const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));
-  payload.buyEx='gc-'+payload.buyEx;payload.sellEx='gc-'+payload.sellEx;
+  if(supported.has(legs[0].exchange))payload.buyEx='gc-'+payload.buyEx;
+  if(supported.has(legs[1].exchange))payload.sellEx='gc-'+payload.sellEx;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify(payload,null,2);
 }
 
@@ -61,3 +62,5 @@ export function residualTone(level) {
  if(level<10)return 'orange';
  return 'red';
 }
+
+export function gcBothLegs(data){const text=gcStrategyCopy(data);if(!text)return false;const p=JSON.parse(text.slice(text.indexOf('\n')+1));return p.buyEx.startsWith('gc-')&&p.sellEx.startsWith('gc-');}

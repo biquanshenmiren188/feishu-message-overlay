@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>disable</ImplicitUsings><ApplicationManifest>app.manifest</ApplicationManifest><AssemblyName>FeishuMessageOverlay</AssemblyName></PropertyGroup>
   <ItemGroup><ProjectReference Include="../Overlay.Core/Overlay.Core.csproj" /></ItemGroup>
-  <PropertyGroup><UpdateVersion Condition="'$(UpdateVersion)' == ''">v2026.10.15.1</UpdateVersion></PropertyGroup>
+  <PropertyGroup><UpdateVersion Condition="'$(UpdateVersion)' == ''">v2026.10.15.2</UpdateVersion></PropertyGroup>
   <ItemGroup><AssemblyMetadata Include="UpdateVersion" Value="$(UpdateVersion)" /></ItemGroup>
   <ItemGroup><Content Include="../../assets/audio/notice.wav" Link="audio/notice.wav" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" /></ItemGroup>
 </Project>
