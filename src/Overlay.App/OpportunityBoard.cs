@@ -211,12 +211,23 @@ internal sealed class OpportunityBoard : DockPanel
         var footer=new DockPanel{Margin=new Thickness(0,2,0,0)};var copy=FooterButton("复制");
         copy.Click+=(_,_)=>{try{Clipboard.SetText(OpportunityModel.CopyStrategy(data)??string.Join('\n',VisibleText(stack))+"\n"+OpportunityModel.Radar(data));copy.Content="已复制";}catch{copy.Content="复制失败，请重试";}};
         SetDock(copy,Dock.Left);footer.Children.Add(copy);
-        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=FooterButton("复制 GC");gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
+        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=FooterButton("复制 GC");if(OpportunityModel.GcBothLegs(data)){
+            gc.BorderBrush=Brush("#008B6B");gc.BorderThickness=new Thickness(3);gc.Foreground=Brush("#007453");gc.Padding=new Thickness(7,0,7,0);
+            // The window's implicit button template does not render BorderBrush.
+            // Give this action its own template so the visible border follows the button.
+            var outline=new FrameworkElementFactory(typeof(Border));outline.Name="GcOutline";
+            outline.SetValue(Border.BackgroundProperty,Brush("#F0F0F0"));outline.SetValue(Border.CornerRadiusProperty,new CornerRadius(4));
+            outline.SetBinding(Border.BorderBrushProperty,new System.Windows.Data.Binding("BorderBrush"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            outline.SetBinding(Border.BorderThicknessProperty,new System.Windows.Data.Binding("BorderThickness"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            outline.SetBinding(Border.PaddingProperty,new System.Windows.Data.Binding("Padding"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            var content=new FrameworkElementFactory(typeof(TextBlock));content.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Content"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetBinding(TextBlock.ForegroundProperty,new System.Windows.Data.Binding("Foreground"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetValue(FrameworkElement.HorizontalAlignmentProperty,HorizontalAlignment.Center);content.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);outline.AppendChild(content);
+            gc.Template=new ControlTemplate(typeof(Button)){VisualTree=outline};
+        }gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
         if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);
         var result=Box(stack);result.Background=new SolidColorBrush(Color.FromRgb(Wash(rankColor.R),Wash(rankColor.G),Wash(rankColor.B)));
-        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(6,4,6,4);result.BorderBrush=Brush(OpportunityModel.GcBothLegs(data)?"#008B6B":rank);result.BorderThickness=new Thickness(OpportunityModel.GcBothLegs(data)?1.5:.7);
+        result.Margin=new Thickness(0);result.CornerRadius=new CornerRadius(0);result.Padding=new Thickness(6,4,6,4);result.BorderBrush=Brush(rank);result.BorderThickness=new Thickness(.7);
         result.ToolTip=$"进入：{OpportunityModel.Date(data,"enteredAt").ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm:ss} UTC+8\n更新：{OpportunityModel.Date(data,"updatedAt").ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8";return result;
     }
     private static string Exchange(JsonElement leg)=>OpportunityModel.Text(leg,"exchange")=="hyperliquid"?"HL":OpportunityModel.Text(leg,"exchange").ToUpperInvariant();

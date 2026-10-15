@@ -149,12 +149,20 @@ public partial class MainWindow
             var bmp=new RenderTargetBitmap((int)Math.Ceiling(visual.ActualWidth*scale),(int)Math.Ceiling(visual.ActualHeight*scale),96*scale,96*scale,PixelFormats.Pbgra32);bmp.Render(visual);
             var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using var file=File.Create(output+suffix);png.Save(file);
         }
-        var gcExamples=new System.Windows.Controls.StackPanel{Width=320,Background=Brushes.White};
+        var gcExamples=new System.Windows.Controls.StackPanel{Width=320,Background=Brushes.White,Resources=Resources};
         foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP"),("ZERBRO","bybit","ZERBROUSDT","aster","ZERBROUSDT")})
         {
             var card=JsonSerializer.SerializeToElement(new{asset=fixture.Item1,strategy="FF",enteredAt=now.AddMinutes(-1),validUntil=now.AddSeconds(-1),v2Residual=new{level=0,bps=47},details=new{legs=new[]{new{exchange=fixture.Item2,symbol=fixture.Item3,spot=false,hours=4,rate=-.0065},new{exchange=fixture.Item4,symbol=fixture.Item5,spot=false,hours=4,rate=-.0058}}}});
             var view=opportunityBoard.Build(new OpportunityModel.Entry(card),now);gcExamples.Children.Add(view);
-            Check(((SolidColorBrush)view.BorderBrush).Color==(Color)ColorConverter.ConvertFromString(fixture.Item1=="ZERBRO"?"#8B95A5":"#008B6B"),"only both GC legs have green outer border");
+            Check(((SolidColorBrush)view.BorderBrush).Color==(Color)ColorConverter.ConvertFromString("#8B95A5"),"GC never changes card outer border");
+            var gcButton=Buttons(view).Single(b=>Equals(b.Content,"复制 GC"));
+            Check(((SolidColorBrush)gcButton.BorderBrush).Color==(Color)ColorConverter.ConvertFromString(fixture.Item1=="ZERBRO"?"#DCE3EA":"#008B6B"),"only both GC legs have green copy button border");
+            gcButton.ApplyTemplate();
+            if(fixture.Item1!="ZERBRO"){
+                var outline=gcButton.Template.FindName("GcOutline",gcButton) as System.Windows.Controls.Border;
+                Check(outline is not null&&outline.BorderThickness==new Thickness(3)&&((SolidColorBrush)outline.BorderBrush).Color==(Color)ColorConverter.ConvertFromString("#008B6B"),"actual window button template renders a three DIP green outline");
+                Check(outline!.Child is System.Windows.Controls.TextBlock label&&((SolidColorBrush)label.Foreground).Color==(Color)ColorConverter.ConvertFromString("#007453"),"actual GC button text is green under window styles");
+            }
             Check(Buttons(view).Any(b=>Equals(b.Content,"复制 GC")),fixture.Item1+" retained card renders GC button");
         }
         gcExamples.Measure(new Size(320,double.PositiveInfinity));gcExamples.Arrange(new Rect(0,0,320,gcExamples.DesiredSize.Height));gcExamples.UpdateLayout();Capture(gcExamples,"-okx-gc.png",1.5);
