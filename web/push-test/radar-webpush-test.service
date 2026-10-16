@@ -1,12 +1,14 @@
 [Unit]
-Description=Radar synthetic-only six-line web push trial
+Description=Radar BOT Web Push
 After=network-online.target
 
 [Service]
 Type=simple
 User=radar-webpush-test
 Group=radar-webpush-test
+SupplementaryGroups=www-data
 ExecStart=/opt/radar-webpush-test/venv/bin/python /opt/radar-webpush-test/server.py
+Environment=RADAR_LIVE_FEED=/var/lib/robot-push/feed.json
 Restart=on-failure
 RestartSec=5
 UMask=0077
@@ -15,7 +17,8 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/radar-webpush-test
-InaccessiblePaths=-/var/lib/robot-push -/opt/robot-push
+ReadOnlyPaths=/var/lib/robot-push
+InaccessiblePaths=-/opt/robot-push
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

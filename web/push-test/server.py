@@ -265,7 +265,7 @@ def handler(trial):
 
         def do_GET(self):
             if self.path == BASE + 'api/health':
-                return self.reply(200, {'ok': True, 'mode': 'synthetic-only'})
+                return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') else 'synthetic-only'})
             if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
                 return self.reply(401, {'error': '请先用测试码连接'})
             if self.path == BASE + 'api/status':
@@ -287,6 +287,8 @@ def handler(trial):
                     return self.reply(200, {'token': trial.pair(data.get('code'))})
                 if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
                     return self.reply(401, {'error': '请先用测试码连接'})
+                if route == 'settings' and hasattr(trial, 'configure'):
+                    return self.reply(200, trial.configure(data))
                 if route == 'subscribe':
                     trial.subscribe(data.get('subscription'))
                 elif route == 'start':
@@ -313,6 +315,12 @@ def handler(trial):
 
 if __name__ == '__main__':
     os.umask(0o077)
-    app = Trial(os.environ.get('RADAR_TEST_STATE', '/var/lib/radar-webpush-test'),
+    factory = Trial
+    if os.environ.get('RADAR_LIVE_FEED'):
+        from live import Live
+        factory = Live
+    app = factory(os.environ.get('RADAR_TEST_STATE', '/var/lib/radar-webpush-test'),
                 os.environ.get('RADAR_TEST_CONFIG', '/etc/radar-webpush-test/config.json'))
+    if factory is not Trial:
+        threading.Thread(target=app.run_feed, args=(os.environ['RADAR_LIVE_FEED'],), daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1', 18885), handler(app)).serve_forever()
