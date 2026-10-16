@@ -145,7 +145,12 @@ class Trial:
                        'run': secrets.token_hex(6), 'rows': rows_for(7, time.time()-180)}
             if compact:
                 payload['title'] = ''
-                payload['rows'] = [re.sub(r'(R\d+) ([+-])', r'\1\2', row.replace('BINANCE','BN').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')[:-3]) for row in payload['rows']]
+                compact_rows = []
+                for row in payload['rows']:
+                    symbol, kind, route, rank, percent, stamp = row.split()
+                    route = route.replace('BINANCE','BN').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')
+                    compact_rows.append(f'{stamp[:5]} {percent} {rank} {kind} {route} {symbol}')
+                payload['rows'] = compact_rows
             payload['rows'] = payload['rows'][-rows:]
             self.save()
             status, error = None, None
