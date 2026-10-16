@@ -148,7 +148,9 @@ class Trial:
                 compact_rows = []
                 for row in payload['rows']:
                     symbol, kind, route, rank, percent, stamp = row.split()
-                    route = route.replace('BINANCE','BN').replace('BITGET','BG').replace('BYBIT','BY').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')
+                    names = {'BINANCE':'BN', 'BITGET':'BG', 'BYBIT':'BY', 'GATE':'GT',
+                             'ASTER':'AS', 'OKX':'OK', 'HYPERLIQUID':'HY', 'HYPER':'HY', 'HL':'HY'}
+                    route = '→'.join(names.get(venue.upper(), venue) for venue in route.split('→'))
                     compact_rows.append(f'{stamp[:5]} {percent} {rank} {kind} {route} {symbol}')
                 payload['rows'] = compact_rows
             payload['rows'] = payload['rows'][-rows:]
