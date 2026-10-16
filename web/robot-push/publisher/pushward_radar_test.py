@@ -115,6 +115,21 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(len(self.bridge.s['rows']), 1)
         self.assertEqual(self.bridge.s['counters']['duplicate_content'], 1)
 
+    def test_content_dedup_survives_six_row_eviction(self):
+        msgs = [message(n=i, at=NOW+i, title=f'COIN{i} | FF | R0 +0.39%') for i in range(1, 9)]
+        self.bridge.tick(feed(msgs, NOW+10), NOW+10)
+        self.bridge.tick(feed([message(n=99, at=NOW+11, title='COIN1 | FF | R0 +0.39%')], NOW+11), NOW+11)
+        self.assertEqual(self.bridge.s['counters']['duplicate_content'], 1)
+        self.assertNotIn('COIN1', [r['coin'] for r in self.bridge.s['rows']])
+
+    def test_small_clock_skew_waits_until_event_time(self):
+        msg = message(at=NOW+5)
+        self.bridge.tick(feed([msg]), NOW)
+        self.assertEqual(len(self.notifications()), 0)
+        self.assertEqual(len(self.bridge.s['pending']), 1)
+        self.bridge.tick(feed([msg], NOW+6), NOW+6)
+        self.assertEqual(len(self.notifications()), 1)
+
     def test_history_seeds_without_alert_and_old_pin_ignored(self):
         f = feed([message(at=NOW-60)])
         f['pinned'] = message(n=2, at=NOW-3600)

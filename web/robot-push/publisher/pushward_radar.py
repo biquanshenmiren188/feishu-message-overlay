@@ -127,7 +127,10 @@ class Client:
                 data = res.read(1024*1024+1)
                 if len(data) > 1024*1024:
                     raise APIError('oversize_response', uncertain=method != 'GET')
-                return json.loads(data)
+                result = json.loads(data)
+                if not isinstance(result, dict):
+                    raise APIError('invalid_response_schema', uncertain=method != 'GET')
+                return result
         except urllib.error.HTTPError as e:
             try:
                 body = json.loads(e.read(16384))
@@ -167,6 +170,8 @@ class Bridge:
         self.status_written = 0
         self.connected = False
         self.status = dict(deviceDelivery='unverified', sourceConnected=False)
+        if self.s.get('activity_error'):
+            self.status['activityError'] = self.s['activity_error']
         self.save()
 
     def save(self):
@@ -189,6 +194,7 @@ class Bridge:
             messages.append(feed['pinned'])
         changed = False
         self.s['seen'] = {k:v for k,v in self.s['seen'].items() if now-v < 172800}
+        self.s['recent_content'] = {k:v for k,v in self.s.get('recent_content', {}).items() if now-v <= 120}
         for m in sorted(messages, key=lambda x: stamp(x.get('sentAt')) or 0 if isinstance(x, dict) else 0):
             row = parse_message(m, now)
             if row is None:
@@ -199,11 +205,13 @@ class Bridge:
             changed = True
             self.count('matched')
             # Same content from multiple groups/bot IDs within two minutes is one signal.
-            if any(r['fingerprint'] == row['fingerprint'] and abs(row['at']-r['at']) <= 120 for r in self.s['rows']):
+            previous = self.s['recent_content'].get(row['fingerprint'])
+            if previous is not None and abs(row['at']-previous) <= 120:
                 self.count('duplicate_content')
                 continue
+            self.s['recent_content'][row['fingerprint']] = row['at']
             self.s['rows'] = sorted(self.s['rows']+[row], key=lambda r:(r['at'], r['id']))[-6:]
-            if row['at'] >= self.s['activated'] and 0 <= now-row['at'] <= 120:
+            if row['at'] >= self.s['activated'] and -30 <= now-row['at'] <= 120:
                 self.s['pending'] = (self.s['pending']+[row])[-100:]
             else:
                 self.count('history_without_alert')
@@ -221,6 +229,8 @@ class Bridge:
         for key in ('quota', 'quotas'):
             if isinstance(me.get(key), dict):
                 q = me[key]
+        if not isinstance(q, dict):
+            raise APIError('invalid_quota_schema')
         self.status['quota'] = {k:q.get(k) for k in ('live_activity_updates_used', 'live_activity_updates_limit',
                                                     'notifications_used', 'notifications_limit', 'quota_resets_at')}
         used, limit = q.get('live_activity_updates_used'), q.get('live_activity_updates_limit')
@@ -240,6 +250,9 @@ class Bridge:
                     raise
                 self.remote = self.client.call('POST', '/activities', dict(slug=self.slug, name='雷达', stale_ttl=28800, dismissal_ttl=0))
             self.remote_checked = now
+            if self.remote.get('state') not in ('ongoing', 'ended', 'preempted') or not isinstance(self.remote.get('content'), dict):
+                self.remote = None
+                raise APIError('invalid_activity_schema')
 
     def update_activity(self, now):
         if now < self.s['update_after'] or now-self.s['last_push'] < self.min_interval:
@@ -292,10 +305,11 @@ class Bridge:
         if now < self.s['notify_after']:
             return
         pending = [r for r in self.s['pending'] if 0 <= now-r['at'] <= 120]
+        future = [r for r in self.s['pending'] if 0 < r['at']-now <= 30]
         if not pending:
-            if self.s['pending']:
-                self.count('expired_alerts', len(self.s['pending']))
-                self.s['pending'] = []
+            if len(self.s['pending']) != len(future):
+                self.count('expired_alerts', len(self.s['pending'])-len(future))
+                self.s['pending'] = future
                 self.save()
             return
         pending.sort(key=lambda r:(r['at'], r['id']))
@@ -306,7 +320,7 @@ class Bridge:
                        source='radar-live', source_display_name='雷达', thread_id='radar-live',
                        collapse_id=batch_id, activity_slug=self.slug, level='active', push=True)
         # Persist before sending: a crash/timeout cannot cause repeated alerts after restart.
-        self.s['pending'] = []
+        self.s['pending'] = future
         self.s['notify_after'] = now+self.min_interval
         self.s['last_notification'] = dict(batch=batch_id, count=len(pending), state='attempted', at=now)
         self.save()
@@ -315,7 +329,7 @@ class Bridge:
         except APIError as e:
             self.s['last_notification']['state'] = 'unknown' if e.uncertain else e.code
             if e.code in ('quota.exceeded', 'http_429'):
-                self.s['pending'] = pending
+                self.s['pending'] = (pending+future)[-100:]
                 self.s['notify_after'] = now+e.retry
             self.save()
             raise
