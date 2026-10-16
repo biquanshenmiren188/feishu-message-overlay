@@ -129,7 +129,7 @@ class Trial:
             self.save()
             threading.Thread(target=self.run_campaign, args=(run, now + 30, self.stop_event), daemon=True).start()
 
-    def resend(self):
+    def resend(self, compact=False):
         with self.lock:
             if not self.state.get('subscription'):
                 raise ValueError('请先启用通知')
@@ -141,6 +141,9 @@ class Trial:
             self.state['seq'] += 1
             payload = {'kind': 'radar-six-test', 'seq': self.state['seq'],
                        'run': secrets.token_hex(6), 'rows': rows_for(7, time.time()-180)}
+            if compact:
+                payload['title'] = ''
+                payload['rows'] = [row.replace('BINANCE','币安').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')[:-3] for row in payload['rows']]
             self.save()
             status, error = None, None
             try:
@@ -274,7 +277,7 @@ def handler(trial):
                 elif route == 'start':
                     trial.start()
                 elif route == 'resend':
-                    return self.reply(200, trial.resend())
+                    return self.reply(200, trial.resend(compact=data.get('compact') is True))
                 elif route == 'stop':
                     trial.stop()
                 elif route == 'receipt':

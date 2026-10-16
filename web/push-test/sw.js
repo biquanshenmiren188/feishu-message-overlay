@@ -1,8 +1,8 @@
 'use strict';
-const VERSION='radar-six-test-v1', KIND='radar-six-test', BASE='/radar/push-test/';
+const VERSION='radar-six-test-v2', KIND='radar-six-test', BASE='/radar/push-test/';
 const ASSETS=['','index.html','style.css','app.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(VERSION);await cache.addAll(ASSETS.map(x=>BASE+x));await self.skipWaiting()})()));
-self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.clients.claim();if(await self.registration.pushManager.getSubscription())await report({stage:'worker-ready',version:VERSION})})()));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(BASE)||u.pathname.includes('/api/'))return;event.respondWith((async()=>{try{const r=await fetch(event.request);if(r.ok&&!r.redirected)return r;throw Error('offline')}catch{return (await caches.match(event.request,{ignoreSearch:true}))||Response.error()}})())});
 function db(){return new Promise((resolve,reject)=>{const r=indexedDB.open(KIND,1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 async function get(key){const d=await db();try{return await new Promise((resolve,reject)=>{const r=d.transaction('state').objectStore('state').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}finally{d.close()}}
@@ -16,7 +16,7 @@ async function display(payload){
   let before=[],enumerationError=false;try{before=(await self.registration.getNotifications()).filter(n=>n.data?.kind===KIND)}catch{enumerationError=true}
   // Show first. A failed display must not destroy the last visible notification.
   // Unique tags avoid the known WebKit same-tag notification bookkeeping defect.
-  await self.registration.showNotification('雷达 · 测试',{body:current.rows.join('\n'),tag:KIND+'-'+current.seq,icon:BASE+'icon-192.png',badge:BASE+'icon-192.png',silent:false,data:{kind:KIND,seq:current.seq,run:current.run,url:BASE}});
+  await self.registration.showNotification(current.title===''?'':'雷达 · 测试',{body:current.rows.join('\n'),tag:KIND+'-'+current.seq,icon:BASE+'icon-192.png',badge:BASE+'icon-192.png',silent:false,data:{kind:KIND,seq:current.seq,run:current.run,url:BASE}});
   let closeCalls=0;for(const notification of before){try{notification.close();closeCalls++}catch{}}
   let after=null;try{after=(await self.registration.getNotifications()).filter(n=>n.data?.kind===KIND).length}catch{}
   await report({seq:current.seq,run:current.run,rows:current.rows.length,before:before.length,closeCalls,after,enumerationError,stage:'display-requested',version:VERSION});
