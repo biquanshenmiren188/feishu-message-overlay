@@ -1,0 +1,272 @@
+"""Finite, owner-paired Web Push experiment. No real-feed readers or arbitrary messages."""
+import base64
+import hmac
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import threading
+import time
+from datetime import datetime, timezone, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
+
+BASE = '/radar/push-test/'
+ORIGIN = 'https://leida.shenmiren.work'
+SAMPLES = (
+    ('ARC', 'SF', 'GATE→BITGET', 'R1', '+0.33%'),
+    ('BLUR', 'FF', 'BINANCE→OKX', 'R0', '+0.41%'),
+    ('DGAI', 'FS', 'OKX→BITGET', 'R0', '+0.39%'),
+    ('ZEREBRO', 'SF', 'GATE→ASTER', 'R1', '+0.23%'),
+    ('BTC', 'FF', 'BINANCE→OKX', 'R0', '+0.10%'),
+    ('CNPY', 'SF', 'BITGET→OKX', 'R0', '+0.39%'),
+    ('ETH', 'FF', 'BINANCE→OKX', 'R2', '+0.52%'),
+)
+
+
+def rows_for(step, first_at):
+    assert 1 <= step <= 7
+    rows = []
+    for i in range(max(0, step - 6), step):
+        clock = datetime.fromtimestamp(first_at + 30 * i, timezone(timedelta(hours=8))).strftime('%H:%M:%S')
+        rows.append(' '.join(SAMPLES[i]) + ' ' + clock)
+    return rows
+
+
+def validate_subscription(value):
+    from cryptography.hazmat.primitives.asymmetric import ec
+    if not isinstance(value, dict):
+        raise ValueError('订阅格式错误')
+    endpoint = value.get('endpoint', '')
+    u = urlsplit(endpoint)
+    if (u.scheme != 'https' or not u.hostname or not u.hostname.endswith('.push.apple.com')
+            or u.username or u.password or u.port not in (None, 443) or u.fragment or len(endpoint) > 2048):
+        raise ValueError('测试版仅接受 iPhone 的苹果推送订阅')
+    keys = value.get('keys', {})
+    decoded = {}
+    for key, size in [('auth', 16), ('p256dh', 65)]:
+        raw = keys.get(key, '')
+        if not isinstance(raw, str) or not re.fullmatch(r'[A-Za-z0-9_-]+={0,2}', raw):
+            raise ValueError('订阅密钥格式错误')
+        decoded[key] = base64.urlsafe_b64decode(raw + '=' * (-len(raw) % 4))
+        if len(decoded[key]) != size:
+            raise ValueError('订阅密钥长度错误')
+    ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), decoded['p256dh'])
+    return {'endpoint': endpoint, 'keys': {k: keys[k] for k in ('auth', 'p256dh')}}
+
+
+class Trial:
+    def __init__(self, state_dir, config_path, sender=None):
+        self.directory = Path(state_dir)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.path = self.directory / 'state.json'
+        self.config = json.loads(Path(config_path).read_text())
+        self.lock = threading.RLock()
+        self.stop_event = threading.Event()
+        self.sender = sender or self.send_webpush
+        self.pair_attempts = []
+        self.state = json.loads(self.path.read_text()) if self.path.exists() else {'seq': 0, 'sends': [], 'receipts': [], 'runs': 0}
+        c = self.state.get('campaign')
+        if c and c['state'] in ('running', 'scheduled'):
+            c['state'] = 'interrupted'
+            self.save()
+
+    def save(self):
+        tmp = self.path.with_suffix('.next')
+        tmp.write_text(json.dumps(self.state, ensure_ascii=False))
+        tmp.chmod(0o600)
+        os.replace(tmp, self.path)
+
+    def pair(self, code):
+        with self.lock:
+            now = time.time()
+            self.pair_attempts = [x for x in self.pair_attempts if x > now - 300]
+            if len(self.pair_attempts) >= 10:
+                raise ValueError('尝试过多，请五分钟后再试')
+            self.pair_attempts.append(now)
+            if now > self.config['expiresAt']:
+                raise ValueError('本次测试已到期')
+            if not isinstance(code, str) or not hmac.compare_digest(code, self.config['pairCode']):
+                raise ValueError('测试码不正确')
+            if not self.state.get('token'):
+                self.state['token'] = secrets.token_urlsafe(32)
+                self.save()
+            return self.state['token']
+
+    def authenticate(self, token):
+        return (time.time() < self.config['expiresAt'] and bool(self.state.get('token'))
+                and hmac.compare_digest(token, self.state['token']))
+
+    def public_status(self):
+        with self.lock:
+            return {'publicKey': self.config['publicKey'], 'subscribed': bool(self.state.get('subscription')),
+                    'campaign': self.state.get('campaign'), 'sends': self.state['sends'][-14:],
+                    'receipts': self.state['receipts'][-14:], 'observation': self.state.get('observation')}
+
+    def subscribe(self, value):
+        sub = validate_subscription(value)
+        with self.lock:
+            if self.state.get('subscription') and self.state['subscription'] != sub:
+                raise ValueError('已绑定另一份订阅，请先联系测试管理员重置')
+            self.state['subscription'] = sub
+            self.save()
+
+    def start(self):
+        with self.lock:
+            if not self.state.get('subscription'):
+                raise ValueError('请先启用通知')
+            if self.state.get('campaign', {}).get('state') in ('scheduled', 'running'):
+                raise ValueError('测试正在进行，不会重复启动')
+            if self.state['runs'] >= 3:
+                raise ValueError('已完成三轮测试，已停发，请先查看诊断结果')
+            self.stop_event = threading.Event()
+            self.state['runs'] += 1
+            now = time.time()
+            run = secrets.token_hex(6)
+            self.state['campaign'] = {'run': run, 'state': 'scheduled', 'sent': 0, 'startedAt': now, 'nextAt': now + 30, 'body': ''}
+            self.state.pop('observation', None)
+            self.save()
+            threading.Thread(target=self.run_campaign, args=(run, now + 30, self.stop_event), daemon=True).start()
+
+    def stop(self):
+        with self.lock:
+            self.stop_event.set()
+            if self.state.get('campaign', {}).get('state') in ('scheduled', 'running'):
+                self.state['campaign']['state'] = 'stopped'
+                self.save()
+
+    def send_webpush(self, subscription, payload):
+        import requests
+        from pywebpush import webpush
+        class NoRedirect(requests.Session):
+            def request(self, *args, **kwargs):
+                kwargs['allow_redirects'] = False
+                return super().request(*args, **kwargs)
+        with NoRedirect() as session:
+            response = webpush(subscription_info=subscription, data=json.dumps(payload, ensure_ascii=False),
+                               vapid_private_key=self.config['privateKeyPath'], vapid_claims={'sub': ORIGIN},
+                               ttl=90, headers={'Urgency': 'high'}, timeout=12, requests_session=session)
+            if response.status_code != 201:
+                raise RuntimeError('push_not_accepted')
+            return response.status_code
+
+    def run_campaign(self, run, first_at, stop):
+        for step in range(1, 8):
+            if stop.wait(max(0, first_at + (step - 1) * 30 - time.time())):
+                return
+            with self.lock:
+                if time.time() >= self.config['expiresAt'] or self.state['campaign']['run'] != run or stop.is_set():
+                    return
+                self.state['seq'] += 1
+                payload = {'kind': 'radar-six-test', 'seq': self.state['seq'], 'run': run, 'rows': rows_for(step, first_at)}
+                assert len(json.dumps(payload, ensure_ascii=False).encode()) < 3000
+                self.state['campaign']['state'] = 'running'
+                self.save()
+                subscription = self.state['subscription']
+            status = None
+            error = None
+            try:
+                status = self.sender(subscription, payload)
+            except Exception as exc:
+                response = getattr(exc, 'response', None)
+                status = getattr(response, 'status_code', None)
+                error = type(exc).__name__  # Never write endpoint, keys, or exception text.
+            with self.lock:
+                self.state['sends'].append({'at': time.time(), 'seq': payload['seq'], 'run': run, 'rows': len(payload['rows']), 'http': status, 'error': error})
+                self.state['sends'] = self.state['sends'][-30:]
+                c = self.state['campaign']
+                if c['run'] != run:
+                    self.save()
+                    return
+                if error:
+                    c['state'] = 'failed'
+                    self.save()
+                    return
+                c.update(sent=step, body='\n'.join(payload['rows']), nextAt=first_at + step * 30)
+                if not stop.is_set():
+                    c['state'] = 'complete' if step == 7 else 'running'
+                self.save()
+
+    def receipt(self, value):
+        safe = {'at': time.time()}
+        for key in ('seq', 'rows', 'before', 'closeCalls', 'after'):
+            x = value.get(key)
+            if isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 100000:
+                safe[key] = x
+        for key in ('run', 'stage', 'version'):
+            x = value.get(key)
+            if isinstance(x, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', x):
+                safe[key] = x
+        safe['enumerationError'] = value.get('enumerationError') is True
+        with self.lock:
+            self.state['receipts'].append(safe)
+            self.state['receipts'] = self.state['receipts'][-30:]
+            self.save()
+
+
+def handler(trial):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def reply(self, status, value):
+            raw = json.dumps(value, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path == BASE + 'api/health':
+                return self.reply(200, {'ok': True, 'mode': 'synthetic-only'})
+            if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
+                return self.reply(401, {'error': '请先用测试码连接'})
+            if self.path == BASE + 'api/status':
+                return self.reply(200, trial.public_status())
+            self.reply(404, {'error': '不存在'})
+
+        def do_POST(self):
+            if self.headers.get('Origin') not in (None, ORIGIN):
+                return self.reply(403, {'error': '来源不匹配'})
+            try:
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 8192:
+                    return self.reply(413, {'error': '请求大小错误'})
+                data = json.loads(self.rfile.read(size))
+                if not isinstance(data, dict):
+                    raise ValueError('请求格式错误')
+                route = self.path.removeprefix(BASE + 'api/')
+                if self.path == BASE + 'api/pair':
+                    return self.reply(200, {'token': trial.pair(data.get('code'))})
+                if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
+                    return self.reply(401, {'error': '请先用测试码连接'})
+                if route == 'subscribe':
+                    trial.subscribe(data.get('subscription'))
+                elif route == 'start':
+                    trial.start()
+                elif route == 'stop':
+                    trial.stop()
+                elif route == 'receipt':
+                    trial.receipt(data)
+                elif route == 'observation' and data.get('result') in ('one-six', 'duplicates', 'missing-or-truncated'):
+                    with trial.lock:
+                        trial.state['observation'] = {'result': data['result'], 'at': time.time()}
+                        trial.save()
+                else:
+                    return self.reply(404, {'error': '不存在'})
+                self.reply(200, {'ok': True})
+            except ValueError as exc:
+                self.reply(400, {'error': str(exc)[:160]})
+            except Exception:
+                self.reply(500, {'error': '测试服务处理失败，已记录状态'})
+    return Handler
+
+
+if __name__ == '__main__':
+    os.umask(0o077)
+    app = Trial(os.environ.get('RADAR_TEST_STATE', '/var/lib/radar-webpush-test'),
+                os.environ.get('RADAR_TEST_CONFIG', '/etc/radar-webpush-test/config.json'))
+    ThreadingHTTPServer(('127.0.0.1', 18885), handler(app)).serve_forever()

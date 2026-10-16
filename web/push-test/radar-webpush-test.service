@@ -1,0 +1,28 @@
+[Unit]
+Description=Radar synthetic-only six-line web push trial
+After=network-online.target
+
+[Service]
+Type=simple
+User=radar-webpush-test
+Group=radar-webpush-test
+ExecStart=/opt/radar-webpush-test/venv/bin/python /opt/radar-webpush-test/server.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/radar-webpush-test
+InaccessiblePaths=-/var/lib/robot-push -/opt/robot-push
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+TasksMax=16
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target
