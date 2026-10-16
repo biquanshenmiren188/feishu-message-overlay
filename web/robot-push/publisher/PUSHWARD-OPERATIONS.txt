@@ -1,13 +1,13 @@
 六行雷达锁屏转发
 
 用途
-读取现有 robot-push 服务原子写入的 /var/lib/robot-push/feed.json，筛选机器人消息标题中的 R0/R1 及紧随的百分比。保留币种、SF/FS/FF、买卖交易所、等级、该百分比和原始发送时间。仅向配置密钥所属的 PushWard 账户转发。
+读取现有 robot-push 服务原子写入的 /var/lib/robot-push/feed.json，识别机器人消息标题中的 R 等级及紧随的百分比。默认接收所有等级，包括 R5、R6、R1000 以及原文带 + 的等级；等级不限定在界面的快捷选项内。保留币种、SF/FS/FF、买卖交易所、原始等级标记、百分比和发送时间。仅向配置密钥所属的 PushWard 账户转发。
 不新增飞书连接、不更改群权限、不写原有 feed、不接触交易操作。独立服务不会重启桌面小窗或 robot-push。
 
 消息规则
 标题格式示例：BTC | FF | V2收敛 | R0 +0.39%。正文需有且只有一组可识别的“买 OKX 永续 → 卖 Bitget 永续”。
 支持 BINANCE、BITGET、BYBIT、OKX/OKEX、GATE/GATE.IO、ASTER、HYPERLIQUID/HL。明确的现货/永续种类必须与 SF/FS/FF 一致。
-没有紧跟等级的百分比、R2以上等级、聚合多组合、未知平台或方向不完整时不猜测、不发送。净收益、盘口差和资金费率都不能替代标题中的百分比。
+没有紧跟等级的百分比、聚合多组合、未知平台或方向不完整时不猜测、不发送。净收益、盘口差和资金费率都不能替代标题中的百分比。
 最多六条，按原始时间从上到下递增。没有真实消息时显示等待提示，不保留虚构示例凑行数。
 相同消息ID持久化去重；同内容跨ID在两分钟内合并。仅最近两分钟且在首次启用之后的新消息响铃；启动前的近30分钟消息可用于展示，不补响。接收中断超过90秒时显示断线状态，恢复后仅提醒仍在两分钟窗口的新消息。
 默认30秒内的提醒合并，可在网页改为最长30分钟；卡片和提醒正文按设置展示最新1–6条，提醒标题保留本批数量。锁屏更新独立保持至少30秒间隔；右侧时间由客户端依据原始时间显示。
@@ -54,13 +54,18 @@ requires the configured exact Origin and JSON; revision conflicts return 409.
 Provision admin-key before upgrading the unit; generate with secrets.token_urlsafe(24).
 Restart pushward-radar after rotating admin-key; existing sessions become invalid.
 
-Defaults preserve six rows, both R ranks, all SF/FS/FF types, all coins/exchanges,
-no percentage threshold, and notifications at least 30 seconds apart. Settings
+Defaults receive every parsed R rank, all SF/FS/FF types, all coins/exchanges,
+six rows, no percentage threshold, and notifications at least 30 seconds apart. Settings
 are read every 2 seconds; no service restart is required after saving. Activity
 updates retain their separate minimum 30-second interval and quota/backoff.
 Rows can be 1–6 (six confirmed on the owner's iPhone). The threshold compares the
-signed percentage following R0/R1 in the title, not net profit or funding rate.
-Exchange selection matches either leg. Empty coins/exchanges mean unrestricted.
+signed percentage following the R rank in the title, not net profit or funding rate.
+All checkboxes and lists are BLOCK lists: empty means receive all. Blocked exchange
+matches either leg. A blocked R5 excludes both R5 and R5+; a blocked R5+ excludes
+only the exact plus-suffixed label. Higher/unlisted grades remain eligible by default.
+Legacy initial allow-list defaults migrate once to receive-all, preserving rows,
+threshold, notification toggle and interval. Custom legacy coin/exchange allow-lists
+fail closed for explicit migration rather than silently broadening their scope.
 The last 100 normalized signals are retained for re-filtering. A settings change
 does not re-alert old signals; muted/filtered incoming signals remain deduplicated.
 Intervals batch alerts after the first immediate alert; queued alerts expire after

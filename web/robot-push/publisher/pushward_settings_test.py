@@ -18,20 +18,27 @@ class PreferenceBridgeTests(unittest.TestCase):
         self.bridge.configure(dict(copy.deepcopy(DEFAULTS), **changes), revision)
 
     def test_filter_percentage_is_rank_value_and_signed(self):
-        self.config(min_percent=0.39, exchanges=['OKX'], coins=['BTC'])
+        self.config(min_percent=0.39)
         self.bridge.tick(feed([message(title='BTC | FF | R0 +0.39%'), message(2,title='BTC | FF | R1 -0.9%')]), NOW)
         self.assertEqual([r['value'] for r in self.bridge.s['rows']], ['+0.39%'])
         self.assertEqual(self.notifications()[0][2]['title'], '雷达 · 1条新消息')
 
     def test_filter_modes_ranks_exchanges(self):
-        self.config(ranks=['R1'], modes=['SF'], exchanges=['ASTER'])
+        self.config(excluded_ranks=['R0'], excluded_modes=['FS','FF'], excluded_exchanges=['OKX'])
         self.bridge.tick(feed([message(), message(2,title='ARC | SF | R1 +0.4%',body='买 GATE 现货 → 卖 ASTER 永续')]), NOW)
         self.assertEqual([r['coin'] for r in self.bridge.s['rows']], ['ARC'])
+
+    def test_higher_ranks_selected_not_just_displayed(self):
+        self.config(excluded_ranks=['R0','R1'])
+        self.bridge.tick(feed([message(n=i+1,title=f'COIN{i} | FF | R{i} +0.8%') for i in range(5)]),NOW)
+        self.assertEqual([r['rank'] for r in self.bridge.s['rows']],['R2','R3','R4'])
+        self.assertEqual(len(self.notifications()),1)
+        self.assertIn('3条新消息',self.notifications()[0][2]['title'])
 
     def test_change_rows_and_filters_restores_history_without_realert(self):
         msgs=[message(i, title=f'COIN{i} | FF | R0 +0.39%') for i in range(1,9)]
         self.bridge.tick(feed(msgs),NOW)
-        self.config(rows=1, coins=['COIN2'])
+        self.config(rows=1, excluded_coins=[f'COIN{i}' for i in range(1,9) if i!=2])
         self.bridge.tick(feed(msgs,NOW+31),NOW+31)
         self.assertEqual([r['coin'] for r in self.bridge.s['rows']],['COIN2'])
         self.config(revision=2,rows=6)
@@ -67,16 +74,48 @@ class PreferenceBridgeTests(unittest.TestCase):
     def test_changed_filter_drops_pending_alert(self):
         self.bridge.tick(feed([message()]),NOW)
         self.bridge.tick(feed([message(2,at=NOW+1,title='ETH | FF | R1 +0.6%')],NOW+1),NOW+1)
-        self.config(coins=['BTC'])
+        self.config(excluded_coins=['ETH'])
         self.bridge.tick(feed([],NOW+31),NOW+31)
         self.assertEqual(len(self.notifications()),1)
+
+    def test_default_receives_unlisted_ranks_and_blocklist_excludes_only_matches(self):
+        ranks=['R0','R1','R5','R5+','R6+','R1000+','R20000']
+        msgs=[message(n=i+1,title=f'COIN{i} | FF | {rank} +0.8%') for i,rank in enumerate(ranks)]
+        self.bridge.tick(feed(msgs),NOW)
+        self.assertEqual(len(self.bridge.s['history']),7)
+        self.assertIn('7条新消息',self.notifications()[0][2]['title'])
+        self.config(excluded_ranks=['R0','R5','R1000+'])
+        self.bridge.tick(feed(msgs,NOW+31),NOW+31)
+        self.assertEqual([r['rank'] for r in self.bridge.s['rows']],['R1','R6+','R20000'])
+        self.assertEqual(len(self.notifications()),1)
+
+    def test_exchange_block_on_either_leg_and_all_modes_can_be_blocked(self):
+        self.config(excluded_exchanges=['BITGET'])
+        self.bridge.tick(feed([message()]),NOW)
+        self.assertEqual(self.bridge.s['rows'],[])
+        self.config(revision=2,excluded_modes=['SF','FS','FF'])
+        self.assertEqual(self.bridge.s['rows'],[])
+        self.config(revision=3)
+        self.assertEqual(len(self.bridge.s['rows']),1)
+        self.assertEqual(self.notifications(),[])
 
 
 class SettingsTests(unittest.TestCase):
     def test_strict_validation(self):
-        for change in [dict(rows=7),dict(rows=True),dict(rows=0),dict(ranks=[]),dict(modes=['XX']),dict(exchanges=['UNKNOWN']),dict(coins=['BTC<script>']),dict(min_percent=float('nan')),dict(min_percent=float('inf')),dict(notify_interval_seconds=1),dict(notify_enabled='false')]:
+        for change in [dict(rows=7),dict(rows=True),dict(rows=0),dict(excluded_ranks=['Rno']),dict(excluded_modes=['XX']),dict(excluded_exchanges=['UNKNOWN']),dict(excluded_coins=['BTC<script>']),dict(min_percent=float('nan')),dict(min_percent=float('inf')),dict(notify_interval_seconds=1),dict(notify_enabled='false')]:
             with self.subTest(change=change), self.assertRaises(ValueError): validate(dict(DEFAULTS,**change))
-        self.assertEqual(validate(dict(DEFAULTS,coins=['btc','BTC']))['coins'],['BTC'])
+        self.assertEqual(validate(dict(DEFAULTS,excluded_coins=['btc','BTC']))['excluded_coins'],['BTC'])
+
+    def test_old_defaults_migrate_to_receive_all_without_changing_frequency(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'preferences.json'
+            old=dict(rows=6,ranks=['R0','R1'],modes=['SF','FS','FF'],coins=[],exchanges=[],min_percent=None,notify_enabled=True,notify_interval_seconds=300)
+            path.write_text(json.dumps(dict(revision=2,settings=old)))
+            actual=Store(path).get()
+            self.assertEqual(actual['revision'],3)
+            self.assertEqual(actual['settings']['excluded_ranks'],[])
+            self.assertEqual(actual['settings']['notify_interval_seconds'],300)
+            self.assertEqual(Store(path).get(),actual)
 
     def test_atomic_persistence_and_conflict(self):
         with tempfile.TemporaryDirectory() as folder:

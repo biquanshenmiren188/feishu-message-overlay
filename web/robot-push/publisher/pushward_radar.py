@@ -21,7 +21,7 @@ API = 'https://api.pushward.app'
 EXCHANGES = {'BINANCE': 'BINANCE', 'BITGET': 'BITGET', 'BYBIT': 'BYBIT',
              'OKX': 'OKX', 'OKEX': 'OKX', 'GATE': 'GATE', 'GATE.IO': 'GATE',
              'ASTER': 'ASTER', 'HYPERLIQUID': 'HL', 'HL': 'HL'}
-RANK = re.compile(r'(?<![A-Z0-9])R([01])\s*([+-]?\d+(?:\.\d+)?)\s*%(?![\d.])', re.I)
+RANK = re.compile(r'(?<![A-Z0-9])R([0-9]{1,24})(?=\s|[+-])(\+(?=\s))?\s*([+-]?\d+(?:\.\d+)?)\s*%(?![\d.])', re.I)
 TITLE = re.compile(r'^\s*([A-Z0-9][A-Z0-9._-]{0,23})\s*[|·]\s*(SF|FS|FF)\b', re.I)
 DIRECTION = re.compile(r'(?:买入|买|做多)\s*([A-Z][A-Z0-9.]*)\s*(现货|永续|合约)?\s*(?:→|->|⇒)\s*(?:卖出|卖|做空)\s*([A-Z][A-Z0-9.]*)\s*(现货|永续|合约)?', re.I)
 
@@ -56,7 +56,7 @@ def parse_message(message, now):
         return None
     title, body = clean(title), clean(body)
     head, ranks, directions = TITLE.search(title), RANK.findall(title), DIRECTION.findall(body)
-    # The percentage must follow R0/R1 in the title. Never substitute net/funding rates.
+    # The percentage must follow the R rank in the title. Never substitute net/funding rates.
     if not head or len(ranks) != 1 or len(directions) != 1:
         return None
     coin, mode = head.group(1).upper(), head.group(2).upper()
@@ -67,12 +67,12 @@ def parse_message(message, now):
     for actual, expected in zip((buy_kind, sell_kind), mode):
         if actual and ('S' if actual == '现货' else 'F') != expected:
             return None
-    rank, value = ranks[0]
+    rank, suffix, value = ranks[0]
     if len(value) > 12:
         return None
     if not value.startswith(('+', '-')):
         value = '+' + value
-    fields = dict(coin=coin, mode=mode, buy=buy, sell=sell, rank='R'+rank, value=value+'%')
+    fields = dict(coin=coin, mode=mode, buy=buy, sell=sell, rank='R'+str(int(rank))+suffix, value=value+'%')
     return dict(fields, id=mid, at=int(sent), fingerprint=digest(fields))
 
 
@@ -84,7 +84,7 @@ def render(rows, connected):
         lines = [dict(text=f"{r['coin']:<{coin_width}} {r['mode']} {r['buy']+'→'+r['sell']:<{pair_width}} {r['rank']} {r['value']}",
                       at=r['at'], level='info') for r in rows]
     else:
-        lines = [dict(text='等待新的 R0 / R1 消息' if connected else '消息源断线，等待恢复', level='info')]
+        lines = [dict(text='等待符合筛选条件的新消息' if connected else '消息源断线，等待恢复', level='info')]
     return dict(template='log', state=state, icon='waveform.path.ecg',
                 accent_color='#00865F', progress=None, lines=lines)
 

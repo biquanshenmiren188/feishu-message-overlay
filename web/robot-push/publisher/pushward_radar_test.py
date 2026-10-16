@@ -52,9 +52,15 @@ class ParserTests(unittest.TestCase):
         self.assertEqual((r['coin'], r['mode'], r['rank'], r['value']), ('ZEREBRO', 'SF', 'R1', '-0.230%'))
 
     def test_no_funding_or_net_fallback(self):
-        for title in ['BTC | FF | R0', 'BTC | FF | R2 +0.8%', 'BTC | FF | R10 +0.8%', 'BTC | FF | R0 净收益 +0.8%']:
+        for title in ['BTC | FF | R0', 'BTC | FF | R10.8%', 'BTC | FF | R0 净收益 +0.8%']:
             with self.subTest(title=title):
                 self.assertIsNone(parse_message(message(title=title), NOW))
+
+    def test_arbitrary_ranks_parse_exact_rank_percentage(self):
+        for rank in ['R2','R3','R4','R5','R5+','R6+','R1000','R1000+','R987654321']:
+            with self.subTest(rank=rank):
+                row=parse_message(message(title=f'BTC | FF | {rank} +0.8%'),NOW)
+                self.assertEqual((row['rank'],row['value']),(rank,'+0.8%'))
 
     def test_aggregation_ambiguous_is_rejected(self):
         self.assertIsNone(parse_message(message(title='强信号聚集 | BTC | 3组', body='R1 | SF | 买 GATE → 卖 ASTER\n净均 +0.23%'), NOW))

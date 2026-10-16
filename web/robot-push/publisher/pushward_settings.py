@@ -15,10 +15,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PREFIX = '/radar/api/pushward'
-DEFAULTS = dict(rows=6, ranks=['R0', 'R1'], modes=['SF', 'FS', 'FF'], min_percent=None,
-                coins=[], exchanges=[], notify_enabled=True, notify_interval_seconds=30)
+DEFAULTS = dict(rows=6, excluded_ranks=[], excluded_modes=[], min_percent=None,
+                excluded_coins=[], excluded_exchanges=[], notify_enabled=True, notify_interval_seconds=30)
 EXCHANGES = ['BINANCE', 'BITGET', 'BYBIT', 'OKX', 'GATE', 'ASTER', 'HL']
 INTERVALS = [30, 60, 180, 300, 600, 1800]
+
+
+def normalize_rank(value):
+    match = re.fullmatch(r'R(\d{1,24})(\+?)', value.upper(), re.ASCII)
+    if not match:
+        raise ValueError('等级格式无效')
+    return 'R'+str(int(match[1]))+match[2]
 
 
 def validate(raw):
@@ -31,17 +38,19 @@ def validate(raw):
         raise ValueError('提醒开关无效')
     if type(out['notify_interval_seconds']) is not int or out['notify_interval_seconds'] not in INTERVALS:
         raise ValueError('请选择有效的提醒间隔')
-    for field, allowed in [('ranks', ['R0', 'R1']), ('modes', ['SF', 'FS', 'FF']), ('exchanges', EXCHANGES)]:
+    for field, allowed in [('excluded_modes', ['SF', 'FS', 'FF']), ('excluded_exchanges', EXCHANGES)]:
         values = out[field]
         if not isinstance(values, list) or len(values) > len(allowed) or any(type(v) is not str or v not in allowed for v in values):
             raise ValueError('筛选选项无效')
-        if field != 'exchanges' and not values:
-            raise ValueError('R 等级和组合类型各至少选择一项')
         out[field] = [v for v in allowed if v in values]
-    coins = out['coins']
+    ranks = out['excluded_ranks']
+    if not isinstance(ranks, list) or len(ranks) > 100 or any(not isinstance(v, str) for v in ranks):
+        raise ValueError('屏蔽等级无效')
+    out['excluded_ranks'] = sorted(set(normalize_rank(v) for v in ranks))
+    coins = out['excluded_coins']
     if not isinstance(coins, list) or len(coins) > 50 or any(not isinstance(v, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,23}', v) for v in coins):
         raise ValueError('币种最多 50 个，只填币种代码，例如 BTC、ETH')
-    out['coins'] = sorted(set(v.upper() for v in coins))
+    out['excluded_coins'] = sorted(set(v.upper() for v in coins))
     v = out['min_percent']
     if v is not None and (type(v) not in (int, float) or not math.isfinite(v) or not -100 <= v <= 100):
         raise ValueError('最低百分比需在 -100 到 100 之间，留空表示不限')
@@ -49,9 +58,9 @@ def validate(raw):
 
 
 def matches(row, settings):
-    return (row['rank'] in settings['ranks'] and row['mode'] in settings['modes']
-            and (not settings['coins'] or row['coin'] in settings['coins'])
-            and (not settings['exchanges'] or row['buy'] in settings['exchanges'] or row['sell'] in settings['exchanges'])
+    return (row['rank'] not in settings['excluded_ranks'] and row['rank'].rstrip('+') not in settings['excluded_ranks'] and row['mode'] not in settings['excluded_modes']
+            and row['coin'] not in settings['excluded_coins']
+            and row['buy'] not in settings['excluded_exchanges'] and row['sell'] not in settings['excluded_exchanges']
             and (settings['min_percent'] is None or Decimal(row['value'].rstrip('%')) >= Decimal(str(settings['min_percent']))))
 
 
@@ -68,7 +77,19 @@ class Store:
             value = json.loads(self.path.read_text(encoding='utf-8'))
             if type(value.get('revision')) is not int or value['revision'] < 0:
                 raise ValueError('invalid_settings_revision')
-            self.value = dict(revision=value['revision'], settings=validate(value['settings']))
+            raw = value['settings']
+            if 'ranks' in raw:
+                # Migrate the initial live allow-list draft to the owner's requested
+                # receive-all/block-list behavior, retaining non-filter preferences.
+                if raw.get('coins') or raw.get('exchanges') or set(raw.get('modes', [])) != {'SF','FS','FF'}:
+                    raise ValueError('custom_allow_list_requires_explicit_migration')
+                new = copy.deepcopy(DEFAULTS)
+                for key in ('rows','min_percent','notify_enabled','notify_interval_seconds'):
+                    new[key] = raw[key]
+                self.value['revision'] = value['revision']
+                self.save(new, value['revision'])
+            else:
+                self.value = dict(revision=value['revision'], settings=validate(raw))
 
     def get(self):
         with self.lock:

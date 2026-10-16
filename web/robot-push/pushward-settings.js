@@ -23,15 +23,18 @@ dialog.innerHTML = `
   <label for="ps-rows">显示条数</label><select id="ps-rows">${[1,2,3,4,5,6].map(n=>`<option value="${n}">${n} 条</option>`).join('')}</select>
   <p class="ps-hint">显示最近符合条件的消息，最新在下；不足时按实际条数显示。</p>
  </fieldset>
- <fieldset class="ps-section"><legend>消息筛选</legend>
-  <fieldset class="ps-options"><legend>R 等级</legend>${['R0','R1'].map(v=>`<label><input type="checkbox" name="ranks" value="${v}">${v}</label>`).join('')}</fieldset>
-  <fieldset class="ps-options"><legend>组合类型</legend>${['SF','FS','FF'].map(v=>`<label><input type="checkbox" name="modes" value="${v}">${v}</label>`).join('')}</fieldset>
+ <fieldset class="ps-section"><legend>屏蔽条件</legend>
+  <p class="ps-hint">默认全部接收。下面勾选或填写的才会被屏蔽；未列出的等级也正常接收。</p>
+  <fieldset class="ps-options"><legend>屏蔽等级（勾选即屏蔽）</legend>${['R0','R1','R2','R3','R4'].map(v=>`<label><input type="checkbox" name="excluded_ranks" value="${v}">${v}</label>`).join('')}</fieldset>
+  <label for="ps-ranks">其他屏蔽等级</label><input id="ps-ranks" type="text" maxlength="2800" placeholder="例如 R5, R6, R1000+" autocapitalize="characters" autocomplete="off">
+  <p class="ps-hint">无需逐个开启等级。多个屏蔽等级用逗号或空格分隔；R5 屏蔽 R5 和 R5+，单填 R5+ 只屏蔽原文中的 R5+。</p>
+  <fieldset class="ps-options"><legend>屏蔽组合类型</legend>${['SF','FS','FF'].map(v=>`<label><input type="checkbox" name="excluded_modes" value="${v}">${v}</label>`).join('')}</fieldset>
   <label for="ps-min">最低百分比（%）</label><input id="ps-min" type="number" min="-100" max="100" step="any" inputmode="decimal" placeholder="不限">
-  <p class="ps-hint">只比较标题中紧跟 R0 / R1 的百分比。例如填 0.3，表示至少 +0.30%。留空不限。</p>
-  <label for="ps-coins">币种</label><input id="ps-coins" type="text" maxlength="1300" placeholder="不限，例如 BTC, ETH" autocapitalize="characters" autocomplete="off">
-  <p class="ps-hint">多个币种用逗号或空格分隔，留空表示全部。</p>
-  <fieldset class="ps-options"><legend>交易所</legend>${['BINANCE','BITGET','BYBIT','OKX','GATE','ASTER','HL'].map(v=>`<label><input type="checkbox" name="exchanges" value="${v}">${v}</label>`).join('')}</fieldset>
-  <p class="ps-hint">不选表示全部；选择后，买卖任意一端包含所选交易所即可。</p>
+  <p class="ps-hint">只比较标题中紧跟 R 等级的百分比。例如填 0.3，表示至少 +0.30%。留空不限。</p>
+  <label for="ps-coins">屏蔽币种</label><input id="ps-coins" type="text" maxlength="1300" placeholder="不屏蔽，例如 BTC, ETH" autocapitalize="characters" autocomplete="off">
+  <p class="ps-hint">多个币种用逗号或空格分隔，留空不屏蔽。</p>
+  <fieldset class="ps-options"><legend>屏蔽交易所</legend>${['BINANCE','BITGET','BYBIT','OKX','GATE','ASTER','HL'].map(v=>`<label><input type="checkbox" name="excluded_exchanges" value="${v}">${v}</label>`).join('')}</fieldset>
+  <p class="ps-hint">不选表示不屏蔽；买卖任意一端包含所选交易所，该消息就不推送。</p>
  </fieldset>
  <fieldset class="ps-section"><legend>新消息提醒</legend>
   <label class="ps-switch"><input id="ps-notify" type="checkbox">开启通知提醒</label>
@@ -64,8 +67,9 @@ function health(data) {
 }
 function fill(data) {
   revision=data.revision; const s=data.settings;
-  $('ps-rows').value=s.rows; $('ps-min').value=s.min_percent??''; $('ps-coins').value=s.coins.join(', ');
-  for (const key of ['ranks','modes','exchanges']) for (const node of dialog.querySelectorAll(`[name="${key}"]`)) node.checked=s[key].includes(node.value);
+  $('ps-rows').value=s.rows; $('ps-min').value=s.min_percent??''; $('ps-coins').value=s.excluded_coins.join(', ');
+  $('ps-ranks').value=s.excluded_ranks.filter(v=>!['R0','R1','R2','R3','R4'].includes(v)).join(', ');
+  for (const key of ['excluded_ranks','excluded_modes','excluded_exchanges']) for (const node of dialog.querySelectorAll(`[name="${key}"]`)) node.checked=s[key].includes(node.value);
   $('ps-notify').checked=s.notify_enabled; $('ps-interval').value=s.notify_interval_seconds;
   $('ps-interval').disabled=!s.notify_enabled; $('ps-health').textContent=health(data);
   $('ps-form').hidden=false; $('ps-login').hidden=true;
@@ -92,11 +96,11 @@ async function confirmApplied(savedRevision, attempts=0) {
 $('ps-form').onsubmit=async event=>{
   event.preventDefault(); if(busy)return;
   const checked=name=>[...dialog.querySelectorAll(`[name="${name}"]:checked`)].map(n=>n.value);
-  const settings={rows:Number($('ps-rows').value),ranks:checked('ranks'),modes:checked('modes'),exchanges:checked('exchanges'),
-    min_percent:$('ps-min').value.trim()===''?null:Number($('ps-min').value),coins:$('ps-coins').value.trim().toUpperCase().split(/[,，\s]+/).filter(Boolean),
+  const settings={rows:Number($('ps-rows').value),excluded_ranks:[...checked('excluded_ranks'),...$('ps-ranks').value.trim().toUpperCase().split(/[,，\s]+/).filter(Boolean)],excluded_modes:checked('excluded_modes'),excluded_exchanges:checked('excluded_exchanges'),
+    min_percent:$('ps-min').value.trim()===''?null:Number($('ps-min').value),excluded_coins:$('ps-coins').value.trim().toUpperCase().split(/[,，\s]+/).filter(Boolean),
     notify_enabled:$('ps-notify').checked,notify_interval_seconds:Number($('ps-interval').value)};
-  if(!settings.ranks.length||!settings.modes.length){feedback('R 等级和组合类型各至少选择一项。',true);return;}
-  if(settings.coins.length>50||settings.coins.some(v=>! /^[A-Z0-9][A-Z0-9._-]{0,23}$/.test(v))){feedback('请填有效币种代码，最多 50 个，用逗号或空格分隔。',true);$('ps-coins').focus();return;}
+  if(settings.excluded_ranks.length>100||settings.excluded_ranks.some(v=>! /^R\d{1,24}\+?$/.test(v))){feedback('屏蔽等级格式错误，例如 R5、R1000+；最多 100 个。',true);$('ps-ranks').focus();return;}
+  if(settings.excluded_coins.length>50||settings.excluded_coins.some(v=>! /^[A-Z0-9][A-Z0-9._-]{0,23}$/.test(v))){feedback('请填有效币种代码，最多 50 个，用逗号或空格分隔。',true);$('ps-coins').focus();return;}
   busy=true; $('ps-save').disabled=true; feedback('正在保存…'); clearTimeout(pollTimer);
   try {const data=await request('/settings',{revision,settings});revision=data.revision;feedback('已保存，正在确认生效…');await confirmApplied(revision);}
   catch(e){failure(e);}finally{busy=false;$('ps-save').disabled=false;}
