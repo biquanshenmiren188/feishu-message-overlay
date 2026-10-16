@@ -239,6 +239,12 @@ class Bridge:
             self.s['update_after'] = 0
             self.s.pop('activity_error', None)
             self.save()
+        used, limit = q.get('notifications_used'), q.get('notifications_limit')
+        if self.s.get('last_notification', {}).get('state') == 'quota.exceeded' and (me.get('subscribed') is True or
+                isinstance(used, int) and isinstance(limit, int) and used < limit):
+            self.s['notify_after'] = 0
+            self.s['last_notification']['state'] = 'quota_available_again'
+            self.save()
         self.quota_checked = now
 
     def check_activity(self, now):
