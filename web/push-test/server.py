@@ -129,7 +129,9 @@ class Trial:
             self.save()
             threading.Thread(target=self.run_campaign, args=(run, now + 30, self.stop_event), daemon=True).start()
 
-    def resend(self, compact=False):
+    def resend(self, compact=False, rows=6):
+        if type(rows) is not int or not 1 <= rows <= 6:
+            raise ValueError('示例条数必须在 1 到 6 之间')
         with self.lock:
             if not self.state.get('subscription'):
                 raise ValueError('请先启用通知')
@@ -144,6 +146,7 @@ class Trial:
             if compact:
                 payload['title'] = ''
                 payload['rows'] = [row.replace('BINANCE','币安').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')[:-3] for row in payload['rows']]
+            payload['rows'] = payload['rows'][-rows:]
             self.save()
             status, error = None, None
             try:
@@ -152,7 +155,7 @@ class Trial:
                 status = getattr(getattr(exc, 'response', None), 'status_code', None)
                 error = type(exc).__name__
             result = {'at': time.time(), 'seq': payload['seq'], 'run': payload['run'],
-                      'rows': 6, 'http': status, 'error': error}
+                      'rows': len(payload['rows']), 'http': status, 'error': error}
             self.state['sends'].append(result)
             self.state['sends'] = self.state['sends'][-30:]
             self.save()
@@ -277,7 +280,7 @@ def handler(trial):
                 elif route == 'start':
                     trial.start()
                 elif route == 'resend':
-                    return self.reply(200, trial.resend(compact=data.get('compact') is True))
+                    return self.reply(200, trial.resend(compact=data.get('compact') is True, rows=data.get('rows', 6)))
                 elif route == 'stop':
                     trial.stop()
                 elif route == 'receipt':
