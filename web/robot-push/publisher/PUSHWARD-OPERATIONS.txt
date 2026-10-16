@@ -1,0 +1,45 @@
+六行雷达锁屏转发
+
+用途
+读取现有 robot-push 服务原子写入的 /var/lib/robot-push/feed.json，筛选机器人消息标题中的 R0/R1 及紧随的百分比。保留币种、SF/FS/FF、买卖交易所、等级、该百分比和原始发送时间。仅向配置密钥所属的 PushWard 账户转发。
+不新增飞书连接、不更改群权限、不写原有 feed、不接触交易操作。独立服务不会重启桌面小窗或 robot-push。
+
+消息规则
+标题格式示例：BTC | FF | V2收敛 | R0 +0.39%。正文需有且只有一组可识别的“买 OKX 永续 → 卖 Bitget 永续”。
+支持 BINANCE、BITGET、BYBIT、OKX/OKEX、GATE/GATE.IO、ASTER、HYPERLIQUID/HL。明确的现货/永续种类必须与 SF/FS/FF 一致。
+没有紧跟等级的百分比、R2以上等级、聚合多组合、未知平台或方向不完整时不猜测、不发送。净收益、盘口差和资金费率都不能替代标题中的百分比。
+最多六条，按原始时间从上到下递增。没有真实消息时显示等待提示，不保留虚构示例凑行数。
+相同消息ID持久化去重；同内容跨ID在两分钟内合并。仅最近两分钟且在首次启用之后的新消息响铃；启动前的近30分钟消息可用于展示，不补响。接收中断超过90秒时显示断线状态，恢复后仅提醒仍在两分钟窗口的新消息。
+30秒内的发送合并；这一周期内超过六条时，卡片和提醒正文展示最新六条，提醒标题保留本批数量。不是每秒刷新；右侧时间由客户端依据原始时间显示。
+
+私有部署
+需要 Linux Python3 和支持 LoadCredential 的 systemd。使用专用 pushward-radar 系统账户。线上 feed 的目录设置了 www-data 组继承，文件为 robot-push:www-data 0640，因此 SupplementaryGroups=www-data 用于读取；不可凭服务名猜测所属组。异地部署先用 namei -l 核实实际权限。该服务通过 InaccessiblePaths 禁止访问现有飞书私有配置和签名公钥目录。
+代码：/opt/pushward-radar/pushward_radar.py
+密钥：/etc/pushward-radar/key，root:root 0600，由 systemd LoadCredential 交给服务；禁止加入源码或命令行。
+设置：/etc/pushward-radar/settings，仅一行 PUSHWARD_ACTIVITY_SLUG=<已核对的活动标识>。
+安装提供的 pushward-radar.service 后，systemctl enable --now pushward-radar。
+已有正常活动优先复用。服务端明确 ended 后，有新信号或八小时内消息时用 generic 启动，间隔至少30秒转成 log。此路径曾人工实机成功，但不能保证每次远程启动都到手机；不能用 ongoing 或HTTP200代替实际到达确认。
+不要把演示构建脚本接入生产，也不要把测试消息写入真实 feed。
+
+运行与恢复
+systemctl status pushward-radar
+sudo cat /var/lib/pushward-radar/status.json
+状态包含来源新鲜度、行数、API接受计数、最后提醒状态、错误和重试时间，不包含消息正文或凭据。
+state.json 权限0600、目录0700，保存最多六条归一化信号、最多100条短期待提醒和最多10000条/48小时去重记录；不保存原始消息正文、群ID或API密钥。
+同一个 state-directory 只有一个进程能加锁；重启沿用同一个目录，不能清空状态后重新启用来“修复”重复提醒。
+更新超时后先 GET 核对服务端状态，不重复写入已接受的同一内容。普通提醒的结果不明时记录 unknown，不自动重发，避免手机重复报警；因此它不是绝不漏报的 exactly-once 系统。明确429按 Retry-After 退避，超过两分钟的待提醒过期后不补响。
+临时错误退避最长15分钟；401/403需检查凭据授权，不会打印原始接口响应或凭据。活动与普通提醒分别处理，活动额度耗尽不阻断普通提醒。
+PushWard免费额度为实时活动250次/月、通知500次/月，服务记录用量；活动额度耗尽时只尝试一条普通提示，等待服务端重置时间。每小时重新检查订阅/额度以识别升级。服务不代购套餐。
+每小时重新核对活动和通知额度，检测到升级或额度恢复后解除相应退避，过期提醒仍不补发；重启也会重新查询额度，不需要清空去重状态。
+系统可在八小时结束实时活动；本服务无空闲保活洪泛。没有新消息且内容已超过八小时，不反复启动旧卡。它保留原始消息时间，旧内容不冒充新机会。
+
+停止与回滚
+systemctl disable --now pushward-radar 只停止本转发。原 robot-push、网页、小窗不变。
+保留 /var/lib/pushward-radar/state.json 和密钥以供恢复。初次安装没有原版本代码需恢复；以后发布前备份本服务代码和单元，再替换、语法检查和健康验收，失败恢复本服务备份。
+停止服务不会自动删除手机卡片或本人的通知记录。
+
+验证
+python -m unittest -v pushward_radar_test
+测试用 FakeClient，不发真实推送；覆盖来源/标题解析、R0百分比与净收益区分、六行排序、持久去重、启动旧消息静音、来源断线、合并、额度、429、超时结果不明、单活动恢复序列。
+生产验收必须分开写：源码和服务运行、真实 feed 读取、合格消息自然到达、PushWard接受、手机实际显示。这些不能互相替代。
+官方依据：https://pushward.app/bn/docs/api/activities 、https://pushward.app/bn/docs/live-activities/log 、https://pushward.app/docs/limits

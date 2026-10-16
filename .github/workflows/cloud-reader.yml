@@ -23,3 +23,4 @@ jobs:
       - run: python web/robot-push/publisher/desktop_cards_test.py
       - run: python web/robot-push/publisher/cloud_config_test.py
       - run: python web/robot-push/publisher/cloud_receiver_test.py
+      - run: python web/robot-push/publisher/pushward_radar_test.py
