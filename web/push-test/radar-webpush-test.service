@@ -1,0 +1,31 @@
+[Unit]
+Description=Radar BOT Web Push
+After=network-online.target
+
+[Service]
+Type=simple
+User=radar-webpush-test
+Group=radar-webpush-test
+SupplementaryGroups=www-data
+ExecStart=/opt/radar-webpush-test/venv/bin/python /opt/radar-webpush-test/server.py
+Environment=RADAR_LIVE_FEED=/var/lib/robot-push/feed.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/radar-webpush-test
+ReadOnlyPaths=/var/lib/robot-push
+InaccessiblePaths=-/opt/robot-push
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+TasksMax=16
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target
