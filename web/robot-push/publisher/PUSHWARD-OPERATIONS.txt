@@ -13,7 +13,7 @@
 30秒内的发送合并；这一周期内超过六条时，卡片和提醒正文展示最新六条，提醒标题保留本批数量。不是每秒刷新；右侧时间由客户端依据原始时间显示。
 
 私有部署
-需要 Linux Python3 和支持 LoadCredential 的 systemd。使用专用 pushward-radar 系统账户，SupplementaryGroups=robot-push 仅为读取现有 feed。该服务通过 InaccessiblePaths 禁止访问现有飞书私有配置和签名公钥目录。
+需要 Linux Python3 和支持 LoadCredential 的 systemd。使用专用 pushward-radar 系统账户。线上 feed 的目录设置了 www-data 组继承，文件为 robot-push:www-data 0640，因此 SupplementaryGroups=www-data 用于读取；不可凭服务名猜测所属组。异地部署先用 namei -l 核实实际权限。该服务通过 InaccessiblePaths 禁止访问现有飞书私有配置和签名公钥目录。
 代码：/opt/pushward-radar/pushward_radar.py
 密钥：/etc/pushward-radar/key，root:root 0600，由 systemd LoadCredential 交给服务；禁止加入源码或命令行。
 设置：/etc/pushward-radar/settings，仅一行 PUSHWARD_ACTIVITY_SLUG=<已核对的活动标识>。

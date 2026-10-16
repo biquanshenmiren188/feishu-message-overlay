@@ -407,8 +407,10 @@ def main():
             feed = json.loads(path.read_text(encoding='utf-8'))
             if not isinstance(feed, dict):
                 raise ValueError('feed_schema')
-        except (OSError, ValueError):
+            bridge.status.pop('feedReadError', None)
+        except (OSError, ValueError) as e:
             feed = {}
+            bridge.status['feedReadError'] = type(e).__name__
         bridge.tick(feed, time.time())
         time.sleep(2)
 
