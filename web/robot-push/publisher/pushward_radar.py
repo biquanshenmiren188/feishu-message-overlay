@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from pushward_settings import DEFAULTS, Store, SettingsServer, matches, validate
 
 API = 'https://api.pushward.app'
 EXCHANGES = {'BINANCE': 'BINANCE', 'BITGET': 'BITGET', 'BYBIT': 'BYBIT',
@@ -164,6 +165,9 @@ class Bridge:
                           pushed='', last_push=0, notify_after=0, update_after=0,
                           bootstrap_until=0, counters={})
         self.min_interval = max(30, min_interval)
+        self.settings = validate(DEFAULTS)
+        self.settings_revision = -1
+        self.s.setdefault('history', list(self.s['rows']))
         self.remote = None
         self.remote_checked = 0
         self.quota_checked = 0
@@ -179,6 +183,20 @@ class Bridge:
 
     def count(self, key, value=1):
         self.s['counters'][key] = self.s['counters'].get(key, 0)+value
+
+    def configure(self, settings, revision):
+        if revision == self.settings_revision:
+            return
+        self.settings = validate(settings)
+        self.settings_revision = revision
+        self.refresh_selection()
+        self.status['settingsRevision'] = revision
+        self.status_written = 0
+        self.save()
+
+    def refresh_selection(self):
+        self.s['rows'] = [r for r in self.s['history'] if matches(r, self.settings)][-self.settings['rows']:]
+        self.s['pending'] = [r for r in self.s['pending'] if self.settings['notify_enabled'] and matches(r, self.settings)]
 
     def ingest(self, feed, now):
         updated = stamp(feed.get('updatedAt'))
@@ -210,14 +228,17 @@ class Bridge:
                 self.count('duplicate_content')
                 continue
             self.s['recent_content'][row['fingerprint']] = row['at']
-            self.s['rows'] = sorted(self.s['rows']+[row], key=lambda r:(r['at'], r['id']))[-6:]
-            if row['at'] >= self.s['activated'] and -30 <= now-row['at'] <= 120:
+            self.s['history'] = sorted(self.s['history']+[row], key=lambda r:(r['at'], r['id']))[-100:]
+            if not matches(row, self.settings) or not self.settings['notify_enabled']:
+                self.count('filtered_or_muted')
+            elif row['at'] >= self.s['activated'] and -30 <= now-row['at'] <= 120:
                 self.s['pending'] = (self.s['pending']+[row])[-100:]
             else:
                 self.count('history_without_alert')
         if len(self.s['seen']) > 10000:
             self.s['seen'] = dict(sorted(self.s['seen'].items(), key=lambda kv:kv[1])[-10000:])
         if changed:
+            self.refresh_selection()
             self.save()
 
     def check_quota(self, now):
@@ -308,9 +329,11 @@ class Bridge:
         self.status.pop('activityError', None)
 
     def notify(self, now):
-        if now < self.s['notify_after']:
+        interval = self.settings['notify_interval_seconds']
+        last_attempt = self.s.get('last_notification', {}).get('at', 0)
+        if not self.settings['notify_enabled'] or now < self.s['notify_after'] or now < last_attempt+interval:
             return
-        pending = [r for r in self.s['pending'] if 0 <= now-r['at'] <= 120]
+        pending = [r for r in self.s['pending'] if 0 <= now-r['at'] <= max(120, interval+30)]
         future = [r for r in self.s['pending'] if 0 < r['at']-now <= 30]
         if not pending:
             if len(self.s['pending']) != len(future):
@@ -320,7 +343,7 @@ class Bridge:
             return
         pending.sort(key=lambda r:(r['at'], r['id']))
         batch_id = digest([r['id'] for r in pending])
-        rows = pending[-6:]
+        rows = pending[-self.settings['rows']:]
         body = '\n'.join(f"{r['coin']} {r['mode']} {r['buy']}→{r['sell']} {r['rank']} {r['value']}" for r in rows)
         payload = dict(title='雷达 · '+str(len(pending))+'条新消息', body=body,
                        source='radar-live', source_display_name='雷达', thread_id='radar-live',
@@ -349,7 +372,7 @@ class Bridge:
     def quota_notice(self, now):
         # One ordinary notification per quota period; do not turn a failure into a retry storm.
         period = datetime.fromtimestamp(now, timezone.utc).strftime('%Y%m')
-        if self.s.get('activity_error') != 'quota.exceeded' or self.s.get('quota_notice') == period:
+        if not self.settings['notify_enabled'] or self.s.get('activity_error') != 'quota.exceeded' or self.s.get('quota_notice') == period:
             return
         self.s['quota_notice'] = period
         self.save()
@@ -404,6 +427,9 @@ def main():
     p.add_argument('--state-directory', required=True)
     p.add_argument('--slug', required=True)
     p.add_argument('--key-file', required=True)
+    p.add_argument('--admin-key-file')
+    p.add_argument('--settings-port', type=int, default=18884)
+    p.add_argument('--settings-origin', default='https://leida.shenmiren.work')
     args = p.parse_args()
     # The deployed Linux service has one durable owner, including manual invocations.
     import fcntl
@@ -413,6 +439,12 @@ def main():
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     client = Client(Path(args.key_file).read_text(encoding='utf-8').strip())
     bridge = Bridge(client, args.state_directory, args.slug, time.time())
+    store = Store(directory/'preferences.json')
+    if args.admin_key_file:
+        import threading
+        settings_server = SettingsServer(('127.0.0.1', args.settings_port), store,
+            Path(args.admin_key_file).read_text(encoding='utf-8').strip(), directory, args.settings_origin)
+        threading.Thread(target=settings_server.serve_forever, daemon=True).start()
     running = True
     def stop(*_):
         nonlocal running
@@ -420,6 +452,8 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     while running:
+        preferences = store.get()
+        bridge.configure(preferences['settings'], preferences['revision'])
         try:
             path = Path(args.feed)
             if path.stat().st_size > 2*1024*1024:
