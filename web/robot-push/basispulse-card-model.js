@@ -33,11 +33,14 @@ export function strategyCopy(data) {
 export function gcStrategyCopy(data) {
   const legs=data.details?.legs;
   const supported=new Set(['binance','bybit','gate','okx','hyperliquid']);
-  if(!['SF','FF'].includes(data.strategy) || legs?.length!==2 || legs.some(l=>typeof l.spot!=='boolean') || !legs.some(l=>supported.has(l.exchange)) || data.strategy==='SF'&&legs[0].exchange==='hyperliquid')return null;
+  if(!['SF','FS','FF'].includes(data.strategy) || legs?.length!==2 || legs.some(l=>typeof l.spot!=='boolean') || data.strategy==='SF'&&legs[0].exchange==='hyperliquid')return null;
+  // FS keeps its borrowing spot leg ordinary; only the futures buy leg can use GC.
+  const buyGc=supported.has(legs[0].exchange),sellGc=data.strategy!=='FS'&&supported.has(legs[1].exchange);
+  if(!buyGc&&!sellGc)return null;
   const normal=strategyCopy(data);if(!normal)return null;
   const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));
-  if(supported.has(legs[0].exchange))payload.buyEx='gc-'+payload.buyEx;
-  if(supported.has(legs[1].exchange))payload.sellEx='gc-'+payload.sellEx;
+  if(buyGc)payload.buyEx='gc-'+payload.buyEx;
+  if(sellGc)payload.sellEx='gc-'+payload.sellEx;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify(payload,null,2);
 }
 

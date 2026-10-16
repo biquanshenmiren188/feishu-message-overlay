@@ -57,11 +57,16 @@ internal sealed class OpportunityModel
     {
         var legs=Array(Get(data,"details"),"legs",3);
         var supported=new[]{"binance","bybit","gate","okx","hyperliquid"};
-        if(Text(data,"strategy") is not ("SF" or "FF")||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind is not (JsonValueKind.True or JsonValueKind.False))||!legs.Any(l=>supported.Contains(Text(l,"exchange")))||Text(data,"strategy")=="SF"&&Text(legs[0],"exchange")=="hyperliquid")return null;
+        var strategy=Text(data,"strategy");
+        if(strategy is not ("SF" or "FS" or "FF")||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind is not (JsonValueKind.True or JsonValueKind.False))||strategy=="SF"&&Text(legs[0],"exchange")=="hyperliquid")return null;
+        // FS borrows on the spot sell leg. Astro accepts cross margin only on ordinary venues.
+        var buyGc=supported.Contains(Text(legs[0],"exchange"));
+        var sellGc=strategy!="FS"&&supported.Contains(Text(legs[1],"exchange"));
+        if(!buyGc&&!sellGc)return null;
         var normal=CopyStrategy(data);if(normal is null)return null;
         var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
-        if(supported.Contains(Text(legs[0],"exchange")))payload["buyEx"]="gc-"+payload["buyEx"];
-        if(supported.Contains(Text(legs[1],"exchange")))payload["sellEx"]="gc-"+payload["sellEx"];
+        if(buyGc)payload["buyEx"]="gc-"+payload["buyEx"];
+        if(sellGc)payload["sellEx"]="gc-"+payload["sellEx"];
         return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
     }
     internal static bool GcBothLegs(JsonElement data)

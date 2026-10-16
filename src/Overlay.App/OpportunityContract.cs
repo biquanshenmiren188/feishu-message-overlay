@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -47,6 +47,16 @@ public partial class MainWindow
             Check(payload["type"]=="FF"&&payload["name"]==fixture.Item1&&payload["buyEx"]==fixture.Item6&&payload["sellEx"]==fixture.Item7,fixture.Item1+" GC direction and normalized name");
         }
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","1000PEPEUSDT","hyperliquid","PEPE")) is null,"GC mismatched contract rejected");
+        JsonElement FsFixture(string buy="hyperliquid",string sell="bitget",string sellSymbol="BERAUSDT")=>JsonSerializer.SerializeToElement(new{asset="BERA",strategy="FS",enteredAt=now,validUntil=now.AddMinutes(2),radarUrl="https://leida.shenmiren.work/radar/",details=new{legs=new[]{new{exchange=buy,symbol="BERAUSDT",spot=false,hours=1,rate=-.0003},new{exchange=sell,symbol=sellSymbol,spot=true,hours=0,rate=0.0}}}});
+        var bera=FsFixture();
+        var beraExpected="ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(new{type="FS",name="BERA",buyEx="gc-hl",sellEx="bitget",spotMarginType="cross"},new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+        Check(OpportunityModel.CopyGcStrategy(bera)==beraExpected,"BERA FS supports GC HL futures with ordinary Bitget margin spot");
+        foreach(var buy in new[]{"binance","bybit","gate","okx","hyperliquid"})foreach(var sell in new[]{"binance","bybit","gate","okx","bitget"}){
+            var fixture=FsFixture(buy,sell);var text=OpportunityModel.CopyGcStrategy(fixture)!;
+            var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(text[(text.IndexOf('\n')+1)..])!;
+            Check(payload["buyEx"]=="gc-"+(buy=="hyperliquid"?"hl":buy)&&payload["sellEx"]==sell&&payload["spotMarginType"]=="cross"&&!OpportunityModel.GcBothLegs(fixture),"FS converts only futures, preserves cross-margin spot and single-GC style");
+        }
+        foreach(var fixture in new[]{FsFixture("aster","binance"),FsFixture("bitget","okx"),FsFixture("hyperliquid","aster"),FsFixture("hyperliquid","hyperliquid"),FsFixture("hyperliquid","bitget","1000BERAUSDT")})Check(OpportunityModel.CopyGcStrategy(fixture) is null,"FS ineligible market or unequal contract rejected");
         Check(OpportunityModel.Radar(JsonSerializer.SerializeToElement(new{radarUrl="https://evil.example/radar/"})) is null,"foreign radar rejected");
         Check(OpportunityModel.Percent(.0001,.01)=="+0.01%"&&OpportunityModel.Percent(19)=="+0.19%","correct funding and basis units");
         var detail=OpportunityModel.Get(raw,"details");var transfers=OpportunityBoard.Transfers(OpportunityModel.Array(detail,"legs",2),OpportunityModel.Array(detail,"transferWallets",20),now);
@@ -92,6 +102,9 @@ public partial class MainWindow
         var savedClipboard=await ReadClipboard(Clipboard.GetDataObject);
         try
         {
+            var beraView=opportunityBoard.Build(new OpportunityModel.Entry(bera),now);
+            Buttons(beraView).Single(b=>Equals(b.Content,"复制 GC")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(await ReadClipboard(()=>Clipboard.GetText())==beraExpected,"real BERA FS GC button writes the exact import payload");
             chineseCopy.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             var clipboard=await ReadClipboard(()=>Clipboard.GetText());
             Check(clipboard=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"SF\",\n  \"name\": \"龙虾\",\n  \"buyEx\": \"gate\",\n  \"sellEx\": \"binance\"\n}","real WPF copy click writes Chinese SF strategy to system clipboard, not card text");
@@ -149,6 +162,8 @@ public partial class MainWindow
             var bmp=new RenderTargetBitmap((int)Math.Ceiling(visual.ActualWidth*scale),(int)Math.Ceiling(visual.ActualHeight*scale),96*scale,96*scale,PixelFormats.Pbgra32);bmp.Render(visual);
             var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using var file=File.Create(output+suffix);png.Save(file);
         }
+        var beraPreview=opportunityBoard.Build(new OpportunityModel.Entry(bera),now);beraPreview.Resources=Resources;
+        beraPreview.Measure(new Size(320,double.PositiveInfinity));beraPreview.Arrange(new Rect(0,0,320,beraPreview.DesiredSize.Height));beraPreview.UpdateLayout();Capture(beraPreview,"-bera-fs.png",1.5);
         var gcExamples=new System.Windows.Controls.StackPanel{Width=320,Background=Brushes.White,Resources=Resources};
         foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP"),("ZERBRO","bybit","ZERBROUSDT","aster","ZERBROUSDT")})
         {

@@ -130,3 +130,15 @@ test('single GC leg keeps the other venue ordinary; only double GC gets a green 
  assert.equal(gcBothLegs(gcFixture()),true);assert.equal(gcBothLegs(gcFixture('bitget','aster','GRIFFAINUSDT')),false);
  const spot=gcFixture('bitget','bybit','GRIFFAINUSDT');spot.strategy='SF';spot.details.legs[0].spot=true;assert.equal(JSON.parse(gcStrategyCopy(spot).split('\n').slice(1).join('\n')).buyEx,'bitget');
 });
+
+test('FS GC copies BERA HL/Bitget and never converts the borrowing spot leg',()=>{
+ for(const buy of ['binance','bybit','gate','okx','hyperliquid','aster','bitget'])for(const sell of ['binance','bybit','gate','okx','bitget','aster','hyperliquid']){
+  const d={strategy:'FS',details:{legs:[{exchange:buy,symbol:buy==='hyperliquid'?'BERA':'BERAUSDT',spot:false},{exchange:sell,symbol:'BERAUSDT',spot:true}]}};
+  const result=gcStrategyCopy(d);
+  if(['aster','bitget'].includes(buy)||['aster','hyperliquid'].includes(sell)){assert.equal(result,null);continue;}
+  assert.deepEqual(JSON.parse(result.slice('ASTRO-QUICK-COPY:'.length)),{type:'FS',name:'BERA',buyEx:'gc-'+(buy==='hyperliquid'?'hl':buy),sellEx:sell,spotMarginType:'cross'});
+  assert.equal(gcBothLegs(d),false);
+  d.details.legs[1].symbol='1000BERAUSDT';assert.equal(gcStrategyCopy(d),null);
+  d.details.legs[1].symbol='BERAUSDT';d.details.legs[1].spot=false;assert.equal(gcStrategyCopy(d),null);
+ }
+});
