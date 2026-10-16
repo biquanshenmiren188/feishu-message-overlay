@@ -72,6 +72,11 @@ class ParserTests(unittest.TestCase):
             self.assertIsNone(parse_message(message(body=body), NOW))
         self.assertEqual(parse_message(message(body='买 Hyperliquid 永续 → 卖 Bitget 永续'), NOW)['buy'], 'HL')
 
+    def test_same_exchange_spot_future_is_valid(self):
+        r = parse_message(message(title='SUPER｜FS｜V2收敛｜R0 +0.43%', body='买 Bitget 永续 → 卖 Bitget 现货\n均值：净收益0.181%｜盘口差+0.246%'), NOW)
+        self.assertEqual((r['buy'], r['sell'], r['mode'], r['value']), ('BITGET', 'BITGET', 'FS', '+0.43%'))
+        self.assertIsNotNone(parse_message(message(title='SUPER | SF | R1 +0.43%', body='买 Bitget 现货 → 卖 Bitget 永续'), NOW))
+
 
 class BridgeTests(unittest.TestCase):
     def setUp(self):

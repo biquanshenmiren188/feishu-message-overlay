@@ -61,7 +61,7 @@ def parse_message(message, now):
     coin, mode = head.group(1).upper(), head.group(2).upper()
     buy, buy_kind, sell, sell_kind = directions[0]
     buy, sell = EXCHANGES.get(buy.upper()), EXCHANGES.get(sell.upper())
-    if not buy or not sell or buy == sell:
+    if not buy or not sell or (buy == sell and mode == 'FF'):
         return None
     for actual, expected in zip((buy_kind, sell_kind), mode):
         if actual and ('S' if actual == '现货' else 'F') != expected:
