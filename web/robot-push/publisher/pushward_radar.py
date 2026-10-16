@@ -76,7 +76,7 @@ def parse_message(message, now):
 
 
 def render(rows, connected):
-    state = '最近消息 · 最新在下' if connected else '消息源断线 · 内容未更新'
+    state = None if connected else '消息源断线 · 内容未更新'
     if rows:
         coin_width = max(7, max(len(r['coin']) for r in rows))
         pair_width = max(11, max(len(r['buy']+'→'+r['sell']) for r in rows))
@@ -272,7 +272,7 @@ class Bridge:
                 self.status['activity'] = 'ended_waiting_for_new_signal'
                 return
             self.remote = self.client.call('PATCH', '/activities/'+self.slug, dict(state='ongoing', content={
-                'template':'generic', 'state':'正在恢复雷达列表', 'progress':0.5,
+                'template':'generic', 'state':None, 'progress':0.5,
                 'lines':None, 'icon':'waveform.path.ecg', 'accent_color':'#00865F'}))
             self.s['bootstrap_until'] = now+self.min_interval
             self.s['last_push'] = now
