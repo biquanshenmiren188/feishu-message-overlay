@@ -129,6 +129,32 @@ class Trial:
             self.save()
             threading.Thread(target=self.run_campaign, args=(run, now + 30, self.stop_event), daemon=True).start()
 
+    def resend(self):
+        with self.lock:
+            if not self.state.get('subscription'):
+                raise ValueError('请先启用通知')
+            if self.state.get('campaign', {}).get('state') in ('scheduled', 'running'):
+                raise ValueError('请等待当前测试结束')
+            if time.time() - self.state.get('lastResendAt', 0) < 30:
+                raise ValueError('请间隔 30 秒再补推')
+            self.state['lastResendAt'] = time.time()
+            self.state['seq'] += 1
+            payload = {'kind': 'radar-six-test', 'seq': self.state['seq'],
+                       'run': secrets.token_hex(6), 'rows': rows_for(7, time.time()-180)}
+            self.save()
+            status, error = None, None
+            try:
+                status = self.sender(self.state['subscription'], payload)
+            except Exception as exc:
+                status = getattr(getattr(exc, 'response', None), 'status_code', None)
+                error = type(exc).__name__
+            result = {'at': time.time(), 'seq': payload['seq'], 'run': payload['run'],
+                      'rows': 6, 'http': status, 'error': error}
+            self.state['sends'].append(result)
+            self.state['sends'] = self.state['sends'][-30:]
+            self.save()
+            return result
+
     def stop(self):
         with self.lock:
             self.stop_event.set()
@@ -247,6 +273,8 @@ def handler(trial):
                     trial.subscribe(data.get('subscription'))
                 elif route == 'start':
                     trial.start()
+                elif route == 'resend':
+                    return self.reply(200, trial.resend())
                 elif route == 'stop':
                     trial.stop()
                 elif route == 'receipt':

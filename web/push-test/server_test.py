@@ -17,6 +17,18 @@ class TrialTests(unittest.TestCase):
         self.sent = []
         self.app = Trial(self.root / 'state', config, lambda sub,payload:self.sent.append(payload) or 201)
 
+    def test_resend_one_six_line_notification(self):
+        self.app.state['subscription'] = {'test': True}
+        self.app.state['seq'] = 7
+        result = self.app.resend()
+        self.assertEqual(result['http'], 201)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0]['seq'], 8)
+        self.assertEqual(len(self.sent[0]['rows']), 6)
+        self.assertTrue(self.sent[0]['rows'][-1].startswith('ETH '))
+        with self.assertRaises(ValueError):self.app.resend()
+        self.assertEqual(len(self.sent), 1)
+
     def test_window_and_order(self):
         for step in range(1,8):
             rows=rows_for(step,0)
