@@ -1,0 +1,36 @@
+[Unit]
+Description=Six-line radar feed to owner's PushWard
+After=network-online.target robot-push.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=pushward-radar
+Group=pushward-radar
+SupplementaryGroups=robot-push
+LoadCredential=pushward-key:/etc/pushward-radar/key
+EnvironmentFile=/etc/pushward-radar/settings
+ExecStart=/usr/bin/python3 /opt/pushward-radar/pushward_radar.py --feed /var/lib/robot-push/feed.json --state-directory /var/lib/pushward-radar --slug ${PUSHWARD_ACTIVITY_SLUG} --key-file ${CREDENTIALS_DIRECTORY}/pushward-key
+StateDirectory=pushward-radar
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=35
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+InaccessiblePaths=/var/lib/robot-push-private /etc/robot-push
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=96M
+TasksMax=4
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target
