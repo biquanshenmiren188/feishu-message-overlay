@@ -18,6 +18,8 @@ from pathlib import Path
 from pushward_settings import DEFAULTS, Store, SettingsServer, matches, validate
 
 API = 'https://api.pushward.app'
+# Conservative bridge policy, not a published Apple budget or reset interval.
+START_COOLDOWN = 3600
 EXCHANGES = {'BINANCE': 'BINANCE', 'BITGET': 'BITGET', 'BYBIT': 'BYBIT',
              'OKX': 'OKX', 'OKEX': 'OKX', 'GATE': 'GATE', 'GATE.IO': 'GATE',
              'ASTER': 'ASTER', 'HYPERLIQUID': 'HL', 'HL': 'HL'}
@@ -118,14 +120,19 @@ class Client:
             raise ValueError('invalid_key_file')
         self.key = key
         self.opener = urllib.request.build_opener(NoRedirect)
+        self.last_receipt = {}
 
     def call(self, method, path, payload=None):
         raw = None if payload is None else json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        started = time.monotonic()
+        self.last_receipt = dict(requestBytes=len(raw or b''))
         req = urllib.request.Request(API+path, data=raw, method=method, headers={
             'Authorization': 'Bearer '+self.key, 'User-Agent': 'RadarPreview/1.0',
             'Accept': 'application/json', 'Content-Type': 'application/merge-patch+json' if method == 'PATCH' else 'application/json'})
         try:
             with self.opener.open(req, timeout=15) as res:
+                self.last_receipt.update(httpStatus=res.status, serverDate=res.headers.get('Date'),
+                                         requestId=res.headers.get('X-Request-ID') or res.headers.get('CF-Ray'))
                 data = res.read(1024*1024+1)
                 if len(data) > 1024*1024:
                     raise APIError('oversize_response', uncertain=method != 'GET')
@@ -134,6 +141,8 @@ class Client:
                     raise APIError('invalid_response_schema', uncertain=method != 'GET')
                 return result
         except urllib.error.HTTPError as e:
+            self.last_receipt.update(httpStatus=e.code, serverDate=e.headers.get('Date'),
+                                     requestId=e.headers.get('X-Request-ID') or e.headers.get('CF-Ray'))
             try:
                 body = json.loads(e.read(16384))
             except (ValueError, OSError):
@@ -148,6 +157,8 @@ class Client:
             raise APIError(code, retry, uncertain=e.code >= 500 and method != 'GET') from None
         except (OSError, ValueError, TimeoutError):
             raise APIError('network_or_response', 60, uncertain=method != 'GET') from None
+        finally:
+            self.last_receipt['elapsedMs'] = round((time.monotonic()-started)*1000)
 
 
 class Bridge:
@@ -169,6 +180,7 @@ class Bridge:
         self.settings = validate(DEFAULTS)
         self.settings_revision = -1
         self.s.setdefault('history', list(self.s['rows']))
+        self.s.setdefault('start_after', 0)
         self.remote = None
         self.remote_checked = 0
         self.quota_checked = 0
@@ -184,6 +196,29 @@ class Bridge:
 
     def count(self, key, value=1):
         self.s['counters'][key] = self.s['counters'].get(key, 0)+value
+
+    def activity_patch(self, payload, now, action):
+        """Persist intent before sending; keep bounded metadata, never message text/keys."""
+        path = self.directory/'activity-attempts.json'
+        events = json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
+        event = dict(at=now, action=action, outcome='pending', deviceDelivery='unverified',
+                     rows=len(payload.get('content', {}).get('lines', [])), payloadHash=digest(payload))
+        events = events[-199:]+[event]
+        atomic(path, events)
+        try:
+            result = self.client.call('PATCH', '/activities/'+self.slug, payload)
+            event.update(outcome='server_accepted', serverState=result.get('state'),
+                         serverUpdatedAt=result.get('updated_at'))
+            return result
+        except APIError as e:
+            event.update(outcome='unknown' if e.uncertain else 'rejected', error=e.code)
+            raise
+        finally:
+            # Whitelist transport metadata; providers may add sensitive response fields.
+            receipt = getattr(self.client, 'last_receipt', {})
+            event.update({k:receipt[k] for k in ('requestBytes','httpStatus','serverDate','requestId','elapsedMs') if k in receipt})
+            atomic(path, events)
+            self.status['lastActivityAttempt'] = event.copy()
 
     def configure(self, settings, revision):
         if revision == self.settings_revision:
@@ -288,26 +323,19 @@ class Bridge:
         self.check_activity(now)
         content = render(self.s['rows'], self.connected)
         wanted = digest(content)
-        if self.remote.get('state') != 'ongoing':
-            # Do not renew an empty idle card indefinitely. New signals resume it.
-            if not self.s['rows'] or now-self.s['rows'][-1]['at'] > 28800:
+        starting = self.remote.get('state') != 'ongoing'
+        if starting:
+            # An old history row is not a reason to repeatedly start a missing card.
+            if not self.connected or not self.s['rows'] or not 0 <= now-self.s['rows'][-1]['at'] <= 120:
                 self.status['activity'] = 'ended_waiting_for_new_signal'
                 return
-            self.remote = self.client.call('PATCH', '/activities/'+self.slug, dict(state='ongoing', content={
-                'template':'generic', 'state':None, 'progress':0.5,
-                'lines':None, 'icon':'waveform.path.ecg', 'accent_color':'#00865F'}))
-            self.s['bootstrap_until'] = now+self.min_interval
-            self.s['last_push'] = now
-            self.s['pushed'] = ''
-            self.save()
-            self.status['activity'] = 'bootstrap_server_accepted'
-            return
-        if now < self.s['bootstrap_until']:
-            return
-        if wanted == self.s['pushed']:
+            if now < self.s['start_after']:
+                self.status.update(activity='start_cooldown', activityStartRetryAt=self.s['start_after'])
+                return
+        if not starting and wanted == self.s['pushed']:
             return
         # Reconcile unknown prior delivery via GET before retrying an identical update.
-        if all(self.remote.get('content', {}).get(k) == v for k,v in content.items() if k != 'progress'):
+        if not starting and all(self.remote.get('content', {}).get(k) == v for k,v in content.items() if k != 'progress'):
             self.s['pushed'] = wanted
             self.s.pop('activity_error', None)
             self.s['failures'] = 0
@@ -318,12 +346,17 @@ class Bridge:
         for key in self.remote.get('content', {}):
             if key not in patch:
                 patch[key] = None
-        self.remote = self.client.call('PATCH', '/activities/'+self.slug, dict(state='ongoing', content=patch))
+        if starting:
+            # Persist before the request, including unknown outcomes and process restarts.
+            self.s['start_after'] = now+START_COOLDOWN
+            self.save()
+        self.remote = self.activity_patch(dict(state='ongoing', content=patch), now, 'start' if starting else 'update')
         if self.remote.get('state') != 'ongoing' or self.remote.get('content', {}).get('lines') != content['lines']:
             raise APIError('update_response_mismatch', 60, True)
         self.s.update(pushed=wanted, last_push=now, bootstrap_until=0)
         self.s.pop('activity_error', None)
         self.s['failures'] = 0
+        self.status.pop('activityStartRetryAt', None)
         self.count('activity_server_accepted')
         self.save()
         self.status.update(activity='server_accepted', lastActivityAcceptedAt=now)
