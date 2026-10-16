@@ -10,8 +10,8 @@ An owner enters a temporary eight-digit pairing code, adds the page to the
 iPhone home screen, and explicitly grants notification permission there.
 After starting, the first push is scheduled 30 seconds later. Seven synthetic
 updates follow at 30-second intervals. Each payload is **one notification**
-whose body contains the latest one to six sample entries, oldest first.
-The seventh update removes the oldest entry. A campaign ends automatically;
+whose body contains the latest one to four sample entries, oldest first.
+From the fifth update onward, each update removes the oldest entry. A campaign ends automatically;
 there is no periodic feed polling or automatic retry. At most three campaigns
 can be started before administrative reset. Pairing/auth expires in 48 hours.
 
@@ -20,7 +20,10 @@ notifications belonging to this test. Unique tags avoid relying on WebKit's
 same-tag replacement bookkeeping. If displaying fails, it preserves the old
 notification. This is an experiment: installed iOS versions may differ, and
 the OS controls collapsed/expanded text layout, wrapping and truncation.
-Six newline-separated entries do not guarantee six visible physical lines.
+Four newline-separated entries do not guarantee four visible physical lines.
+The accepted layout is time, percentage, rank, type, route, symbol. The title
+is empty; iOS still supplies application identity. BY means Bybit and HY means
+Hyperliquid. Proportional system fonts do not guarantee table-like alignment.
 
 ## Diagnostics and acceptance
 
@@ -57,6 +60,8 @@ node --test web/push-test/sw.test.mjs
 node --check web/push-test/app.js
 ```
 
-11 automated checks passed before initial deployment. Browser page checked;
-real-device subscription, delivery, truncation and single-notification behavior
-still require device acceptance. No real data integration is authorized here.
+Device tests confirmed a single remaining notification and four readable entries.
+The owner accepted the time-first layout on 2026-10-17. These results apply to
+the tested iPhone; they are not a cross-device guarantee. Real data integration
+is not enabled or authorized by this test. Temporary pairing still expires
+after 48 hours; this is not an always-on production service.

@@ -4,7 +4,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from server import Trial, rows_for, validate_subscription
+from server import Trial, rows_for, validate_subscription, compact_rows
 
 
 class TrialTests(unittest.TestCase):
@@ -17,15 +17,16 @@ class TrialTests(unittest.TestCase):
         self.sent = []
         self.app = Trial(self.root / 'state', config, lambda sub,payload:self.sent.append(payload) or 201)
 
-    def test_resend_one_six_line_notification(self):
+    def test_resend_one_four_entry_notification(self):
         self.app.state['subscription'] = {'test': True}
         self.app.state['seq'] = 7
         result = self.app.resend()
         self.assertEqual(result['http'], 201)
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.sent[0]['seq'], 8)
-        self.assertEqual(len(self.sent[0]['rows']), 6)
-        self.assertTrue(self.sent[0]['rows'][-1].startswith('ETH '))
+        self.assertEqual(len(self.sent[0]['rows']), 4)
+        self.assertEqual(self.sent[0]['title'], '')
+        self.assertTrue(self.sent[0]['rows'][-1].endswith('ETH'))
         with self.assertRaises(ValueError):self.app.resend()
         self.assertEqual(len(self.sent), 1)
 
@@ -62,7 +63,9 @@ class TrialTests(unittest.TestCase):
         # A timestamp in the past eliminates waits without altering production interval.
         self.app.run_campaign(c['run'],time.time()-300,self.app.stop_event)
         self.assertEqual(len(self.sent),7)
-        self.assertEqual([len(p['rows']) for p in self.sent],[1,2,3,4,5,6,6])
+        self.assertEqual([len(p['rows']) for p in self.sent],[1,2,3,4,4,4,4])
+        self.assertTrue(self.sent[-1]['rows'][0].endswith('ZEREBRO'))
+        self.assertTrue(self.sent[-1]['rows'][-1].endswith('ETH'))
         self.assertEqual(self.app.state['campaign']['state'],'complete')
         self.assertEqual([p['seq'] for p in self.sent],list(range(1,8)))
 
@@ -73,6 +76,10 @@ class TrialTests(unittest.TestCase):
         c=self.app.state['campaign']
         self.app.run_campaign(c['run'],time.time()-300,self.app.stop_event)
         self.assertEqual(self.sent,[])
+
+    def test_user_exchange_labels_and_large_rank_preserved(self):
+        self.assertEqual(compact_rows(['BTC FF BYBIT→HYPERLIQUID R1000+ +0.10% 00:39:22']),
+                         ['00:39 +0.10% R1000+ FF BY→HY BTC'])
 
     def test_failure_stops_and_does_not_log_secret(self):
         self.app.state['subscription']={1:True}

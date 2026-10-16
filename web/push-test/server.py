@@ -34,6 +34,17 @@ def rows_for(step, first_at):
     return rows
 
 
+def compact_rows(rows):
+    names = {'BINANCE':'BN', 'BITGET':'BG', 'BYBIT':'BY', 'GATE':'GT',
+             'ASTER':'AS', 'OKX':'OK', 'HYPERLIQUID':'HY', 'HYPER':'HY', 'HL':'HY'}
+    result = []
+    for row in rows:
+        symbol, kind, route, rank, percent, stamp = row.split()
+        route = '→'.join(names.get(venue.upper(), venue) for venue in route.split('→'))
+        result.append(f'{stamp[:5]} {percent} {rank} {kind} {route} {symbol}')
+    return result
+
+
 def validate_subscription(value):
     from cryptography.hazmat.primitives.asymmetric import ec
     if not isinstance(value, dict):
@@ -129,7 +140,7 @@ class Trial:
             self.save()
             threading.Thread(target=self.run_campaign, args=(run, now + 30, self.stop_event), daemon=True).start()
 
-    def resend(self, compact=False, rows=6):
+    def resend(self, compact=True, rows=4):
         if type(rows) is not int or not 1 <= rows <= 6:
             raise ValueError('示例条数必须在 1 到 6 之间')
         with self.lock:
@@ -145,14 +156,7 @@ class Trial:
                        'run': secrets.token_hex(6), 'rows': rows_for(7, time.time()-180)}
             if compact:
                 payload['title'] = ''
-                compact_rows = []
-                for row in payload['rows']:
-                    symbol, kind, route, rank, percent, stamp = row.split()
-                    names = {'BINANCE':'BN', 'BITGET':'BG', 'BYBIT':'BY', 'GATE':'GT',
-                             'ASTER':'AS', 'OKX':'OK', 'HYPERLIQUID':'HY', 'HYPER':'HY', 'HL':'HY'}
-                    route = '→'.join(names.get(venue.upper(), venue) for venue in route.split('→'))
-                    compact_rows.append(f'{stamp[:5]} {percent} {rank} {kind} {route} {symbol}')
-                payload['rows'] = compact_rows
+                payload['rows'] = compact_rows(payload['rows'])
             payload['rows'] = payload['rows'][-rows:]
             self.save()
             status, error = None, None
@@ -198,7 +202,8 @@ class Trial:
                 if time.time() >= self.config['expiresAt'] or self.state['campaign']['run'] != run or stop.is_set():
                     return
                 self.state['seq'] += 1
-                payload = {'kind': 'radar-six-test', 'seq': self.state['seq'], 'run': run, 'rows': rows_for(step, first_at)}
+                payload = {'kind': 'radar-six-test', 'seq': self.state['seq'], 'run': run,
+                           'title': '', 'rows': compact_rows(rows_for(step, first_at))[-4:]}
                 assert len(json.dumps(payload, ensure_ascii=False).encode()) < 3000
                 self.state['campaign']['state'] = 'running'
                 self.save()
@@ -287,12 +292,12 @@ def handler(trial):
                 elif route == 'start':
                     trial.start()
                 elif route == 'resend':
-                    return self.reply(200, trial.resend(compact=data.get('compact') is True, rows=data.get('rows', 6)))
+                    return self.reply(200, trial.resend(compact=data.get('compact', True) is True, rows=data.get('rows', 4)))
                 elif route == 'stop':
                     trial.stop()
                 elif route == 'receipt':
                     trial.receipt(data)
-                elif route == 'observation' and data.get('result') in ('one-six', 'duplicates', 'missing-or-truncated'):
+                elif route == 'observation' and data.get('result') in ('one-four', 'one-six', 'duplicates', 'missing-or-truncated'):
                     with trial.lock:
                         trial.state['observation'] = {'result': data['result'], 'at': time.time()}
                         trial.save()

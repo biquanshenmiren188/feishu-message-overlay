@@ -10,11 +10,11 @@
 </head>
 <body><main>
   <header><img src="./icon-192.png" width="48" height="48" alt=""><div><span class="eyebrow">独立测试版</span><h1>雷达通知测试</h1></div></header>
-  <p class="intro">一张通知，最多六行。新消息在下面。<br>仅使用虚构示例，不接真实消息。</p>
+  <p class="intro">一张通知，最多四条。新消息在下面。<br>仅使用虚构示例，不接真实消息。<br>时间 · 百分比 · 等级 · 类型 · 交易所 · 币名</p>
   <section id="install"><h2>先添加到主屏幕</h2><p>用 iPhone 的 Safari 打开本页，点<strong>分享 → 添加到主屏幕</strong>，再从“雷达测试”图标打开。</p><p class="muted">通知权限只能由你在手机上授权。测试不会自动开始。</p></section>
   <section><h2>1. 连接这台 iPhone</h2><label for="code">测试码</label><div class="pair"><input id="code" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="输入 8 位测试码"><button id="pair">连接</button></div><p id="pair-state" class="muted" role="status">尚未连接</p><button id="enable" class="primary" disabled>启用测试通知</button></section>
-  <section><h2>2. 锁屏查看更新</h2><p>点击后有 30 秒准备锁屏。随后每 30 秒新增一条示例，共七次；最后一次应移掉最旧一条，保留六行。</p><div class="actions"><button id="start" class="primary" disabled>开始七次更新测试</button><button id="stop" disabled>停止测试</button></div><p id="status" class="status" role="status" aria-live="polite">等待启用通知</p><pre id="preview">测试尚未开始</pre><p class="muted">这里只展示预期正文。手机是否显示、是否只剩一张通知，以锁屏实际效果为准。</p></section>
-  <section><h2>3. 记录锁屏结果</h2><p>测试结束后，选一个实际结果，方便直接定位问题。</p><div class="results"><button data-result="one-six" disabled>只剩一张，六行完整</button><button data-result="duplicates" disabled>出现多张通知</button><button data-result="missing-or-truncated" disabled>没收到或内容不全</button></div><p id="result-state" class="muted" role="status"></p></section>
+  <section><h2>2. 锁屏查看更新</h2><p>点击后有 30 秒准备锁屏。随后每 30 秒新增一条示例，共七次；超过四条时移掉最旧一条，始终保留最新四条。</p><div class="actions"><button id="start" class="primary" disabled>开始七次更新测试</button><button id="stop" disabled>停止测试</button></div><p id="status" class="status" role="status" aria-live="polite">等待启用通知</p><pre id="preview">测试尚未开始</pre><p class="muted">这里只展示预期正文。手机是否显示、是否只剩一张通知，以锁屏实际效果为准。</p></section>
+  <section><h2>3. 记录锁屏结果</h2><p>测试结束后，选一个实际结果，方便直接定位问题。</p><div class="results"><button data-result="one-four" disabled>只剩一张，四条完整</button><button data-result="duplicates" disabled>出现多张通知</button><button data-result="missing-or-truncated" disabled>没收到或内容不全</button></div><p id="result-state" class="muted" role="status"></p></section>
   <details><summary>查看本次诊断</summary><pre id="diagnostics">暂无记录</pre></details>
   <footer>测试版 · 只推示例 · 任务结束自动停发</footer>
 </main></body></html>
