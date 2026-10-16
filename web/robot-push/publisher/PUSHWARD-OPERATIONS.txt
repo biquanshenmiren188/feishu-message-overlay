@@ -18,7 +18,7 @@
 密钥：/etc/pushward-radar/key，root:root 0600，由 systemd LoadCredential 交给服务；禁止加入源码或命令行。
 设置：/etc/pushward-radar/settings，仅一行 PUSHWARD_ACTIVITY_SLUG=<已核对的活动标识>。
 安装提供的 pushward-radar.service 后，systemctl enable --now pushward-radar。
-已有正常活动优先复用。服务端明确 ended 后，有新信号或八小时内消息时用 generic 启动，间隔至少30秒转成 log。此路径曾人工实机成功，但不能保证每次远程启动都到手机；不能用 ongoing 或HTTP200代替实际到达确认。
+已有正常活动优先复用。服务端明确 ended/preempted 后，仅在来源在线且最新合格消息不超过120秒时尝试直接启动真实 log 列表；不再插入虚构进度条或切换模板。启动尝试在发送之前持久记录，一小时内最多一次，包括结果不明和进程重启。该间隔是本服务的保守保护策略，不是苹果公布的限额或恢复时间。不能用 ongoing 或HTTP200代替实际到达确认；卡片缺失时禁止循环 ended/ongoing 或通过新 slug 绕过保护。
 不要把演示构建脚本接入生产，也不要把测试消息写入真实 feed。
 
 运行与恢复
@@ -31,7 +31,14 @@ state.json 权限0600、目录0700，保存最多100条归一化历史信号供�
 临时错误退避最长15分钟；401/403需检查凭据授权，不会打印原始接口响应或凭据。活动与普通提醒分别处理，活动额度耗尽不阻断普通提醒。
 PushWard免费额度为实时活动250次/月、通知500次/月，服务记录用量；活动额度耗尽时只尝试一条普通提示，等待服务端重置时间。每小时重新检查订阅/额度以识别升级。服务不代购套餐。
 每小时重新核对活动和通知额度，检测到升级或额度恢复后解除相应退避，过期提醒仍不补发；重启也会重新查询额度，不需要清空去重状态。
-系统可在八小时结束实时活动；本服务无空闲保活洪泛。没有新消息且内容已超过八小时，不反复启动旧卡。它保留原始消息时间，旧内容不冒充新机会。
+系统可在八小时结束实时活动；本服务无空闲保活洪泛。没有120秒内的新信号，不反复启动旧卡。它保留原始消息时间，旧内容不冒充新机会。
+
+投递诊断
+activity-attempts.json（0600）保存最近200次活动写请求的时间、start/update类别、内容哈希、行数、请求字节数、HTTP状态、请求编号、服务器时间和耗时。不记录消息内容、密钥、原始响应或设备令牌。发送前记录 pending；网络结果不明记 unknown，接口成功记 server_accepted，手机状态始终单独标记 unverified。status.json 提供最后一条诊断。
+PushWard公开活动接口没有提供锁屏显示确认或苹果原始投递回执；App内预览也不等于锁屏渲染成功。排查必须向服务商核对APNs请求/响应及活动令牌，或使用设备日志中的 liveactivitiesd / apsd / chronod 错误，不能用重复推送代替诊断。
+PushWard priority 是排序/淘汰优先级，不是 apns-priority；不要混用。苹果推送启动预算与更新预算独立，开启频繁更新不会增加启动预算。
+依据：https://developer.apple.com/forums/thread/799505
+https://developer.apple.com/videos/play/wwdc2023/10185/
 
 停止与回滚
 systemctl disable --now pushward-radar 只停止本转发。原 robot-push、网页、小窗不变。

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from pushward_radar import APIError, Bridge, parse_message, render
+from pushward_radar import APIError, Bridge, START_COOLDOWN, parse_message, render
 
 NOW = 1800000000
 
@@ -213,14 +213,65 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(len(self.notifications()), 1)
         self.assertEqual(self.bridge.s['pending'], [])
 
-    def test_expired_activity_bootstrap_then_log_same_slug(self):
+    def test_expired_activity_starts_real_log_without_placeholder(self):
         self.client.activity['state'] = 'ended'
         self.bridge.tick(feed([message()]), NOW)
-        self.assertEqual(self.client.activity['content']['template'], 'generic')
         self.bridge.tick(feed([message()], NOW+30), NOW+30)
         self.assertEqual(self.client.activity['content']['template'], 'log')
         self.assertNotIn('progress', self.client.activity['content'])
+        self.assertEqual(len(self.patches()), 1)
+        self.assertEqual(self.client.activity['content']['lines'][0]['at'], NOW)
+
+    def test_ended_old_history_does_not_restart(self):
+        self.client.activity['state'] = 'ended'
+        self.bridge.tick(feed([message(at=NOW-121)]), NOW)
+        self.assertEqual(self.patches(), [])
+        self.assertEqual(self.bridge.status['activity'], 'ended_waiting_for_new_signal')
+
+    def test_start_cooldown_survives_process_restart_and_does_not_mute_alerts(self):
+        self.client.activity['state'] = 'ended'
+        self.bridge.tick(feed([message()]), NOW)
+        self.client.activity['state'] = 'ended'
+        self.bridge = Bridge(self.client, self.temp.name, 'unit-test', NOW+300)
+        msg = message(n=2, at=NOW+300, title='ETH | FF | R1 +0.5%')
+        self.bridge.tick(feed([msg], NOW+300), NOW+300)
+        self.assertEqual(len(self.patches()), 1)
+        self.assertEqual(len(self.notifications()), 2)
+        self.assertEqual(self.bridge.status['activity'], 'start_cooldown')
+        fresh = message(n=3, at=NOW+START_COOLDOWN, title='SOL | FF | R2 +0.6%')
+        self.bridge.tick(feed([fresh], NOW+START_COOLDOWN), NOW+START_COOLDOWN)
         self.assertEqual(len(self.patches()), 2)
+
+    def test_unknown_start_does_not_retry_as_new_start(self):
+        self.client.activity['state'] = 'ended'
+        self.client.fail = ('/activities/unit-test', APIError('network_or_response', 60, True))
+        self.bridge.tick(feed([message()]), NOW)
+        self.client.fail = None
+        self.bridge = Bridge(self.client, self.temp.name, 'unit-test', NOW+60)
+        self.bridge.tick(feed([message()], NOW+60), NOW+60)
+        self.assertEqual(len(self.patches()), 1)
+        events = json.loads((Path(self.temp.name)/'activity-attempts.json').read_text())
+        self.assertEqual(events[0]['outcome'], 'unknown')
+
+    def test_ended_activity_with_matching_content_still_needs_start(self):
+        self.bridge.tick(feed([message()]), NOW)
+        self.client.activity['state'] = 'ended'
+        self.bridge.remote = None
+        self.bridge.tick(feed([message()], NOW+30), NOW+30)
+        self.assertEqual(len(self.patches()), 2)
+        self.assertEqual(self.client.activity['state'], 'ongoing')
+
+    def test_diagnostics_are_bounded_private_metadata_not_delivery_ack(self):
+        self.client.last_receipt = dict(httpStatus=200, requestId='request-123', secret='hlk_SECRET')
+        for i in range(205):
+            self.bridge.activity_patch(dict(state='ongoing', content=render([parse_message(message(), NOW)], True)), NOW+i, 'update')
+        p = Path(self.temp.name)/'activity-attempts.json'
+        events = json.loads(p.read_text())
+        self.assertEqual(len(events), 200)
+        self.assertEqual(events[-1]['httpStatus'], 200)
+        self.assertEqual(events[-1]['deviceDelivery'], 'unverified')
+        self.assertNotIn('hlk_SECRET', p.read_text())
+        self.assertNotIn('BTC', p.read_text())
 
     def test_unknown_update_reconciles_without_duplicate_patch(self):
         original = self.client.call
