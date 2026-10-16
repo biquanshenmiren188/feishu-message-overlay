@@ -11,8 +11,9 @@ User=pushward-radar
 Group=pushward-radar
 SupplementaryGroups=www-data
 LoadCredential=pushward-key:/etc/pushward-radar/key
+LoadCredential=admin-key:/etc/pushward-radar/admin-key
 EnvironmentFile=/etc/pushward-radar/settings
-ExecStart=/usr/bin/python3 /opt/pushward-radar/pushward_radar.py --feed /var/lib/robot-push/feed.json --state-directory /var/lib/pushward-radar --slug ${PUSHWARD_ACTIVITY_SLUG} --key-file ${CREDENTIALS_DIRECTORY}/pushward-key
+ExecStart=/usr/bin/python3 /opt/pushward-radar/pushward_radar.py --feed /var/lib/robot-push/feed.json --state-directory /var/lib/pushward-radar --slug ${PUSHWARD_ACTIVITY_SLUG} --key-file ${CREDENTIALS_DIRECTORY}/pushward-key --admin-key-file ${CREDENTIALS_DIRECTORY}/admin-key
 StateDirectory=pushward-radar
 StateDirectoryMode=0700
 UMask=0077
@@ -29,7 +30,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 MemoryMax=96M
-TasksMax=4
+TasksMax=16
 CPUQuota=10%
 
 [Install]
