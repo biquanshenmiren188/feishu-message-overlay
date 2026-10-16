@@ -145,7 +145,7 @@ class Trial:
                        'run': secrets.token_hex(6), 'rows': rows_for(7, time.time()-180)}
             if compact:
                 payload['title'] = ''
-                payload['rows'] = [row.replace('BINANCE','币安').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')[:-3] for row in payload['rows']]
+                payload['rows'] = [re.sub(r'(R\d+) ([+-])', r'\1\2', row.replace('BINANCE','BN').replace('BITGET','BG').replace('GATE','GT').replace('ASTER','AS').replace('OKX','OK')[:-3]) for row in payload['rows']]
             payload['rows'] = payload['rows'][-rows:]
             self.save()
             status, error = None, None
