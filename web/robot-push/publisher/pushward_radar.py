@@ -81,7 +81,8 @@ def render(rows, connected):
     if rows:
         coin_width = max(7, max(len(r['coin']) for r in rows))
         pair_width = max(11, max(len(r['buy']+'→'+r['sell']) for r in rows))
-        lines = [dict(text=f"{r['coin']:<{coin_width}} {r['mode']} {r['buy']+'→'+r['sell']:<{pair_width}} {r['rank']} {r['value']}",
+        rank_width = max(len(r['rank']) for r in rows)
+        lines = [dict(text=f"{r['coin']:<{coin_width}} {r['mode']} {r['buy']+'→'+r['sell']:<{pair_width}} {r['rank']:<{rank_width}} {r['value']}",
                       at=r['at'], level='info') for r in rows]
     else:
         lines = [dict(text='等待符合筛选条件的新消息' if connected else '消息源断线，等待恢复', level='info')]

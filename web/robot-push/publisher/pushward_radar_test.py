@@ -62,6 +62,11 @@ class ParserTests(unittest.TestCase):
                 row=parse_message(message(title=f'BTC | FF | {rank} +0.8%'),NOW)
                 self.assertEqual((row['rank'],row['value']),(rank,'+0.8%'))
 
+    def test_high_rank_keeps_percentage_column_aligned(self):
+        rows=[parse_message(message(n=i+1,title=f'BTC | FF | {rank} +0.8%'),NOW) for i,rank in enumerate(['R0','R1000+'])]
+        lines=render(rows,True)['lines']
+        self.assertEqual(lines[0]['text'].index('+0.8%'),lines[1]['text'].index('+0.8%'))
+
     def test_aggregation_ambiguous_is_rejected(self):
         self.assertIsNone(parse_message(message(title='强信号聚集 | BTC | 3组', body='R1 | SF | 买 GATE → 卖 ASTER\n净均 +0.23%'), NOW))
         self.assertIsNone(parse_message(message(title='BTC | FF | R0 +0.3% R1 +0.5%'), NOW))
