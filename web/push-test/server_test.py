@@ -54,6 +54,35 @@ class TrialTests(unittest.TestCase):
         for endpoint in ['http://127.0.0.1/','https://push.apple.com.evil.test/a','https://x.push.apple.com:443@127.0.0.1/a','https://x.push.apple.com:444/a']:
             with self.assertRaises(ValueError):validate_subscription({'endpoint':endpoint})
 
+    def test_binding_requires_owner_token_and_is_not_cached(self):
+        from http.server import ThreadingHTTPServer
+        from http.client import HTTPConnection
+        from threading import Thread
+        from server import handler, BASE
+        token = self.app.pair('12345678')
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.app))
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for bearer, expected in [('', 401), ('wrong', 401), (token, 200)]:
+                connection = HTTPConnection(*server.server_address)
+                connection.request('GET', BASE+'api/binding', headers={'Authorization':'Bearer '+bearer})
+                response = connection.getresponse()
+                value = json.loads(response.read())
+                self.assertEqual(response.status, expected)
+                self.assertEqual(response.getheader('Cache-Control'), 'no-store')
+                if expected == 200:
+                    self.assertEqual(value, {'pushCode':'12345678'})
+                else:
+                    self.assertNotIn('12345678', json.dumps(value))
+                connection.close()
+            self.assertNotIn('12345678', json.dumps(self.app.public_status()))
+            self.assertFalse(self.sent)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
     def test_bounded_campaign_no_real_input(self):
         self.app.state['subscription']={'synthetic':True}
         with patch('threading.Thread'):

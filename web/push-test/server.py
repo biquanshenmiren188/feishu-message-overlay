@@ -272,6 +272,10 @@ def handler(trial):
                 return self.reply(401, {'error': '请先用测试码连接'})
             if self.path == BASE + 'api/status':
                 return self.reply(200, trial.public_status())
+            if self.path == BASE + 'api/binding':
+                # Owner-only, no-store: do not include the pairing code in routine
+                # status/diagnostics or static assets. Existing devices need no re-pair.
+                return self.reply(200, {'pushCode': trial.config['pairCode']})
             self.reply(404, {'error': '不存在'})
 
         def do_POST(self):

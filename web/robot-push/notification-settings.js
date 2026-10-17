@@ -1,11 +1,12 @@
 const BASE='/radar/push-test/', API=BASE+'api/';
-const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-mobile1';document.head.append(css);
+const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-notify2';document.head.append(css);
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
 const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';mount?.append(button);
 const dialog=document.createElement('dialog');dialog.id='notification-settings';dialog.setAttribute('aria-labelledby','notification-settings-title');
 dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在上。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
 <div class="ns-body"><p id="ns-message" role="status" aria-live="polite"></p>
-<form id="ns-pair" hidden><label for="ns-code">连接码</label><div class="ns-inline"><input id="ns-code" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位连接码"><button>连接</button></div><p>原测试通知已沿用，不需要重新安装。</p></form>
+<section class="ns-notification" aria-label="通知与绑定"><div id="ns-binding" hidden><span>已绑定推送码</span><output id="ns-bound-code"></output></div><button type="button" id="ns-enable" aria-describedby="ns-notification-help">开启通知</button><p id="ns-notification-help">开启后可在手机锁屏接收提醒。</p></section>
+<form id="ns-pair" hidden><label for="ns-code">推送码</label><div class="ns-inline"><input id="ns-code" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位推送码"><button>连接</button></div><p>沿用原来的推送码，不需要重新安装。</p></form>
 <form id="ns-form" hidden><fieldset id="ns-fields"><label class="ns-toggle"><span>接收消息</span><input id="ns-enabled" type="checkbox"></label>
 <div class="ns-grid"><label>显示条数<select id="ns-rows"><option value="1">1 条</option><option value="2">2 条</option><option value="3">3 条</option><option value="4">4 条</option></select></label><label>提醒间隔<select id="ns-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="180">3 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option></select></label></div>
 <p class="ns-help">间隔内合并提醒，无新消息不打扰。时间为 UTC+8。</p>
@@ -17,29 +18,34 @@ dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title"
 <div class="ns-options"><strong>屏蔽类型</strong><div id="ns-modes"></div></div>
 <div class="ns-options"><strong>屏蔽交易所</strong><div id="ns-exchanges"></div></div>
 <p class="ns-help">只屏蔽勾选项，买卖任一侧命中即过滤。</p>
-</fieldset></form></div><div class="ns-actions" id="ns-actions" hidden><button type="button" id="ns-enable" hidden>在这台 iPhone 启用通知</button><button class="ns-primary" id="ns-save" type="submit" form="ns-form">保存设置</button></div>`;
+</fieldset></form></div><div class="ns-actions" id="ns-actions" hidden><button class="ns-primary" id="ns-save" type="submit" form="ns-form">保存设置</button></div>`;
 document.body.append(dialog);
 const $=id=>dialog.querySelector('#'+id);
 for(const [id,values] of [['ns-modes',[['SF','SF'],['FS','FS'],['FF','FF']]],['ns-exchanges',[['BINANCE','BN · 币安'],['BITGET','BG · Bitget'],['BYBIT','BY · Bybit'],['OKX','OK · OKX'],['GATE','GT · Gate'],['ASTER','AS · Aster'],['HL','HY · Hyperliquid']]]]){
  for(const [value,label] of values){const el=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;el.append(input,document.createTextNode(label));$(id).append(el)}
 }
 let token=localStorage.getItem('radar-test-token')||'', revision=0, publicKey='', busy=false;
-let phone=null, serverFingerprint=null, workerVersion='unknown';
+let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 function message(text,error=false){$('ns-message').textContent=text;$('ns-message').classList.toggle('ns-error',error)}
-async function api(route,data){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error'});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401){$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true}if(!r.ok)throw Error(body.error||'请求失败');return body}
+async function api(route,data){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error'});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401){token='';localStorage.removeItem('radar-test-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok)throw Error(body.error||'请求失败');return body}
+function renderNotification(){
+ notificationReady=!!(token&&standalone&&ios&&phone?.permission==='granted'&&phone.subscriptionFingerprint&&phone.subscriptionFingerprint===serverFingerprint);
+ $('ns-enable').textContent=notificationReady?'通知已开启':'开启通知';
+ $('ns-enable').disabled=busy||notificationReady;
+ $('ns-notification-help').textContent=!token?'请先输入推送码连接，再开启通知。':!ios?'请在 iPhone 上打开雷达，添加到主屏幕后开启通知。':!standalone?'请在 Safari 中将雷达添加到主屏幕，再从主屏幕打开并开启通知。':phone?.permission==='denied'?'通知权限已关闭，请前往 iPhone 设置中允许雷达通知。':notificationReady?'本机通知已开启，消息接收由下方“接收消息”控制。':'点击后允许系统通知；如订阅已失效，会重新连接本机通知。';
+}
 function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.subscriptionFingerprint??null;$('ns-pair').hidden=true;$('ns-form').hidden=false;$('ns-actions').hidden=false;const p=s.settings;
  $('ns-enabled').checked=p.notify_enabled;$('ns-rows').value=p.rows;$('ns-interval').value=p.notify_interval_seconds;$('ns-percent').value=p.min_percent??'';$('ns-ranks').value=p.excluded_ranks.join(', ');$('ns-coins').value=p.excluded_coins.join(', ');
  for(const [id,key] of [['ns-modes','excluded_modes'],['ns-exchanges','excluded_exchanges']])for(const el of $(id).querySelectorAll('input'))el.checked=p[key].includes(el.value);
  const needsRepair=phone&&(phone.permission!=='granted'||!phone.subscriptionFingerprint||phone.subscriptionFingerprint!==serverFingerprint);
- $('ns-enable').hidden=!standalone||!ios||(!needsRepair&&s.subscribed);
- $('ns-enable').textContent=s.subscribed?'修复这台 iPhone 的通知':'在这台 iPhone 启用通知';
+ renderNotification();
  message(!s.subscribed?'手机订阅未连接，请从 iPhone 主屏幕打开雷达并启用通知。':!p.notify_enabled?'手机推送已关闭。':s.source?.connected?'推送已开启，消息源在线。':'推送已开启，等待消息源恢复。');
- if(needsRepair)message(phone.permission==='denied'?'这台手机的通知权限已关闭，请在 iPhone 设置中允许通知。':'手机订阅未连接或与服务器不一致，请点下方修复通知。',true);
+ if(needsRepair)message(phone.permission==='denied'?'这台手机的通知权限已关闭，请在 iPhone 设置中允许通知。':'手机订阅未连接或与服务器不一致，请点“开启通知”重新连接。',true);
 }
-async function task(fn){if(busy)return;busy=true;$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;try{await fn()}catch(e){message(e.message,true)}finally{busy=false;$('ns-fields').disabled=false;$('ns-save').disabled=false;$('ns-enable').disabled=false}}
-async function load(){if(!token){$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');return}await syncPhone();fill(await api('status'))}
+async function task(fn){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;try{await fn()}catch(e){message(e.message,true)}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=false;$('ns-save').disabled=false;renderNotification()}}
+async function load(){if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}await syncPhone();fill(await api('status'));const binding=await api('binding');$('ns-bound-code').textContent=binding.pushCode;$('ns-binding').hidden=false}
 button.onclick=()=>{dialog.showModal();dialog.querySelector('.ns-body').scrollTop=0;task(load)};$('ns-close').onclick=()=>dialog.close();
 $('ns-pair').onsubmit=e=>{e.preventDefault();task(async()=>{const result=await api('pair',{code:$('ns-code').value.trim()});token=result.token;localStorage.setItem('radar-test-token',token);$('ns-code').value='';await load();if(standalone)await configureWorker()})};
 const list=id=>$(id).value.trim().split(/[\s,，、]+/).filter(Boolean).map(s=>s.toUpperCase());
@@ -56,9 +62,24 @@ async function syncPhone(){
   const sub=await registration.pushManager.getSubscription();
   phone={permission:typeof Notification==='undefined'?'unsupported':Notification.permission,subscriptionFingerprint:await subscriptionFingerprint(sub),version:workerVersion};
   await api('device',phone);
+  renderNotification();
  }finally{syncing=false}
 }
-$('ns-enable').onclick=()=>task(async()=>{if(!registration)throw Error('请从 iPhone 主屏幕打开雷达通知页面。');const p=await Notification.requestPermission();if(p!=='granted')throw Error('请在 iPhone 设置中允许雷达通知。');let sub=await registration.pushManager.getSubscription();if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}await configureWorker();await api('subscribe',{subscription:sub.toJSON(),replaceFingerprint:serverFingerprint});await load()});
+$('ns-enable').onclick=()=>task(async()=>{
+ if(!token){$('ns-code').focus();throw Error('请先输入推送码连接。')}
+ if(!ios||!standalone)throw Error('请在 iPhone Safari 中将雷达添加到主屏幕，再从主屏幕打开并点击“开启通知”。');
+ if(!registration?.active||!publicKey)throw Error('通知组件正在准备，请稍后再点“开启通知”。');
+ if(typeof Notification==='undefined'||!registration.pushManager)throw Error('当前系统不支持网页通知，请更新 iOS 后重试。');
+ $('ns-enable').textContent='正在开启…';message('请允许系统通知，正在连接本机推送。');
+ // Request permission directly in the click gesture, before any network/worker awaits.
+ const p=await Notification.requestPermission();
+ if(p!=='granted'){await syncPhone();throw Error(p==='denied'?'请在 iPhone 设置中允许雷达通知，再返回此处。':'尚未允许通知，可以再次点击“开启通知”。')}
+ let sub=await registration.pushManager.getSubscription();
+ if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}
+ await configureWorker();await api('subscribe',{subscription:sub.toJSON(),replaceFingerprint:serverFingerprint});
+ serverFingerprint=await subscriptionFingerprint(sub);await syncPhone();
+ message('本机通知已开启；按“接收消息”和已保存的筛选设置接收提醒。');
+});
 if(location.pathname.startsWith(BASE)||standalone){
  if('serviceWorker'in navigator)navigator.serviceWorker.register(BASE+'sw.js',{scope:BASE,updateViaCache:'none'}).then(async reg=>{
   registration=reg;

@@ -119,6 +119,28 @@ confirmed one remaining notification and the four-entry time-first layout.
 
 ## Mobile entry
 
+### Notification controls (2026-10-17)
+
+BOT settings now always show an “开启通知” control and display the existing
+owner's push code after pairing. The code is loaded only by the authenticated,
+`Cache-Control: no-store` GET `api/binding` endpoint, not routine status responses
+or static files. Existing paired devices do not need to enter the code again.
+On an installed iPhone PWA, the button requests permission in the click gesture
+and reuses or repairs the subscription through the existing fingerprint CAS.
+Healthy devices show “通知已开启”; Safari and other browsers show installation
+guidance. Enabling notifications preserves unsaved filter edits and does not
+change the separate “接收消息” preference.
+
+`python web/push-test/deploy_settings.py --with-binding-api` deploys this endpoint
+and settings assets with backup/rollback, restarts only the push service, and
+preserves subscription, settings, worker identity and the current website overlays.
+Without that flag the script remains a static settings update.
+Release `20261017-notification-controls-1792205078` passed 33 Python tests and
+12 worker/protocol tests; browser checks covered permission/default/denied,
+paired/unpaired and installed/browser states using synthetic fixtures, plus the
+live authenticated code display and 393/320px layouts. No diagnostic push was
+sent and no physical iPhone permission interaction was performed.
+
 The installed PWA keeps its existing id, start URL and worker scope at
 `/radar/push-test/`. nginx internally serves the current BOT page at that URL
 (no external redirect or reinstall). The shared HTML base points to
