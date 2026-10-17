@@ -1,0 +1,5 @@
+/* Stable mobile geometry: Safari toolbar collapse must not resize content above cards. */
+@media(max-width:900px){
+  html body.split-mode{min-height:100svh;overflow:visible}
+  html .split-mode .feed-pane{height:60svh}
+}

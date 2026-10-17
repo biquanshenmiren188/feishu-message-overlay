@@ -1,4 +1,5 @@
 import {subscribePush} from './push-subscription.js';
+import {mobileScrollGate,stablePaneBottom} from './mobile-scroll.js';
 import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261003m';
 import {CarouselReader} from './carousel.js?v=20261003m';
 import {mobileSummary} from './summary.js?v=20261003m';
@@ -118,13 +119,14 @@ let detailOpen=null;
 const mobile=matchMedia('(max-width:640px)');reader.setCapacity(mobile.matches?5:3);
 let fitKey='',touchActive=false,touchSettling=false,touchQuiet=null,touchTravel=0,pendingTouchStep=0,deferredRefresh=false;
 function fitCards(force=false){
+ if(mobileScrollGate.defer(fitCards,()=>fitCards(force)))return;
  if(touchActive||touchSettling||reader.paused&&!force||detailOpen)return;
  const footer=document.querySelector('.boundary');
  const footerHeight=getComputedStyle(footer).display==='none'?0:footer.getBoundingClientRect().height+8;
  const viewportBottom=Math.min(innerHeight,window.visualViewport?visualViewport.height+visualViewport.offsetTop:innerHeight);
  const safeBottom=parseFloat(getComputedStyle($('board-shell')).paddingBottom)||0;
  const pane=document.querySelector('.feed-pane');
- const bottom=pane?Math.min(viewportBottom,pane.getBoundingClientRect().bottom):viewportBottom;
+ const bottom=pane?stablePaneBottom(pane.getBoundingClientRect().bottom,viewportBottom,matchMedia('(max-width:900px)').matches):viewportBottom;
  const height=Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
@@ -148,6 +150,7 @@ function fitCards(force=false){
  if(required<=board.clientHeight)board.scrollTop=0;
 }
 function render(anchor=null){
+ if(mobileScrollGate.defer(render,()=>render(anchor)))return;
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
  let layoutChanged=false;const ids=reader.window(),key=ids.join('|');
  const pinKey=store.pinned?JSON.stringify(store.pinned):'';
