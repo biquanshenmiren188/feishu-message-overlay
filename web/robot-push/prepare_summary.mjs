@@ -28,9 +28,10 @@ replace('if(i.append(c),!n&&P.matches){','if(i.append(c),!n){');
 replace('f.className="mobile-summary";','r.textContent=l.title||r.textContent,f.className="mobile-summary";');
 replace('r.textContent=e.title||(t?', 'r.textContent=Xt(e).title||e.title||(t?');
 replace('i.setAttribute("aria-label",(e.title||', 'i.setAttribute("aria-label",(r.textContent||');
-const summaryRows='{signals:l.signals,spread:l.spread,risk:l.warning?l.risk:""}';
+const summaryRows='{spread:l.spread,signals:l.signals,risk:l.warning?l.risk:""}';
 if(js.includes('{direction:l.direction,metrics:l.metrics,fees:l.fees,preview:l.preview,risk:l.risk}'))replace('{direction:l.direction,metrics:l.metrics,fees:l.fees,preview:l.preview,risk:l.risk}',summaryRows);
-else replace('{signals:l.signals,risk:l.warning?l.risk:""}',summaryRows);
+else if(js.includes('{signals:l.signals,spread:l.spread,risk:l.warning?l.risk:""}'))replace('{signals:l.signals,spread:l.spread,risk:l.warning?l.risk:""}',summaryRows);
+else if(!js.includes(summaryRows))replace('{signals:l.signals,risk:l.warning?l.risk:""}',summaryRows);
 replace('function an(e,t){if(!P.matches||z)return;','function an(e,t){if(z)return;');
 // Retain the concurrently released scroll stability module and its identity.
 if(js.includes('from "./mobile-scroll.js"'))replace('from "./mobile-scroll.js"','from "/radar/scroll-stability-20261017/mobile-scroll.js"');
@@ -53,7 +54,7 @@ await fs.mkdir(path.join(fixtureDir,'radar'),{recursive:true});
 await fs.cp(baselineDir,path.join(fixtureDir,'radar'),{recursive:true});
 for(const [name,text] of Object.entries(files)){const p=path.join(fixtureDir,'radar',name);await fs.mkdir(path.dirname(p),{recursive:true});await fs.writeFile(p,text);}
 const messages=[
- {title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\n净费率: 0.0228%/h\n质量: 样本少'},
+ {title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h\n质量: 样本少'},
  {title:'',body:'[Dex 套利监控命中][最高P3]\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\n净费率: -0.01%/h\n2. [P2][期现] SECOND | 多 OKX / 空 Binance\n净费率: +0.02%/h'},
  {title:'🚨🚨 强信号聚集｜EPIC｜3 组同时 ACTIVE',body:'涉及 4 所 · 已持续 0s\n最近180秒净收益均值最高 +0.28%\nR1｜SF｜买 GATE → 卖 BITGET\n净均 +0.28% · ACTIVE 1s\nR0｜FF｜买 BYBIT → 卖 BITGET\n净均 +0.17% · ACTIVE 59s\nR0｜FF｜买 BYBIT → 卖 BINANCE\n净均 +0.24% · ACTIVE 22s\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8\n官方原文：https://www.bitget.com/en/support/articles/12560603897724\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8\n⚠ 警告：Bybit 4h 成本：资金费计算方式不同'},
  {title:'SPACE｜FF｜V2收敛｜R0 +0.36%',body:'买 OKX 永续 → 卖 Binance 永续\n均值：净收益0.158%｜盘口差+0.333%\nOKX：资费+0.005%\nBinance：资费+0.005%\n最长未知4秒\nOKX：充开提开\nBinance：该平台无现货，暂无充提数据'},

@@ -5,14 +5,14 @@ import {mobileSummary} from './summary.mjs';
 test('untitled DEX opportunities use the instrument, direction and original P rank',()=>{
  const message={title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%\n净费率: 0.0228%/h\n质量: 样本少'};
  const before=JSON.stringify(message),x=mobileSummary(message);
- assert.equal(x.title,'TOKEN｜FF｜BN→AS｜P3');assert.equal(x.signals,'净费率 0.0228%/h · 质量：样本少');
- assert.equal(x.warning,false);assert.equal(x.risk,'');assert.equal(x.spread,'');assert.equal(JSON.stringify(message),before);
+ assert.equal(x.title,'TOKEN｜FF｜BN→AS｜P3');assert.equal(x.signals,'质量：样本少');
+ assert.equal(x.warning,false);assert.equal(x.risk,'');assert.equal(x.spread,'盘口差 +0.3759%');assert.equal(JSON.stringify(message),before);
 });
 
-test('DEX batches retain each coin, route and own fee without taking config blacklist coins',()=>{
- const x=mobileSummary({body:'[Dex 套利监控命中][最高P9]\nsymbol黑名单: BLACKLIST\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\n净费率: -0.01%/h\n质量: 样本少\n2. [P9][期现] SECOND | 多 OKX / 空 Binance\n净费率: +0.02%/h\n3. [P2][FF] THIRD | 多 Aster / 空 Bybit'});
+test('DEX batches retain each coin, route and own spread without taking config blacklist coins',()=>{
+ const x=mobileSummary({body:'[Dex 套利监控命中][最高P9]\nsymbol黑名单: BLACKLIST\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\ntake: -0.015% / +0.022%，30m +0.9%\n净费率: -0.01%/h\n质量: 样本少\n2. [P9][期现] SECOND | 多 OKX / 空 Binance\ntake: 0.32% / 0.45%\n净费率: +0.02%/h\n3. [P2][FF] THIRD | 多 Aster / 空 Bybit'});
  assert.equal(x.title,'DEX套利｜FIRST、SECOND、THIRD｜3组');
- assert.equal(x.signals,'FIRST｜SF｜GT→BG｜P3 · 净费率 -0.01%/h · 质量：样本少\nSECOND｜FS｜OK→BN｜P9 · 净费率 +0.02%/h\nTHIRD｜FF｜AS→BY｜P2');
+ assert.equal(x.signals,'FIRST｜SF｜GT→BG｜P3 · 盘口差 -0.015% · 质量：样本少\nSECOND｜FS｜OK→BN｜P9 · 盘口差 +0.32%\nTHIRD｜FF｜AS→BY｜P2');
  assert.ok(!x.title.includes('BLACKLIST'));
 });
 
@@ -20,6 +20,18 @@ test('configuration maximum age is hidden but actual delay warnings remain',()=>
  assert.equal(mobileSummary({body:'价格最大延迟: 45s'}).risk,'');
  assert.equal(mobileSummary({body:'价格最大延迟: 45s\n警告：TOKEN 价格已延迟90秒'}).risk,'警告：TOKEN 价格已延迟90秒');
  assert.equal(mobileSummary({body:'TOKEN 价格延迟，暂不可用'}).warning,true);
+});
+
+test('DEX summaries show opening spread only and never substitute a fee, reverse quote or average',()=>{
+ const header='1. [P3][期期] TOKEN | 多 Binance / 空 Aster\n';
+ for(const [body,expected] of [
+  ['take: +0.3759% / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h','盘口差 +0.3759%'],
+  ['take: 0.0000% / 0.1%','盘口差 +0.0000%'],
+  ['take: −0.2% / 0.5%','盘口差 −0.2%'],
+  ['盘口差: -0.15%\n净费率: 0.0228%/h','盘口差 -0.15%'],
+  ['take: 未知 / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h',''],
+  ['净费率: 0.0228%/h\n盘口差P75: +0.6%','']
+ ]){const x=mobileSummary({body:header+body});assert.equal(x.spread,expected);assert.ok(!x.signals.includes('净费率'));}
 });
 
 test('unknown untitled messages use meaningful original context instead of a generic heading',()=>{

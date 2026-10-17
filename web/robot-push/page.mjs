@@ -75,7 +75,7 @@ function card(message,pinned=false,detail=false){
  if(!detail){
   const summary=mobileSummary(message),compact=document.createElement('div');compact.className='mobile-summary';
   title.textContent=summary.title||title.textContent;
-  for(const [name,text] of Object.entries({signals:summary.signals,spread:summary.spread,risk:summary.warning?summary.risk:''})){if(!text)continue;const row=document.createElement('p');row.className='summary-'+name;row.textContent=text;row.title=text;if(name==='risk')row.dataset.warning=String(summary.warning);compact.append(row);}
+  for(const [name,text] of Object.entries({spread:summary.spread,signals:summary.signals,risk:summary.warning?summary.risk:''})){if(!text)continue;const row=document.createElement('p');row.className='summary-'+name;row.textContent=text;row.title=text;if(name==='risk')row.dataset.warning=String(summary.warning);compact.append(row);}
   const hint=document.createElement('span');hint.className='detail-hint';hint.textContent='全文 ›';header.append(hint);article.append(compact);article.classList.add('compact-card');article.tabIndex=0;article.setAttribute('role','button');article.setAttribute('aria-label',(title.textContent||'消息')+'，查看完整原文');
   article.addEventListener('click',()=>openDetail(message,pinned));article.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();openDetail(message,pinned);}});
  }
