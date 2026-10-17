@@ -1,0 +1,119 @@
+/* Compact presentation only; notification state and form handlers stay untouched. */
+html #notification-settings.ns-compact {
+  --ns-room: calc(var(--ns-viewport-height, 100dvh) - 24px);
+  position: fixed; inset: auto; left: 50%;
+  top: calc(var(--ns-viewport-top, 0px) + (var(--ns-viewport-height, 100dvh) - min(620px, var(--ns-room))) / 2);
+  transform: translateX(-50%); margin: 0;
+  width: min(480px, calc(100vw - 20px)); max-width: none;
+  height: min(620px, var(--ns-room)); max-height: var(--ns-room);
+  padding: 0; border: 1px solid #d5e2dc; border-radius: 14px;
+  overflow: hidden; font: 14px/1.4 system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+html #notification-settings.ns-compact[open] {
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+}
+#notification-settings.ns-compact .ns-head {
+  min-width: 0; gap: 8px; padding: 10px 14px; align-items: center;
+}
+#notification-settings.ns-compact h2 { font-size: 17px; line-height: 1.3; }
+#notification-settings.ns-compact .ns-head p { margin: 3px 0 0; font-size: 12px; line-height: 1.4; }
+#notification-settings.ns-compact #ns-close {
+  min-height: 44px; padding: 6px 10px; border-radius: 7px; font-size: 13px;
+}
+#notification-settings.ns-compact .ns-body {
+  min-height: 0; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
+  padding: 0 14px 12px; overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch; touch-action: pan-y;
+  scroll-padding-block: 12px;
+}
+#notification-settings.ns-compact .ns-body > * { max-width: 100%; }
+#notification-settings.ns-compact #ns-message {
+  margin: 10px 0; padding: 8px 10px; border-radius: 7px; font-size: 12px;
+}
+#notification-settings.ns-compact label { margin-bottom: 10px; font-size: 13px; }
+#notification-settings.ns-compact :is(input:not([type=checkbox]),select) {
+  height: 44px; min-height: 44px; padding: 8px 10px; margin-top: 5px;
+  border-radius: 7px; font-size: 16px; line-height: normal; min-width: 0;
+}
+#notification-settings.ns-compact input::placeholder { font-size: 13px; }
+#notification-settings.ns-compact .ns-grid { gap: 10px; }
+#notification-settings.ns-compact .ns-toggle {
+  min-height: 44px; padding: 0 0 8px; margin-bottom: 10px;
+}
+#notification-settings.ns-compact .ns-toggle input { flex: 0 0 46px; }
+#notification-settings.ns-compact .ns-help {
+  margin: -2px 0 10px; font-size: 12px; line-height: 1.4;
+}
+#notification-settings.ns-compact .ns-options strong { font-size: 13px; }
+#notification-settings.ns-compact .ns-options > div { gap: 6px; margin: 6px 0 12px; }
+#notification-settings.ns-compact .ns-options label {
+  min-height: 44px; padding: 8px; gap: 6px; font-size: 12px; border-radius: 7px;
+}
+#notification-settings.ns-compact .ns-actions {
+  margin: 0; padding: 8px 14px max(8px, env(safe-area-inset-bottom)); gap: 8px;
+  background: #fff; border-top: 1px solid #dce7e1;
+}
+#notification-settings.ns-compact .ns-actions button {
+  width: 100%; min-height: 44px; padding: 8px 12px; font-size: 14px; border-radius: 8px;
+}
+#notification-settings.ns-compact .ns-device-details {
+  border: 1px solid #dce7e1; border-radius: 8px; margin: 0 0 10px;
+}
+#notification-settings.ns-compact .ns-device-details > summary {
+  min-height: 44px; padding: 12px 10px; cursor: pointer; color: #31574a; font-size: 13px;
+}
+#notification-settings.ns-compact .ns-device-details > summary span {
+  float: right; color: #64786f; font-size: 12px;
+}
+#notification-settings.ns-compact .ns-notification,
+#notification-settings.ns-compact .ns-plans {
+  margin: 0; padding: 10px; border: 0; border-top: 1px solid #e5ede8; border-radius: 0;
+}
+#notification-settings.ns-compact #ns-binding { gap: 6px; margin-bottom: 8px; font-size: 12px; }
+#notification-settings.ns-compact #ns-bound-code { font-size: 16px; }
+#notification-settings.ns-compact :is(#ns-enable,#ns-create-code) {
+  min-height: 44px; padding: 8px; font-size: 14px; border-radius: 7px;
+}
+#notification-settings.ns-compact :is(#ns-notification-help,.ns-plans p) {
+  font-size: 12px; line-height: 1.4; margin: 8px 0 0;
+}
+#notification-settings.ns-compact .ns-inline { min-width: 0; gap: 8px; }
+#notification-settings.ns-compact .ns-inline input { min-width: 0; }
+#notification-settings.ns-compact .ns-inline button { flex: none; }
+
+/* One toolbar baseline; existing source labels/icons and actions are retained. */
+.split-mode .feed-tools.ns-toolbar {
+  display: grid; grid-template-columns: 88px 64px 60px minmax(84px,1fr);
+  align-items: center; gap: 6px; padding: 0 0 8px;
+}
+.feed-tools.ns-toolbar .reading { display: flex; align-items: center; gap: 0; margin: 0; }
+.feed-tools.ns-toolbar .switch { width: 44px; height: 44px; flex: 0 0 44px; }
+.feed-tools.ns-toolbar .switch input { width: 44px; height: 44px; top: 0; left: 0; }
+.feed-tools.ns-toolbar .switch i { inset: 13px 7px 14px; }
+.feed-tools.ns-toolbar #seconds {
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  margin: 0; padding: 0; text-align: center; font-size: 13px;
+}
+.feed-tools.ns-toolbar #new-messages {
+  width: 64px; height: 44px; min-height: 44px; padding: 0 6px; margin: 0;
+  display: inline-flex; justify-content: center; align-items: center;
+  border-radius: 7px; font-size: 12px; line-height: 1.2;
+}
+.feed-tools.ns-toolbar .desktop-status { display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px; }
+.feed-tools.ns-toolbar #connection { width: 13px; min-width: 13px; height: 12px; flex: 0 0 13px; }
+.feed-tools.ns-toolbar #sound {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0;
+}
+.feed-tools.ns-toolbar #notification-settings-open {
+  justify-self: end; height: 44px; min-height: 44px; margin: 0; padding: 0 10px;
+  border-radius: 7px; font-size: 13px; line-height: 1.2;
+}
+@media (min-width: 901px) {
+  .split-mode .feed-tools.ns-toolbar { grid-template-columns: 88px 64px 60px minmax(84px,1fr); }
+}
+@media (max-width: 360px) {
+  .split-mode .feed-tools.ns-toolbar { grid-template-columns: 88px 64px minmax(60px,1fr); gap: 4px 8px; }
+  .feed-tools.ns-toolbar #notification-settings-open { grid-column: 1 / -1; justify-self: stretch; width: 100%; }
+}
