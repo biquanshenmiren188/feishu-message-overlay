@@ -12,17 +12,18 @@ export function timeUTC8(value){
 function clean(message){
   if(!message||typeof message.id!=='string'||message.id.length>256||message.senderType!=='bot'||typeof message.body!=='string'||message.body.length>16000)return null;
   const stamp=Date.parse(message.sentAt);if(!Number.isFinite(stamp))return null;
-  return {id:message.id,groupId:String(message.groupId??''),title:String(message.title??''),body:message.body,sentAt:new Date(stamp).toISOString(),actions:(message.actions??[]).filter(a=>typeof a.label==='string'&&safeUrl(a.url)).map(a=>({label:a.label,url:a.url}))};
+  return {id:message.id,groupId:String(message.groupId??''),headerTone:['blue','red','green','orange','purple','indigo','turquoise','yellow','grey'].includes(message.headerTone)?message.headerTone:'grey',title:String(message.title??''),body:message.body,sentAt:new Date(stamp).toISOString(),actions:(message.actions??[]).filter(a=>typeof a.label==='string'&&safeUrl(a.url)).map(a=>({label:a.label,url:a.url}))};
 }
 export class FeedStore{
-  messages=[];pinned=null;seen=new Map();
+  messages=[];pinned=null;seen=new Map();revision=0;
   ingest(batch,now=Date.now()){
-    const added=[];
-    for(const raw of batch.messages??[]){const message=clean(raw);if(!message)continue;const stamp=Date.parse(message.sentAt);if(stamp>now+30000||now-stamp>RETENTION_MS||this.seen.has(message.id))continue;this.seen.set(message.id,stamp);this.messages.push(message);added.push(message.id);}
+    const added=[],previousIds=this.messages.map(m=>m.id).join("|"),previousPin=JSON.stringify(this.pinned),retained=new Set(this.messages.map(m=>m.id));
+    for(const raw of batch.messages??[]){const message=clean(raw);if(!message)continue;const stamp=Date.parse(message.sentAt);if(stamp>now+30000||now-stamp>RETENTION_MS||this.seen.has(message.id)||retained.has(message.id))continue;this.seen.set(message.id,stamp);this.messages.push(message);added.push(message.id);}
     if(batch.pinned!==undefined)this.pinned=batch.pinned===null?null:clean(batch.pinned);
-    this.messages=this.messages.filter(m=>now-Date.parse(m.sentAt)<=RETENTION_MS&&(!this.pinned||m.groupId!==this.pinned.groupId)).sort((a,b)=>Date.parse(a.sentAt)-Date.parse(b.sentAt)).slice(-MAX_MESSAGES);
+    this.messages=this.messages.filter(m=>!this.pinned||m.groupId!==this.pinned.groupId).sort((a,b)=>Date.parse(a.sentAt)-Date.parse(b.sentAt)).slice(-MAX_MESSAGES);
     for(const [id,stamp] of this.seen)if(now-stamp>RETENTION_MS)this.seen.delete(id);
     if(this.seen.size>MAX_MESSAGES*2){const kept=new Set(this.messages.map(m=>m.id));for(const id of this.seen.keys())if(!kept.has(id))this.seen.delete(id);}
+    if(previousIds!==this.messages.map(m=>m.id).join("|")||previousPin!==JSON.stringify(this.pinned))this.revision++;
     return added.filter(id=>this.messages.some(m=>m.id===id));
   }
 }

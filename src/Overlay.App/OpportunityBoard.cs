@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -15,7 +15,8 @@ public sealed class OpportunityPresenter : ContentControl
 // The existing signed cloud response carries this credential-free cache. No new upstream poller.
 internal sealed class OpportunityModel
 {
-    internal sealed class Entry(JsonElement data) {internal JsonElement Data=data;internal DateTimeOffset? Missing;}
+    private static long nextContentVersion;
+    internal sealed class Entry(JsonElement data) {internal JsonElement Data=data;internal readonly string Content=data.GetRawText();internal readonly long ContentVersion=Interlocked.Increment(ref nextContentVersion);internal DateTimeOffset? Missing;}
     internal readonly Dictionary<string,Entry> Cards=new(StringComparer.Ordinal);
     internal DateTimeOffset Sample=DateTimeOffset.MinValue,Received=DateTimeOffset.MinValue;
     internal bool Connected,Complete;
@@ -42,7 +43,8 @@ internal sealed class OpportunityModel
         {
             var id=Text(data,"id");if(id.Length is 0 or >512||Date(data,"validUntil")==DateTimeOffset.MinValue)continue;
             var pair=Text(data,"pair");var key=pair.Length>0?pair:id;present.Add(key);
-            Cards[key]=new(data.Clone());
+            if(Cards.TryGetValue(key,out var existing)&&existing.Content==data.GetRawText())existing.Missing=null;
+            else Cards[key]=new(data.Clone());
         }
         if(Complete)foreach(var pair in Cards)if(!present.Contains(pair.Key))pair.Value.Missing??=now;
         Prune(now);
@@ -54,12 +56,24 @@ internal sealed class OpportunityModel
     internal static string? CopyGcStrategy(JsonElement data)
     {
         var legs=Array(Get(data,"details"),"legs",3);
-        var supported=new[]{"binance","bybit","gate","hyperliquid"};
-        if(Text(data,"strategy")!="FF"||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind!=JsonValueKind.False||!supported.Contains(Text(l,"exchange"))))return null;
+        var supported=new[]{"binance","bybit","gate","okx","hyperliquid"};
+        var strategy=Text(data,"strategy");
+        if(strategy is not ("SF" or "FS" or "FF")||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind is not (JsonValueKind.True or JsonValueKind.False))||strategy=="SF"&&Text(legs[0],"exchange")=="hyperliquid")return null;
+        // FS borrows on the spot sell leg. Astro accepts cross margin only on ordinary venues.
+        var buyGc=supported.Contains(Text(legs[0],"exchange"));
+        var sellGc=strategy!="FS"&&supported.Contains(Text(legs[1],"exchange"));
+        if(!buyGc&&!sellGc)return null;
         var normal=CopyStrategy(data);if(normal is null)return null;
         var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(normal[(normal.IndexOf('\n')+1)..])!;
-        payload["buyEx"]="gc-"+payload["buyEx"];payload["sellEx"]="gc-"+payload["sellEx"];
-        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+        if(buyGc)payload["buyEx"]="gc-"+payload["buyEx"];
+        if(sellGc)payload["sellEx"]="gc-"+payload["sellEx"];
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
+    }
+    internal static bool GcBothLegs(JsonElement data)
+    {
+        var text=CopyGcStrategy(data);if(text is null)return false;
+        var p=JsonSerializer.Deserialize<Dictionary<string,string>>(text[(text.IndexOf('\n')+1)..])!;
+        return p["buyEx"].StartsWith("gc-",StringComparison.Ordinal)&&p["sellEx"].StartsWith("gc-",StringComparison.Ordinal);
     }
     internal static string? CopyStrategy(JsonElement data)
     {
@@ -69,11 +83,11 @@ internal sealed class OpportunityModel
         var buy=Text(legs[0],"exchange");var sell=Text(legs[1],"exchange");
         if(!allowed.Contains(buy)||!allowed.Contains(sell)||strategy=="FS"&&sell is "aster" or "hyperliquid")return null;
         if(True(legs[0],"spot")!=(strategy=="SF")||True(legs[1],"spot")!=(strategy=="FS"))return null;
-        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+-USDT-SWAP$"))s=s[..^5];s=Regex.Replace(s,"[_/\\-]","");if(Text(leg,"exchange")=="hyperliquid"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[A-Z0-9]+$")&&!s.EndsWith("USDT",StringComparison.Ordinal))s+="USDT";return s;}
-        var a=Symbol(legs[0]);if(a!=Symbol(legs[1])||!Regex.IsMatch(a,"^[A-Z0-9]+USDT$"))return null;
+        string Symbol(JsonElement leg){var s=Text(leg,"symbol").ToUpperInvariant();if(Text(leg,"exchange")=="okx"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[\\p{L}\\p{Nd}]+-USDT-SWAP$"))s=s[..^5];s=Regex.Replace(s,"[_/\\-]","");if(Text(leg,"exchange")=="hyperliquid"&&!True(leg,"spot")&&Regex.IsMatch(s,"^[\\p{L}\\p{Nd}]+$")&&!s.EndsWith("USDT",StringComparison.Ordinal))s+="USDT";return s;}
+        var a=Symbol(legs[0]);if(a!=Symbol(legs[1])||!Regex.IsMatch(a,"^[\\p{L}\\p{Nd}]+USDT$"))return null;
         var payload=new Dictionary<string,string>{{"type",strategy},{"name",a[..^4]},{"buyEx",buy=="hyperliquid"?"hl":buy},{"sellEx",sell=="hyperliquid"?"hl":sell}};
         if(strategy=="FS")payload["spotMarginType"]="cross";
-        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
+        return "ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(payload,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)}).Replace("\r\n","\n",StringComparison.Ordinal);
     }
 }
 
@@ -83,18 +97,41 @@ internal sealed class OpportunityBoard : DockPanel
     private readonly TextBlock heading=new(){FontSize=14,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,6,4,8)};
     private readonly ListBox cards=new(){BorderThickness=new Thickness(0),Background=Brushes.Transparent,HorizontalContentAlignment=HorizontalAlignment.Stretch};
     private string? lastRender;
+    private string? lastStates;
+    private DateTimeOffset lastValues;
+    private long lastAgeTick=-1;
+    private readonly List<(WeakReference<TextBlock> Label,OpportunityModel.Entry Entry)> ages=[];
+    internal int RenderCount{get;private set;}
     internal int ActiveCount{get;private set;}
     internal int VisibleCount{get;private set;}
+    internal int MaximumColumns{get;set;}=1;
+    internal int ColumnCount{get;private set;}=1;
+    internal event Action<int>? ColumnsChanged;
+    internal void ReportColumns(int count)
+    {
+        if(count==ColumnCount)return;
+        ColumnCount=count;
+        Dispatcher.BeginInvoke(new Action(()=>ColumnsChanged?.Invoke(ColumnCount)));
+    }
+    internal void RefreshColumnLayout()=>FindColumns(cards)?.InvalidateMeasure();
+    private static OpportunityColumnsPanel? FindColumns(DependencyObject parent)
+    {
+        if(parent is OpportunityColumnsPanel panel)return panel;
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++)if(FindColumns(VisualTreeHelper.GetChild(parent,i)) is {} found)return found;
+        return null;
+    }
     internal OpportunityBoard()
     {
         heading.Visibility=Visibility.Collapsed;Margin=new Thickness(0);LastChildFill=true;SetDock(heading,Dock.Top);Children.Add(heading);
         ScrollViewer.SetHorizontalScrollBarVisibility(cards,ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(cards,ScrollBarVisibility.Hidden);
-        ScrollViewer.SetCanContentScroll(cards,true);VirtualizingPanel.SetIsVirtualizing(cards,true);VirtualizingPanel.SetVirtualizationMode(cards,VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(cards,false);VirtualizingPanel.SetIsVirtualizing(cards,false);
+        cards.ItemsPanel=new ItemsPanelTemplate(new FrameworkElementFactory(typeof(OpportunityColumnsPanel)));
+        SizeChanged+=(_,_)=>RefreshColumnLayout();
         var factory=new FrameworkElementFactory(typeof(OpportunityPresenter));cards.ItemTemplate=new DataTemplate{VisualTree=factory};
         cards.Padding=new Thickness(0);
         // The default ListBox template adds a one-pixel ScrollViewer margin.
-        var viewport=new FrameworkElementFactory(typeof(ScrollViewer));viewport.SetValue(ScrollViewer.CanContentScrollProperty,true);viewport.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty,ScrollBarVisibility.Hidden);viewport.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);viewport.SetValue(Control.PaddingProperty,new Thickness(0));viewport.SetValue(FrameworkElement.MarginProperty,new Thickness(0));viewport.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter)));cards.Template=new ControlTemplate(typeof(ListBox)){VisualTree=viewport};
+        var viewport=new FrameworkElementFactory(typeof(ScrollViewer));viewport.SetValue(ScrollViewer.CanContentScrollProperty,false);viewport.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty,ScrollBarVisibility.Hidden);viewport.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);viewport.SetValue(Control.PaddingProperty,new Thickness(0));viewport.SetValue(FrameworkElement.MarginProperty,new Thickness(0));viewport.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter)));cards.Template=new ControlTemplate(typeof(ListBox)){VisualTree=viewport};
         var style=new Style(typeof(ListBoxItem));style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0)));style.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0)));style.Setters.Add(new Setter(Control.FocusableProperty,false));style.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty,null));
         var presenter=new FrameworkElementFactory(typeof(ContentPresenter));
         style.Setters.Add(new Setter(Control.TemplateProperty,new ControlTemplate(typeof(ListBoxItem)){VisualTree=presenter}));cards.ItemContainerStyle=style;
@@ -110,13 +147,30 @@ internal sealed class OpportunityBoard : DockPanel
         if(!visible)return;
         // Values are committed at most once per ten seconds; expiry/connection changes remain immediate.
         var ordered=Model.Cards.Values.OrderBy(c=>OpportunityModel.Asset(c.Data),StringComparer.Ordinal).ThenByDescending(c=>OpportunityModel.Number(OpportunityModel.Get(c.Data,"v2Residual"),"level")??-1).ToArray();
-        var signature=string.Join('|',ordered.Select(c=>OpportunityModel.Text(c.Data,"id")+Model.State(c,now)))+"/"+now.ToUnixTimeSeconds()/10+"/"+Model.Connected;
+        var states=JsonSerializer.Serialize(ordered.Select(c=>new{id=OpportunityModel.Text(c.Data,"id"),state=Model.State(c,now),transfers=Transfers(OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"legs",2),OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"transferWallets",20),now)}));
+        var signature=string.Join(',',ordered.Select(c=>c.ContentVersion))+states;
         heading.Text=$"卡片推送   {ActiveCount} ACTIVE";
         heading.ToolTip=Model.Connected?$"同步中 · {Model.Sample.ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8"+(Model.Complete?"":" · 数据暂不完整"):"正在连接卡片数据源 · 旧数据不计入活跃机会";
-        if(signature==lastRender)return;lastRender=signature;VisibleCount=ordered.Length;
+        // Update the age label alone; do not rebuild card controls just because time passed.
+        var ageTick=now.ToUnixTimeSeconds()/10;
+        if(ageTick!=lastAgeTick)
+        {
+            lastAgeTick=ageTick;
+            for(var i=ages.Count-1;i>=0;i--)
+                if(ages[i].Label.TryGetTarget(out var label))label.Text=StatusText(ages[i].Entry,now);
+                else ages.RemoveAt(i);
+        }
+        if(signature==lastRender||(states==lastStates&&now-lastValues<TimeSpan.FromSeconds(10)))return;
+        lastRender=signature;lastStates=states;lastValues=now;VisibleCount=ordered.Length;RenderCount++;ages.Clear();
         var scroller=FindScroll(cards);var offset=scroller?.VerticalOffset??0;
         cards.ItemsSource=ordered.Length>0?ordered.Select(entry=>(object)new OpportunityItem(this,entry,now)).ToArray():System.Array.Empty<object>();
         if(scroller is not null)Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,new Action(()=>scroller.ScrollToVerticalOffset(offset)));
+    }
+    private string StatusText(OpportunityModel.Entry entry,DateTimeOffset now)
+    {
+        var state=Model.State(entry,now);var data=entry.Data;
+        var age=Math.Max(0,(int)(now-OpportunityModel.Date(data,"enteredAt")).TotalSeconds);
+        return (state=="ACTIVE"?"● ACTIVE "+age+"s":state)+" · "+(OpportunityModel.Text(data,"trigger")=="v2_price_window"?"V2收敛":OpportunityModel.Text(data,"trigger"));
     }
     internal static ScrollViewer? FindScroll(DependencyObject parent)
     {
@@ -130,17 +184,16 @@ internal sealed class OpportunityBoard : DockPanel
         var rank=level>=10?"#E3444E":level>=6?"#E47C23":level>=4?"#C49500":level>=2?"#4085DF":"#8B95A5";
         var rankText=level>=10?"#B72136":level>=6?"#9C490C":level>=4?"#866400":level>=2?"#245B9E":"#596271";
         var stack=new StackPanel();
-        var age=Math.Max(0,(int)(now-OpportunityModel.Date(data,"enteredAt")).TotalSeconds);
         var title=new Grid{Margin=new Thickness(0,0,0,3)};title.ColumnDefinitions.Add(new());title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var name=Label("",13,true);name.Inlines.Add(new System.Windows.Documents.Run(OpportunityModel.Asset(data)));var strategyBadge=new Border{Child=Label(OpportunityModel.Text(data,"strategy"),8,color:"#476371"),Background=Brush("#E9EDEB"),Margin=new Thickness(3,0,0,0),Padding=new Thickness(1),VerticalAlignment=VerticalAlignment.Center};name.Inlines.Add(new System.Windows.Documents.InlineUIContainer(strategyBadge){BaselineAlignment=BaselineAlignment.Center});title.Children.Add(name);
-        var status=Label((state=="ACTIVE"?"● ACTIVE "+age+"s":state)+" · "+(OpportunityModel.Text(data,"trigger")=="v2_price_window"?"V2收敛":OpportunityModel.Text(data,"trigger")),8,true,state=="ACTIVE"?"#28765B":"#A16910");status.VerticalAlignment=VerticalAlignment.Center;status.Margin=new Thickness(3,0,4,0);Grid.SetColumn(status,1);title.Children.Add(status);
+        var status=Label(StatusText(entry,now),8,true,state=="ACTIVE"?"#28765B":"#A16910");ages.Add((new(status),entry));status.VerticalAlignment=VerticalAlignment.Center;status.Margin=new Thickness(3,0,4,0);Grid.SetColumn(status,1);title.Children.Add(status);
         var badge=new Border{Child=Label($"R{(level?.ToString(CultureInfo.InvariantCulture)??"—")} {OpportunityModel.Percent(OpportunityModel.Number(residual,"bps"))}",10,true,rankText),Background=Brush("#F7F9FB"),BorderBrush=Brush(rankText),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(4),Padding=new Thickness(3,1,3,1)};Grid.SetColumn(badge,2);title.Children.Add(badge);stack.Children.Add(title);
         var legs=OpportunityModel.Array(detail,"legs",2);var legGrid=new Grid{Margin=new Thickness(0,0,0,4),MinHeight=44};legGrid.ColumnDefinitions.Add(new());legGrid.ColumnDefinitions.Add(new());
         for(var i=0;i<legs.Length;i++)
         {
             var leg=legs[i];var spot=OpportunityModel.True(leg,"spot");var panel=new Grid{Margin=new Thickness(i==0?0:5,0,i==0?5:0,0)};panel.ColumnDefinitions.Add(new());panel.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var main=new StackPanel();main.Children.Add(Label((i==0?"买 ":"卖 ")+Exchange(leg)+(spot?" 现货":" 永续"),11,true));
-            if(!spot){var rate=new StackPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),15,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hours=OpportunityModel.Number(leg,"hours");var cycle=hours==1?("#9A3900","#FFF0E1","#D06A15"):hours==8?("#155CAD","#E7F1FF","#4383C5"):hours is >0?("#7031A7","#F1E8FF","#9A62C8"):("#657B89","#00FFFFFF","#DCE3E8");rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:cycle.Item1),BorderBrush=Brush(cycle.Item3),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(cycle.Item2),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
+            if(!spot){var rate=new WrapPanel{Orientation=Orientation.Horizontal};var number=Label(OpportunityModel.Percent(OpportunityModel.Number(leg,"rate"),.01),15,true);number.FontFamily=new FontFamily("Consolas");rate.Children.Add(number);var hours=OpportunityModel.Number(leg,"hours");var cycle=hours==1?("#9A3900","#FFF0E1","#D06A15"):hours==8?("#155CAD","#E7F1FF","#4383C5"):hours is >0?("#7031A7","#F1E8FF","#9A62C8"):("#657B89","#00FFFFFF","#DCE3E8");rate.Children.Add(new Border{Child=Label(OpportunityModel.Number(leg,"hours") is {} h?$"{h}h":"—",11,color:cycle.Item1),BorderBrush=Brush(cycle.Item3),BorderThickness=new Thickness(.7),CornerRadius=new CornerRadius(2),Background=Brush(cycle.Item2),Padding=new Thickness(2,0,2,0),Margin=new Thickness(3,2,0,2),VerticalAlignment=VerticalAlignment.Center});main.Children.Add(rate);}panel.Children.Add(main);
             var stats=new StackPanel{Margin=new Thickness(2,1,0,0)};
             foreach(var metric in spot?new[]{("24H","volume")}:new[]{("24H","volume"),("OI","oi")}){var caption=Label(metric.Item1,8,color:"#747570");caption.TextAlignment=TextAlignment.Right;caption.Margin=new Thickness(0);stats.Children.Add(caption);var value=Label(OpportunityModel.Money(OpportunityModel.Number(leg,metric.Item2)),9);value.FontFamily=new FontFamily("Consolas");value.TextAlignment=TextAlignment.Right;value.Margin=new Thickness(0);stats.Children.Add(value);}Grid.SetColumn(stats,1);panel.Children.Add(stats);Grid.SetColumn(panel,i);legGrid.Children.Add(panel);
         }stack.Children.Add(legGrid);
@@ -151,7 +204,7 @@ internal sealed class OpportunityBoard : DockPanel
         if(legs.Length==2&&!OpportunityModel.True(legs[0],"spot")&&!OpportunityModel.True(legs[1],"spot")&&OpportunityModel.Number(legs[0],"hours") is >0 and var h0&&OpportunityModel.Number(legs[1],"hours") is >0 and var h1&&h0!=h1)warnings.Add($"周期 {h0}h/{h1}h");
         if(legs.Any(l=>OpportunityModel.Text(l,"exchange")=="bybit"&&!OpportunityModel.True(l,"spot")&&OpportunityModel.Number(l,"hours")==1))warnings.Add("Bybit 1h 计算不同");
         if(warnings.Count>0)stack.Children.Add(new Border{Child=Label("⚠ "+string.Join(" · ",warnings),10,true,"#BA2948"),Background=Brush("#FFF0F4"),Padding=new Thickness(5,1,5,1),Margin=new Thickness(0,0,0,4),BorderBrush=Brush("#E0294A"),BorderThickness=new Thickness(2,0,0,0)});
-        var transferHeading=new StackPanel{Orientation=Orientation.Horizontal};transferHeading.Children.Add(Label("现货充提",12,true,"#476371"));transferHeading.Children.Add(Label(" 充 / 提 · ✓开 ×关 ?未知 —无数据",8,color:"#647E8D"));stack.Children.Add(transferHeading);
+        var transferHeading=new WrapPanel{Orientation=Orientation.Horizontal};transferHeading.Children.Add(Label("现货充提",12,true,"#476371"));transferHeading.Children.Add(Label(" 充 / 提 · ✓开 ×关 ?未知 —无数据",8,color:"#647E8D"));stack.Children.Add(transferHeading);
         var transfers=Transfers(legs,OpportunityModel.Array(detail,"transferWallets",20),now);
         var rows=transfers.Select(t=>t.Split("   ",2)).ToArray();var chains=rows.SelectMany(r=>r.Length<2?[]:r[1].Split('；').Select(c=>c.Split("   ",2)).Where(c=>c.Length==2).Select(c=>c[0])).Distinct().ToArray();if(chains.Length==0)chains=["状态"];
         var table=new Grid{Margin=new Thickness(0,0,0,4)};table.ColumnDefinitions.Add(new(){Width=new GridLength(66)});foreach(var chain in chains)table.ColumnDefinitions.Add(new());for(var i=0;i<=rows.Length;i++)table.RowDefinitions.Add(new(){Height=GridLength.Auto});
@@ -163,7 +216,18 @@ internal sealed class OpportunityBoard : DockPanel
         var footer=new DockPanel{Margin=new Thickness(0,2,0,0)};var copy=FooterButton("复制");
         copy.Click+=(_,_)=>{try{Clipboard.SetText(OpportunityModel.CopyStrategy(data)??string.Join('\n',VisibleText(stack))+"\n"+OpportunityModel.Radar(data));copy.Content="已复制";}catch{copy.Content="复制失败，请重试";}};
         SetDock(copy,Dock.Left);footer.Children.Add(copy);
-        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=FooterButton("复制 GC");gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
+        if(OpportunityModel.CopyGcStrategy(data) is {} gcPayload){var gc=FooterButton("复制 GC");if(OpportunityModel.GcBothLegs(data)){
+            gc.BorderBrush=Brush("#008B6B");gc.BorderThickness=new Thickness(3);gc.Foreground=Brush("#007453");gc.Padding=new Thickness(7,0,7,0);
+            // The window's implicit button template does not render BorderBrush.
+            // Give this action its own template so the visible border follows the button.
+            var outline=new FrameworkElementFactory(typeof(Border));outline.Name="GcOutline";
+            outline.SetValue(Border.BackgroundProperty,Brush("#F0F0F0"));outline.SetValue(Border.CornerRadiusProperty,new CornerRadius(4));
+            outline.SetBinding(Border.BorderBrushProperty,new System.Windows.Data.Binding("BorderBrush"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            outline.SetBinding(Border.BorderThicknessProperty,new System.Windows.Data.Binding("BorderThickness"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            outline.SetBinding(Border.PaddingProperty,new System.Windows.Data.Binding("Padding"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});
+            var content=new FrameworkElementFactory(typeof(TextBlock));content.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Content"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetBinding(TextBlock.ForegroundProperty,new System.Windows.Data.Binding("Foreground"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetValue(FrameworkElement.HorizontalAlignmentProperty,HorizontalAlignment.Center);content.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);outline.AppendChild(content);
+            gc.Template=new ControlTemplate(typeof(Button)){VisualTree=outline};
+        }gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
         if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);

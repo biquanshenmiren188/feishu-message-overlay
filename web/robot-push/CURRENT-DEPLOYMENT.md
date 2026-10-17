@@ -1,3 +1,18 @@
+# Web session history — 2026-10-11
+
+Current static release: `/opt/funding-radar-web/releases/20261011-web-session-history`; active module namespace: `robot-push/web-session-20261011`. This section supersedes historical retention and render behavior below.
+
+- Keep the latest 100 accepted ordinary messages in the current page session, with an independent latest pin. Idle time does not evict accepted messages. Refresh starts a new session and reloads the server's recent feed; this is not persistent history. Incoming stale messages remain rejected.
+- Preserve the existing scroll rail, reading cadence, mobile summaries and layout; no History button. Unchanged feed content does not rebuild or reposition the message list.
+- Reuse parsed snapshots on genuine HTTP 304 responses. The shared worker sends a small unchanged notification instead of repeatedly cloning the full snapshot. Existing delta requests, shared polling across visible tabs, hidden-page suspension and error backoff remain enabled.
+- Opportunity cards retain the desktop lifecycle: stale after 20 seconds, expired cards retained for 30 seconds. Status/age updates run locally without extra HTTP requests; normal values remain limited to the existing 10-second display cadence. Unchanged cards retain their DOM nodes.
+
+Validation: all 83 Node web tests passed. Synthetic browser fixtures at desktop and 390px widths passed 10 checks each, including idle-day retention, original history keyboard navigation, independent pin, bounded nodes, unchanged DOM preservation, stale/expired transitions and no horizontal overflow. The live authenticated page loaded the new namespace, showed the updated retention notice, shared transport, HTTP 304 and delta counters. Browser-extension errors were unrelated to page modules. This is not physical mobile-device testing.
+
+Deployment copied the previous release, verified baseline and candidate SHA256 values, then atomically switched the current symlink. Backup: `/opt/funding-radar-web/backups/20261011-web-session-history`; previous target: `/opt/funding-radar-web/releases/20261009-push-low-traffic-v2`. No receiver restart, message-data mutation, authentication or network-security change was required.
+
+---
+
 > 2026-10-10：当前 Windows 安装和云端读者授权请看 [CLOUD-SETUP.md](../../CLOUD-SETUP.md)。本文件下面的逐项哈希一致结论仅适用于当时部署；新增只读授权后 server.py 已变化，旧 source-hashes 不能作为当前整体一致的证明。
 
 # Deployment reconciliation — 2026-10-03（历史记录）

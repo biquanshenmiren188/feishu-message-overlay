@@ -9,12 +9,17 @@ const snapshotFetch=createSnapshotFetch(async(...args)=>{
   if(response.headers.get('Content-Type')?.includes('application/vnd.radar.delta+json'))metrics.delta++;
   return response;
 });
-export async function readPushSnapshot(name,signal){
+export function createPushReader(fetchSnapshot=snapshotFetch){
+ const parsed=new Map();
+ return async function readPushSnapshot(name,signal){
   if(!['feed','basispulse'].includes(name))throw Error('Unknown push stream');
-  const response=await snapshotFetch(new URL('/radar/robot-push/'+name+'.json',import.meta.url).href,{credentials:'same-origin',redirect:'error',signal});
+  const response=await fetchSnapshot(new URL('/radar/robot-push/'+name+'.json',import.meta.url).href,{credentials:'same-origin',redirect:'error',signal});
   if(!response.ok)throw Error('Push unavailable');
+  if(response.headers.get('X-Radar-Unchanged')==='1'&&parsed.has(name)){signal.throwIfAborted();return parsed.get(name);}
   const data=await response.json();signal.throwIfAborted();
   if(name==='feed'&&(!data||!Array.isArray(data.messages)))throw Error('Invalid feed');
   if(name==='basispulse'&&!['connected','connecting','reconnecting','auth_required'].includes(data?.status))throw Error('Invalid cards');
-  return data;
+  parsed.set(name,data);return data;
+ };
 }
+export const readPushSnapshot=createPushReader();

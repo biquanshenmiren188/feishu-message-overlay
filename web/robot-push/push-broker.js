@@ -12,8 +12,9 @@ export function createPushBroker(read, {clock=Date.now, later=setTimeout, cancel
     try{
       const data=await read(name,controller.signal);controller.signal.throwIfAborted();
       if(s.controller!==controller)return;
+      const unchanged=s.last?.data===data;
       s.failures=0;s.last={type:'data',name,data};s.at=clock();
-      for(const [,c] of audience(name))c.send(s.last);
+      for(const [,c] of audience(name))c.send(unchanged?{type:'unchanged',name}:s.last);
     }catch{
       if(s.controller===controller){s.failures++;s.last=null;for(const [,c] of audience(name))c.send({type:'error',name});}
     }finally{

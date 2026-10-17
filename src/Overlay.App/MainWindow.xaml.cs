@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Controls.Primitives;
@@ -14,7 +14,7 @@ using System.IO;
 namespace Overlay.App;
 public partial class MainWindow : Window
 {
-    private readonly MessageStore store = new();
+    private readonly MessageStore store = new(expireMessages:false);
     private readonly OpportunityBoard opportunityBoard=new();
     private readonly DispatcherTimer opportunityTimer=new(){Interval=TimeSpan.FromSeconds(1)};
     private readonly PublicWebPublisher webPublisher=new();
@@ -69,6 +69,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         OpportunityArea.Child=opportunityBoard;
+        opportunityBoard.ColumnsChanged+=ResizeOpportunityColumns;
         opportunityTimer.Tick+=(_,_)=>{if(source is CloudMessageSource cloud)opportunityBoard.Update(cloud.Opportunities,cloud.TransportConnected,DateTimeOffset.UtcNow,IsVisible);};
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
@@ -358,7 +359,7 @@ public partial class MainWindow : Window
     {
         if(App.SmokeMode && Preferences.ContractPath is null)return;
         if(Preferences.LoadState is not ("loaded" or "missing" or "not_loaded")){Status.Text=$"设置读取失败（{Preferences.LoadState}），原文件已保留；暂停保存";return;}
-        var next=new Preferences{Width=Width,Height=Height,Topmost=Pin.IsChecked==true,Sound=Sound.IsChecked==true,Font=MessageList.FontFamily.Source,FontSize=FontScale.Value,Opacity=OpacityScale.Value/100,AutoScroll=AutoScroll.IsChecked==true,DwellSeconds=reader.Seconds,AudioPath=audio.PathName,AutoListenJoined=AutoJoined.IsChecked==true,PinnedChatId=pinnedChatId};
+        var next=new Preferences{Width=Width,MessagePaneWidth=OpportunityArea.Visibility==Visibility.Visible?Math.Max(300,Width-CardsColumn.Width.Value):null,Height=Height,Topmost=Pin.IsChecked==true,Sound=Sound.IsChecked==true,Font=MessageList.FontFamily.Source,FontSize=FontScale.Value,Opacity=OpacityScale.Value/100,AutoScroll=AutoScroll.IsChecked==true,DwellSeconds=reader.Seconds,AudioPath=audio.PathName,AutoListenJoined=AutoJoined.IsChecked==true,PinnedChatId=pinnedChatId};
         if(next==lastPersisted && pendingPreferences is null)return;
         if(App.SmokeMode){if(next.Save())lastPersisted=next;return;}
         pendingPreferences=next;preferenceTimer.Stop();preferenceTimer.Start();
@@ -631,14 +632,30 @@ public partial class MainWindow : Window
     {
         if(OpportunityArea.Visibility==Visibility.Visible)return;
         OpportunityArea.Visibility=Visibility.Visible;MessagesColumn.Width=new GridLength(1,GridUnitType.Star);
-        var work=CurrentWorkArea();var cardWidth=Math.Min(300,Math.Max(280,work.Width-376));
+        var work=CurrentWorkArea();var cardWidth=OpportunityColumnsPanel.CardWidth;
         CardsColumn.Width=new GridLength(cardWidth);
-        // Preserve the text pane's original fit policy; only add horizontal card space.
-        var textWidth=Width>=720?360:Width;
+        // Reopening an already combined layout must not add the card pane twice.
+        var textWidth=lastPersisted.CloudTextWidth(Width,300);
         fittingWindow=true;
         try{MinWidth=cardWidth+300;Width=Math.Min(cardWidth+textWidth,Math.Max(MinWidth,work.Width-16));}
         finally{fittingWindow=false;}
+        opportunityBoard.MaximumColumns=Math.Max(1,(int)((work.Width-textWidth-2)/cardWidth));
+        opportunityBoard.RefreshColumnLayout();
         RequestContentLayout();WindowAlpha.Set(this,OpacityScale.Value/100);PlaceTopRight();
+    }
+    private void ResizeOpportunityColumns(int count)
+    {
+        if(OpportunityArea.Visibility!=Visibility.Visible || exiting)return;
+        var work=CurrentWorkArea();
+        var textWidth=Math.Max(300,Width-CardsColumn.Width.Value);
+        var maximum=Math.Max(1,(int)((work.Width-textWidth-2)/OpportunityColumnsPanel.CardWidth));
+        opportunityBoard.MaximumColumns=maximum;
+        var cardWidth=Math.Min(count,maximum)*OpportunityColumnsPanel.CardWidth;
+        if(Math.Abs(CardsColumn.Width.Value-cardWidth)<.1)return;
+        var right=Left+Width;fittingWindow=true;
+        try{CardsColumn.Width=new GridLength(cardWidth);MinWidth=cardWidth+300;Width=cardWidth+textWidth;Left=Math.Max(work.Left,right-Width);}
+        finally{fittingWindow=false;}
+        opportunityBoard.RefreshColumnLayout();SavePreferences();
     }
     internal async Task RestoreConfiguredConnectionAsync()
     {
@@ -660,7 +677,7 @@ public partial class MainWindow : Window
     internal void ObserveConfiguredState(string receipt)
     {trialReceipt=receipt;trialChat=ConnectionSelection.Load()?.ChatIds.FirstOrDefault();WriteTrialReceipt();}
     private void WriteTrialReceipt(){ } // Legacy startup option never writes a periodic receipt.
-    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{updateVersion=DesktopAutoUpdate.CurrentVersion,automaticUpdates=desktopUpdates?.Enabled,updateStatus=desktopUpdates?.Status,opportunityCount=opportunityBoard.Model.Cards.Count,activeOpportunities=opportunityBoard.ActiveCount,opportunityPaneVisible=OpportunityArea.Visibility==Visibility.Visible,opportunitySourceConnected=opportunityBoard.Model.Connected,webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),messageCount=readingQueue.Length,visibleContainers=displayed.Count,visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
+    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{updateVersion=DesktopAutoUpdate.CurrentVersion,automaticUpdates=desktopUpdates?.Enabled,updateStatus=desktopUpdates?.Status,opportunityCount=opportunityBoard.Model.Cards.Count,opportunityColumns=opportunityBoard.ColumnCount,opportunityPaneWidth=OpportunityArea.ActualWidth,opportunityPaneHeight=OpportunityArea.ActualHeight,activeOpportunities=opportunityBoard.ActiveCount,opportunityPaneVisible=OpportunityArea.Visibility==Visibility.Visible,opportunitySourceConnected=opportunityBoard.Model.Connected,webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),historyRetention="session_latest_100",messageCount=readingQueue.Length,visibleContainers=displayed.Count,visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
     private void CreateTray(bool verify=false)
     {
         if(App.SmokeMode && !verify)return;

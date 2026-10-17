@@ -31,6 +31,35 @@ internal static class CloudSourceContract
             Volatile.Write(ref state,State([],connected:false));await Until(()=>source.State==LinkState.Reconnecting);
             if(source.IsRealConnection)throw new InvalidOperationException("Offline status");checks.Add("offline_without_local_fallback");
         }
+        var revision=new string('a',64);var changedRevision=new string('b',64);var phase=0;var requestedKnown=false;
+        var full=System.Text.Json.Nodes.JsonNode.Parse(State([Message("delta")],Message("pin")))!.AsObject();
+        full["protocol"]=1;full["revisions"]=JsonSerializer.SerializeToNode(new{groups=revision,messages=revision,pin=revision,opportunities=revision});
+        full["opportunities"]=JsonSerializer.SerializeToNode(new{status="connected",snapshot=new{active=System.Array.Empty<object>()}});
+        Task<JsonDocument> DeltaTransport(object payload)
+        {
+            var sent=JsonSerializer.SerializeToElement(payload);requestedKnown=sent.TryGetProperty("known",out _);
+            if(!requestedKnown)return Task.FromResult(JsonDocument.Parse(full.ToJsonString()));
+            var delta=System.Text.Json.Nodes.JsonNode.Parse(full.ToJsonString())!.AsObject();
+            foreach(var name in new[]{"groups","messages","pinned","pinnedGroupId","opportunities"})delta.Remove(name);
+            if(Volatile.Read(ref phase)==1){delta["messages"]=JsonSerializer.SerializeToNode(new[]{Message("delta"),Message("new")});delta["revisions"]!["messages"]=changedRevision;delta["sourceConnected"]=false;}
+            if(Volatile.Read(ref phase)==2){delta["revisions"]!["messages"]=changedRevision;delta["pinned"]=null;delta["pinnedGroupId"]="";delta["opportunities"]=JsonSerializer.SerializeToNode(new{status="unavailable",snapshot=(object?)null});delta["revisions"]!["pin"]=changedRevision;delta["revisions"]!["opportunities"]=changedRevision;}
+            return Task.FromResult(JsonDocument.Parse(delta.ToJsonString()));
+        }
+        await using(var source=new CloudMessageSource(DeltaTransport,TimeSpan.FromMilliseconds(25)))
+        {
+            await Until(()=>source.StateLoaded&&requestedKnown);
+            if((await source.ReadAsync(CancellationToken.None)).Count!=1||source.Pinned is null||source.Opportunities is null)throw new InvalidOperationException("Delta hydration");
+            await Task.Delay(100);if((await source.ReadAsync(CancellationToken.None)).Count!=0||source.Groups.Count!=1||source.Pinned is null)throw new InvalidOperationException("Delta retention");checks.Add("unchanged_components_preserved_without_message_replay");
+            Volatile.Write(ref phase,1);await Until(()=>source.State==LinkState.Reconnecting);
+            if((await source.ReadAsync(CancellationToken.None)).Count!=1)throw new InvalidOperationException("Delta new arrival");checks.Add("delta_new_message_and_offline_status");
+            // Clear pin/cards explicitly while retaining the acknowledged message revision.
+            Volatile.Write(ref phase,2);await Until(()=>source.Pinned is null);
+            if(source.PinnedGroupId!=""||source.Opportunities?.GetProperty("status").GetString()!="unavailable")throw new InvalidOperationException("Delta clear");checks.Add("explicit_null_pin_and_unavailable_cards_are_not_old_cache");
+        }
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var waiting=new CloudMessageSource(cancellableTransport:async(_,token)=>{entered.TrySetResult();await Task.Delay(Timeout.Infinite,token);return JsonDocument.Parse("{}");});
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await waiting.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(1));checks.Add("shutdown_cancels_inflight_request_within_one_second");
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));
     }
 }

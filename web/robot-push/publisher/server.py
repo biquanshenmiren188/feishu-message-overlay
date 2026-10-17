@@ -1,11 +1,12 @@
 """Authenticated, bounded single-writer publisher. No Feishu credentials or body logs."""
-import argparse, base64, hashlib, json, os, re, sqlite3, subprocess, tempfile, time, sys
+import argparse, base64, gzip, hashlib, json, os, re, sqlite3, subprocess, tempfile, time, sys
 if __name__=="__main__":sys.modules.setdefault("server",sys.modules[__name__])
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from desktop_cards import read_cards
+from state_delta import state_request, conditional_state
 
 ROUTE='/radar/api/robot-push/publish'
 CONFIG_ROUTE='/radar/api/robot-push/configure'
@@ -84,7 +85,7 @@ class Publisher:
         if reader:
             if not re.fullmatch(r'[0-9a-f]{16}',requested_key) or route!=CONTROL_ROUTE:
                 raise Rejected(401,'unknown_key')
-            try: read_only=json.loads(body)=={'action':'state'}
+            try: read_only=state_request(json.loads(body))
             except (ValueError,UnicodeError): read_only=False
             if not read_only: raise Rejected(403,'reader_state_only')
             verify_key=self.public_key.parent/('desktop-reader-'+requested_key+'.pem')
@@ -145,7 +146,12 @@ class Handler(BaseHTTPRequestHandler):
     def setup(self):
         super().setup();self.connection.settimeout(6)
     def respond(self,status,value):
-        body=json.dumps(value,ensure_ascii=False,separators=(',',':')).encode();self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(body)
+        body=json.dumps(value,ensure_ascii=False,separators=(',',':')).encode()
+        compress=len(body)>1024 and any(token.strip().lower()=='gzip' for token in self.headers.get('Accept-Encoding','').split(','))
+        if compress: body=gzip.compress(body,compresslevel=3)
+        self.send_response(status);self.send_header('Content-Type','application/json')
+        if compress: self.send_header('Content-Encoding','gzip')
+        self.send_header('Vary','Accept-Encoding');self.send_header('Content-Length',str(len(body)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(body)
     def do_GET(self):
         if self.path!='/health':self.respond(404,{'error':'not_found'});return
         p=self.server.publisher;self.respond(200,{'ready':True,'accepted':p.accepted,'duplicates':p.duplicates,'rejected':p.rejected,'normalCount':len(p.normal),'pinned':p.pin is not None,'lastSourceAge':round(time.time()-p.last_source,1) if p.last_source else None})
@@ -164,9 +170,10 @@ class Handler(BaseHTTPRequestHandler):
                 nonce=publisher.authenticate(self.headers,body,now,CONTROL_ROUTE)
                 publisher.db.execute('INSERT INTO nonces VALUES (?,?)',(nonce,now));publisher.db.commit()
                 control=json.loads(body)
-                if control=={'action':'state'}:
+                if state_request(control):
                     result=receiver.state()
                     result['opportunities']=read_cards(publisher.directory)
+                    result=conditional_state(result,control.get('known'))
                 elif isinstance(control,dict) and set(control)=={'action','pinnedGroupId'} and control['action']=='pin':result=receiver.select_pin(control['pinnedGroupId'])
                 else:raise Rejected(400,'invalid_control')
             elif self.path==CONFIG_ROUTE:

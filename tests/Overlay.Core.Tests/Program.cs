@@ -15,6 +15,14 @@ Check(!store.Add(Message("one"), "chosen", now.AddSeconds(2)), "重复消息不�
 store.Add(Message("two"), "chosen", now.AddSeconds(2)); store.Add(Message("three"), "chosen", now.AddSeconds(2));
 Check(store.Items.Count == 2 && store.Items[0].Id == "three", "容量与顺序");
 store.Prune(now.AddMinutes(31)); Check(store.Items.Count == 0, "超时删除");
+var history=new MessageStore(100,expireMessages:false);history.Start(now);
+for(var i=0;i<105;i++)history.Add(Message("history-"+i),"chosen",now.AddSeconds(2));
+history.Prune(now.AddDays(1));
+Check(history.Items.Count==100 && history.Items[^1].Id=="history-5","保留最近100条，空闲一天不删除");
+Check(!history.Add(Message("history-104") with {SentAt=now.AddDays(1)},"chosen",now.AddDays(1)),"去重窗口过期后仍不重复保留消息");
+Check(!history.Add(Message("stale-history"),"chosen",now.AddDays(1)),"保留历史不放宽过时事件接收");
+Check(history.Add(Message("history-new") with {SentAt=now.AddDays(1)},"chosen",now.AddDays(1)) && history.Items.Count==100,"长期空闲后仍接收新消息且有容量上限");
+history.Clear(now.AddDays(1));Check(history.Items.Count==0,"用户清空仍移除保留历史");
 store.Clear(now.AddMinutes(31)); Check(!store.Add(Message("one"), "chosen", now.AddMinutes(31)), "清空后不重播");
 store.Start(now); store.Add(Message("long") with { Text = new string('中', 20000) }, "chosen", now.AddSeconds(2));
 Check(store.Items[0].Text.Contains("限制显示长度"), "中文长文显式截断");

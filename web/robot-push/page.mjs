@@ -1,5 +1,6 @@
 import {subscribePush} from './push-subscription.js';
-import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261003m';
+import {mobileScrollGate,stablePaneBottom} from './mobile-scroll.js';
+import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261011-session';
 import {CarouselReader} from './carousel.js?v=20261003m';
 import {mobileSummary} from './summary.js?v=20261003m';
 import {demoData} from './demo.js';
@@ -117,13 +118,14 @@ let detailOpen=null;
 const mobile=matchMedia('(max-width:640px)');reader.setCapacity(mobile.matches?5:3);
 let fitKey='',touchActive=false,touchSettling=false,touchQuiet=null,touchTravel=0,pendingTouchStep=0,deferredRefresh=false;
 function fitCards(force=false){
+ if(mobileScrollGate.defer(fitCards,()=>fitCards(force)))return;
  if(touchActive||touchSettling||reader.paused&&!force||detailOpen)return;
  const footer=document.querySelector('.boundary');
  const footerHeight=getComputedStyle(footer).display==='none'?0:footer.getBoundingClientRect().height+8;
  const viewportBottom=Math.min(innerHeight,window.visualViewport?visualViewport.height+visualViewport.offsetTop:innerHeight);
  const safeBottom=parseFloat(getComputedStyle($('board-shell')).paddingBottom)||0;
  const pane=document.querySelector('.feed-pane');
- const bottom=pane?Math.min(viewportBottom,pane.getBoundingClientRect().bottom):viewportBottom;
+ const bottom=pane?stablePaneBottom(pane.getBoundingClientRect().bottom,viewportBottom,matchMedia('(max-width:900px)').matches):viewportBottom;
  const height=Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
@@ -147,6 +149,7 @@ function fitCards(force=false){
  if(required<=board.clientHeight)board.scrollTop=0;
 }
 function render(anchor=null){
+ if(mobileScrollGate.defer(render,()=>render(anchor)))return;
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
  let layoutChanged=false;const ids=reader.window(),key=ids.join('|');
  const pinKey=store.pinned?JSON.stringify(store.pinned):'';
@@ -169,7 +172,7 @@ function schedule(){
 }
 let initialPositionPending=true,initialScrollToken=0;
 function accept(batch){
- const beforePin=store.pinned?.id;const added=store.ingest(batch);alertNew([...store.messages.filter(m=>added.includes(m.id)),...(store.pinned?.id!==beforePin?[store.pinned]:[])]);if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}reader.synchronize(store.messages.map(m=>m.id),Date.now());
+ const revision=store.revision,beforePin=store.pinned?.id;const added=store.ingest(batch);alertNew([...store.messages.filter(m=>added.includes(m.id)),...(store.pinned?.id!==beforePin?[store.pinned]:[])]);if(store.revision===revision)return;if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}reader.synchronize(store.messages.map(m=>m.id),Date.now());
  const initialJump=initialPositionPending&&reader.ids.length>0;
  if(initialJump){initialPositionPending=false;reader.show(reader.ids.at(-1));reader.focus(reader.window()[0],Date.now());}
  newCount+=added.length;render();
@@ -303,11 +306,15 @@ function endRail(){railDrag=null;schedule();}historyRail.addEventListener('point
 historyRail.addEventListener('keydown',e=>{if(mobile.matches)return;const g=progressGeometry();let ratio=g.ratio;if(e.key==='Home')ratio=0;else if(e.key==='End')ratio=1;else if(['ArrowUp','ArrowDown','PageUp','PageDown'].includes(e.key))ratio+=((e.key.endsWith('Up')?-1:1)*(e.key.startsWith('Page')?reader.capacity:1))/Math.max(1,g.domain);else return;e.preventDefault();seekProgress(ratio);});
 board.addEventListener('scroll',()=>updateProgress(true),{passive:true});
 
+let latestFeed=null;
 function receiveFeed(data){
- accept(data);const age=Date.now()-Date.parse(data.updatedAt);const connected=data.sourceConnected===true&&Number.isFinite(age)&&age>=-30000&&age<45000;setConnection(connected?'connected':'offline',connected?'消息源已连接':'等待消息源');
+ latestFeed=data;accept(data);refreshFeedConnection();
+}
+function refreshFeedConnection(){
+ const data=latestFeed;if(!data)return;const age=Date.now()-Date.parse(data.updatedAt);const connected=data.sourceConnected===true&&Number.isFinite(age)&&age>=-30000&&age<45000;setConnection(connected?'connected':'offline',connected?'消息源已连接':'等待消息源');
 }
 document.addEventListener('visibilitychange',()=>{reader.setVisible(!document.hidden,Date.now(),firstVisible());if(document.hidden){stopSounds();clearTimeout(timer);clearTimeout(touchQuiet);timer=null;manualHeld=false;touchActive=false;touchSettling=false;pendingTouchStep=0;}else{render();schedule();}});
 mobile.addEventListener('change',queueResize);
 let resizeFrame=null;function queueResize(){if(resizeFrame!==null)return;resizeFrame=requestAnimationFrame(()=>{resizeFrame=null;const capacity=mobile.matches?5:3;if(reader.capacity!==capacity){reader.setCapacity(capacity,firstVisible());lastWindowKey=null;lastPinKey=null;render();schedule();}fitKey='';fitCards(true);updateLatest();updateProgress();});}
 window.addEventListener('resize',queueResize);window.visualViewport?.addEventListener('resize',queueResize);
-if(demo){$('demo-note').hidden=false;accept(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');subscribePush('feed',{data:receiveFeed,error:()=>setConnection('error','暂时无法更新，保留已接收消息')});}
+if(demo){$('demo-note').hidden=false;accept(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');subscribePush('feed',{data:receiveFeed,unchanged:refreshFeedConnection,error:()=>setConnection('error','暂时无法更新，保留已接收消息')});}

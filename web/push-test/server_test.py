@@ -50,9 +50,56 @@ class TrialTests(unittest.TestCase):
         self.assertNotIn(token,public)
         self.assertNotIn('/secret',public)
 
-    def test_reject_non_apple_endpoints(self):
-        for endpoint in ['http://127.0.0.1/','https://push.apple.com.evil.test/a','https://x.push.apple.com:443@127.0.0.1/a','https://x.push.apple.com:444/a']:
+    def test_reject_untrusted_push_endpoints(self):
+        for endpoint in ['http://127.0.0.1/','https://push.apple.com.evil.test/a','https://x.push.apple.com:443@127.0.0.1/a','https://x.push.apple.com:444/a',
+                         'https://fcm.googleapis.com.evil.test/wp/a', 'https://evil.fcm.googleapis.com/wp/a',
+                         'https://fcm.googleapis.com/v1/projects/a', 'https://fcm.googleapis.com:444/wp/a',
+                         'https://fcm.googleapis.com@127.0.0.1/wp/a', 'https://fcm.googleapis.com/wp/a#secret',
+                         'https://updates.push.services.mozilla.com.evil.test/wpush/v2/a',
+                         'https://127.0.0.1/wp/a', 'https://fcm.googleapis.com\n/wp/a', None]:
             with self.assertRaises(ValueError):validate_subscription({'endpoint':endpoint})
+
+    def test_accept_android_webpush_and_keep_apple_compatible(self):
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        key = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+        encode = lambda raw: base64.urlsafe_b64encode(raw).decode().rstrip('=')
+        keys = dict(p256dh=encode(key), auth=encode(b'0'*16))
+        for endpoint in ['https://fcm.googleapis.com/wp/fixture', 'https://fcm.googleapis.com/fcm/send/fixture',
+                         'https://updates.push.services.mozilla.com/wpush/v2/fixture', 'https://fixture.push.apple.com/fixture']:
+            sub = dict(endpoint=endpoint, keys=keys)
+            self.assertEqual(validate_subscription(sub), sub)
+            with self.assertRaises(ValueError): validate_subscription(dict(sub, keys=dict(keys, auth='bad')))
+
+    def test_binding_requires_owner_token_and_is_not_cached(self):
+        from http.server import ThreadingHTTPServer
+        from http.client import HTTPConnection
+        from threading import Thread
+        from server import handler, BASE
+        token = self.app.pair('12345678')
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.app))
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for bearer, expected in [('', 401), ('wrong', 401), (token, 200)]:
+                connection = HTTPConnection(*server.server_address)
+                connection.request('GET', BASE+'api/binding', headers={'Authorization':'Bearer '+bearer})
+                response = connection.getresponse()
+                value = json.loads(response.read())
+                self.assertEqual(response.status, expected)
+                self.assertEqual(response.getheader('Cache-Control'), 'no-store')
+                if expected == 200:
+                    self.assertEqual(value, {'pushCode':'12345678'})
+                else:
+                    self.assertNotIn('12345678', json.dumps(value))
+                connection.close()
+            self.assertNotIn('12345678', json.dumps(self.app.public_status()))
+            self.assertFalse(self.sent)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_bounded_campaign_no_real_input(self):
         self.app.state['subscription']={'synthetic':True}

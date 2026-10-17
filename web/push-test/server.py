@@ -50,10 +50,17 @@ def validate_subscription(value):
     if not isinstance(value, dict):
         raise ValueError('订阅格式错误')
     endpoint = value.get('endpoint', '')
+    if not isinstance(endpoint, str) or any(ord(char) <= 32 for char in endpoint):
+        raise ValueError('推送地址格式错误')
     u = urlsplit(endpoint)
-    if (u.scheme != 'https' or not u.hostname or not u.hostname.endswith('.push.apple.com')
+    # Preserve Apple; accept only the production Web Push services used by
+    # Android Chrome (both current /wp/ and legacy /fcm/send/) and Firefox.
+    provider = bool(u.hostname and u.hostname.endswith('.push.apple.com')) or (
+        u.hostname == 'fcm.googleapis.com' and u.path.startswith(('/wp/', '/fcm/send/'))) or (
+        u.hostname == 'updates.push.services.mozilla.com' and u.path.startswith(('/wpush/', '/push/', '/v1/')))
+    if (u.scheme != 'https' or not provider
             or u.username or u.password or u.port not in (None, 443) or u.fragment or len(endpoint) > 2048):
-        raise ValueError('测试版仅接受 iPhone 的苹果推送订阅')
+        raise ValueError('不支持此推送服务，请在安卓 Chrome、Firefox 或 iPhone 主屏幕雷达中开启通知')
     keys = value.get('keys', {})
     decoded = {}
     for key, size in [('auth', 16), ('p256dh', 65)]:
@@ -68,11 +75,11 @@ def validate_subscription(value):
 
 
 class Trial:
-    def __init__(self, state_dir, config_path, sender=None):
+    def __init__(self, state_dir, config_path, sender=None, *, config=None):
         self.directory = Path(state_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / 'state.json'
-        self.config = json.loads(Path(config_path).read_text())
+        self.config = dict(config) if config is not None else json.loads(Path(config_path).read_text())
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.sender = sender or self.send_webpush
@@ -188,7 +195,8 @@ class Trial:
                 kwargs['allow_redirects'] = False
                 return super().request(*args, **kwargs)
         with NoRedirect() as session:
-            headers = vapid_headers(self.directory, self.config['privateKeyPath'], subscription['endpoint'], ORIGIN)
+            with getattr(self, 'vapid_lock', self.lock):
+                headers = vapid_headers(getattr(self, 'vapid_directory', self.directory), self.config['privateKeyPath'], subscription['endpoint'], ORIGIN)
             headers.update(Urgency='high', Topic=TOPIC)
             response = webpush(subscription_info=subscription, data=json.dumps(payload, ensure_ascii=False),
                                ttl=TTL, headers=headers, timeout=12, requests_session=session)
@@ -267,12 +275,23 @@ def handler(trial):
 
         def do_GET(self):
             if self.path == BASE + 'api/health':
-                return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') else 'synthetic-only'})
-            if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
+                return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') or hasattr(trial, 'resolve') else 'synthetic-only'})
+            account = self.authorized_account()
+            if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})
             if self.path == BASE + 'api/status':
-                return self.reply(200, trial.public_status())
+                return self.reply(200, account.public_status())
+            if self.path == BASE + 'api/binding':
+                # Owner-only, no-store: do not include the pairing code in routine
+                # status/diagnostics or static assets. Existing devices need no re-pair.
+                return self.reply(200, {'pushCode': account.config['pairCode']})
             self.reply(404, {'error': '不存在'})
+
+        def authorized_account(self):
+            token = self.headers.get('Authorization', '').removeprefix('Bearer ')
+            if hasattr(trial, 'resolve'):
+                return trial.resolve(token)
+            return trial if trial.authenticate(token) else None
 
         def do_POST(self):
             if self.headers.get('Origin') not in (None, ORIGIN):
@@ -284,40 +303,50 @@ def handler(trial):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError('请求格式错误')
+                if not self.path.startswith(BASE + 'api/'):
+                    return self.reply(404, {'error': '不存在'})
                 route = self.path.removeprefix(BASE + 'api/')
+                if route == 'create-code' and hasattr(trial, 'create_code'):
+                    # Available to visitors behind the existing website access policy.
+                    return self.reply(200, trial.create_code(data.get('requestId')))
                 if self.path == BASE + 'api/pair':
+                    if hasattr(trial, 'resolve'):
+                        return self.reply(200, {'token': trial.pair(data.get('code'), trial.client_key(self.headers, self.client_address[0]))})
                     return self.reply(200, {'token': trial.pair(data.get('code'))})
-                if not trial.authenticate(self.headers.get('Authorization', '').removeprefix('Bearer ')):
+                account = self.authorized_account()
+                if account is None:
                     return self.reply(401, {'error': '请先用测试码连接'})
-                if route == 'settings' and hasattr(trial, 'configure'):
-                    return self.reply(200, trial.configure(data))
-                if route == 'device' and hasattr(trial, 'device_status'):
-                    return self.reply(200, trial.device_status(data))
-                if route == 'verify' and hasattr(trial, 'verify_delivery'):
-                    return self.reply(200, trial.verify_delivery())
+                if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
+                    return self.reply(200, trial.transfer_subscription(account, data))
+                if route == 'settings' and hasattr(account, 'configure'):
+                    return self.reply(200, account.configure(data))
+                if route == 'device' and hasattr(account, 'device_status'):
+                    return self.reply(200, account.device_status(data))
+                if route == 'verify' and hasattr(account, 'verify_delivery'):
+                    return self.reply(200, account.verify_delivery())
                 if route == 'subscribe':
-                    if 'replaceFingerprint' in data and hasattr(trial, 'repair_subscription'):
-                        trial.repair_subscription(data.get('subscription'), data['replaceFingerprint'])
+                    if 'replaceFingerprint' in data and hasattr(account, 'repair_subscription'):
+                        account.repair_subscription(data.get('subscription'), data['replaceFingerprint'])
                     else:
-                        trial.subscribe(data.get('subscription'))
+                        account.subscribe(data.get('subscription'))
                 elif route == 'start':
-                    trial.start()
+                    account.start()
                 elif route == 'resend':
-                    return self.reply(200, trial.resend(compact=data.get('compact', True) is True, rows=data.get('rows', 4)))
+                    return self.reply(200, account.resend(compact=data.get('compact', True) is True, rows=data.get('rows', 4)))
                 elif route == 'stop':
-                    trial.stop()
+                    account.stop()
                 elif route == 'receipt-batch':
                     records = data.get('records')
                     if not isinstance(records, list) or not 1 <= len(records) <= 20 or any(not isinstance(r, dict) for r in records):
                         raise ValueError('Invalid receipt batch')
                     for record in records:
-                        trial.receipt(record)
+                        account.receipt(record)
                 elif route == 'receipt':
-                    trial.receipt(data)
+                    account.receipt(data)
                 elif route == 'observation' and data.get('result') in ('one-four', 'one-six', 'duplicates', 'missing-or-truncated'):
-                    with trial.lock:
-                        trial.state['observation'] = {'result': data['result'], 'at': time.time()}
-                        trial.save()
+                    with account.lock:
+                        account.state['observation'] = {'result': data['result'], 'at': time.time()}
+                        account.save()
                 else:
                     return self.reply(404, {'error': '不存在'})
                 self.reply(200, {'ok': True})
@@ -332,8 +361,8 @@ if __name__ == '__main__':
     os.umask(0o077)
     factory = Trial
     if os.environ.get('RADAR_LIVE_FEED'):
-        from live import Live
-        factory = Live
+        from profiles import Profiles
+        factory = Profiles
     app = factory(os.environ.get('RADAR_TEST_STATE', '/var/lib/radar-webpush-test'),
                 os.environ.get('RADAR_TEST_CONFIG', '/etc/radar-webpush-test/config.json'))
     if factory is not Trial:
