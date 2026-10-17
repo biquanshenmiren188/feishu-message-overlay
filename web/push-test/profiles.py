@@ -25,6 +25,19 @@ class Profile(Live):
         self.vapid_lock = manager.vapid_lock
         super().__init__(directory, None, sender, config=config)
 
+    def public_status(self):
+        return dict(super().public_status(), profileId=self.profile_id)
+
+    def notification_payload(self, payload):
+        return super().notification_payload(dict(payload, profile=self.profile_id))
+
+    def tick(self, feed, now):
+        # An interrupted disk commit must not resume delivery until recovery.
+        with self.lock:
+            if self.manager.transfer_path.exists():
+                return
+            return super().tick(feed, now)
+
     def subscribe(self, value):
         sub = validate_subscription(value)
         with self.lock, self.manager.lock:
@@ -53,6 +66,8 @@ class Profiles:
         self.directory = Path(state_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory/'profiles.json'
+        self.transfer_path = self.directory/'subscription-transfer.json'
+        self.recover_transfer()
         self.config = json.loads(Path(config_path).read_text())
         self.lock = threading.RLock()
         self.vapid_lock = threading.RLock()
@@ -85,6 +100,81 @@ class Profiles:
             raise ValueError('duplicate_profile_token')
         if not self.path.exists():
             self.save_registry(self.registry)
+
+    @staticmethod
+    def write_private(path, value):
+        temp = path.with_suffix('.next')
+        with open(temp, 'w', encoding='utf-8') as stream:
+            os.chmod(temp, 0o600)
+            json.dump(value, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+
+    def recover_transfer(self):
+        if not self.transfer_path.exists():
+            return
+        operation = json.loads(self.transfer_path.read_text())
+        for key, binding in operation['bindings'].items():
+            if key != 'legacy' and not re.fullmatch('[a-f0-9]{32}', key):
+                raise ValueError('invalid_transfer_profile')
+            path = (self.directory if key == 'legacy' else self.directory/'profiles'/key)/'state.json'
+            state = json.loads(path.read_text())
+            for field in ('subscription', 'device'):
+                state.pop(field, None)
+            state.update(binding)
+            self.write_private(path, state)
+        registry = json.loads(self.path.read_text())
+        registry.setdefault('transfers', {})[operation['requestHash']] = operation['identity']
+        self.write_private(self.path, registry)
+        self.transfer_path.unlink()
+
+    def transfer_subscription(self, source, value):
+        target = self.resolve(value.get('targetToken'))
+        if target is None:
+            raise ValueError('目标推送码无效，请重新输入')
+        request_id = value.get('requestId')
+        if not isinstance(request_id, str) or not re.fullmatch('[a-f0-9]{32}', request_id):
+            raise ValueError('切换请求无效')
+        sub = validate_subscription(value.get('subscription'))
+        fp = fingerprint(sub)
+        digest = hashlib.sha256(request_id.encode()).hexdigest()
+        identity = dict(source=source.profile_id, target=target.profile_id, fingerprint=fp)
+        # Account locks precede the manager lock everywhere; ordered acquisition
+        # serializes A→B and B→A without blocking unrelated feed workers.
+        a, b = sorted([source, target], key=lambda item: item.profile_id)
+        with a.lock, b.lock, self.lock:
+            if self.transfer_path.exists():
+                raise ValueError('订阅切换正在恢复，请稍后重试')
+            previous = self.registry.get('transfers', {}).get(digest)
+            if previous:
+                if previous != identity or fingerprint(target.state.get('subscription')) != fp:
+                    raise ValueError('本机绑定已再次变化，请重新打开设置')
+                return target.public_status()
+            current = source.state.get('subscription')
+            destination = target.state.get('subscription')
+            if current != sub:
+                raise ValueError('本机订阅与原推送码不一致，请先在原码开启通知')
+            if destination and destination != sub:
+                raise ValueError('目标推送码已绑定另一台手机，无法覆盖；请使用未绑定的推送码')
+            if source is target:
+                return target.public_status()
+            # Persist the intent first. Recovery changes only binding fields,
+            # never rewinds settings, queues, sequence numbers or receipts.
+            bindings = {source.profile_id: {}, target.profile_id: dict(subscription=sub,
+                device=dict(at=time.time(), permission='granted', subscribed=True,
+                            matches=False, version='radar-delivery-v6'))}
+            self.write_private(self.transfer_path, dict(bindings=bindings, requestHash=digest, identity=identity))
+            try:
+                self.recover_transfer()
+            finally:
+                # If a disk write fails, pause delivery via the journal above.
+                for account in (source, target):
+                    for field in ('subscription', 'device'):
+                        account.state.pop(field, None)
+                    account.state.update(copy.deepcopy(bindings[account.profile_id]))
+            self.registry = json.loads(self.path.read_text())
+            return target.public_status()
 
     def save_registry(self, value):
         temp = self.path.with_suffix('.next')

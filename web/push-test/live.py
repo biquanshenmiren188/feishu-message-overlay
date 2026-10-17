@@ -56,7 +56,7 @@ class Live(Trial):
         with self.lock:
             self.state['device'] = dict(at=time.time(), permission=value['permission'],
                 subscribed=bool(fp), matches=fp == fingerprint(self.state.get('subscription')) and bool(fp),
-                version=value.get('version') if value.get('version') in ('radar-delivery-v4', 'radar-delivery-v5') else 'unknown')
+                version=value.get('version') if value.get('version') in ('radar-delivery-v4', 'radar-delivery-v5', 'radar-delivery-v6') else 'unknown')
             self.save()
             return self.state['device'].copy()
 

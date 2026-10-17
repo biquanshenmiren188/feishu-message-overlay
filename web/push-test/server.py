@@ -309,6 +309,8 @@ def handler(trial):
                 account = self.authorized_account()
                 if account is None:
                     return self.reply(401, {'error': '请先用测试码连接'})
+                if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
+                    return self.reply(200, trial.transfer_subscription(account, data))
                 if route == 'settings' and hasattr(account, 'configure'):
                     return self.reply(200, account.configure(data))
                 if route == 'device' and hasattr(account, 'device_status'):

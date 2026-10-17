@@ -52,6 +52,39 @@ identity has been checked.
 
 ## Settings and ownership
 
+2026-10-17 update: switching inside the installed iPhone PWA now also transfers
+that phone's subscription. Desktop/browser switching continues to select only
+the settings being managed and never remotely switches the phone. Each code's
+settings and sequence stay intact. An occupied destination is rejected rather
+than replacing another phone. A phone without a local subscription is prompted
+to enable notifications after selecting the code.
+
+`switch-subscription` authenticates the source bearer and destination token,
+validates the exact source subscription, and uses ordered account locks plus a
+private durable `subscription-transfer.json` journal. Recovery changes only
+subscription/device fields. Requests are idempotent, and the destination is
+paused until the configured phone reports a matching subscription. The browser
+retains `radar-phone-switch` until server, worker and device synchronization
+finish; uncertain responses can resume on reopening settings.
+
+Worker v6 persists profile/token together, separates latest-message and receipt
+storage by profile, and drops queued old-profile pushes. Old pages cannot
+silently reconfigure it to their stale token. v6 uses ordinary Web Push so an
+old-profile declarative OS fallback cannot bypass the worker's profile check;
+existing v5 devices retain their previous delivery format until upgrading.
+
+Released `20261017-phone-switch-1792207231` from
+`20261017-switch-code-1792206410` with `deploy_settings.py --with-worker`.
+Backups are in `/opt/radar-webpush-test/backup-20261017-phone-switch-1792207231`.
+Only the push service restarted; existing subscriptions/settings and 2,634
+other static files were preserved. 47 Python and 22 Node tests passed,
+including transfer recovery, occupied destinations, cross-profile sequence and
+receipt isolation. Browser acceptance used a real isolated backend with
+simulated phone APIs: switch, reload and switch-back passed. Live 393/320px UI
+passed; no extra production push or code creation and no physical iPhone
+lock-screen validation were performed. The previous management-only phone
+behavior described below is superseded by this update.
+
 2026-10-17: **推送设置 → 通知与推送码 → 切换推送码** accepts another
 eight-digit code and loads that profile's saved settings and revision. Saving
 affects only the selected profile. Both status and binding must load before the

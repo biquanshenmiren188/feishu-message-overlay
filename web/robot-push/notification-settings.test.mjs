@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
 
 const source=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
-function fixture({failRoute='',savedSelection='',ios=false}={}){
+function fixture({failRoute='',savedSelection='',ios=false,subscribed=false,transferFailure='',workerFailure=false}={}){
  const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={};
  if(savedSelection)storage.set('radar-settings-token',savedSelection);
  class Element{
@@ -19,16 +19,17 @@ function fixture({failRoute='',savedSelection='',ios=false}={}){
  }
  const body=new Element(),toolbar=new Element();
  const document={createElement:()=>new Element(),createTextNode:text=>({text}),querySelector:()=>toolbar,head:new Element(),body:new Element(),addEventListener:(name,fn)=>events[name]=fn,visibilityState:'visible'};
- const plan=auth=>({revision:auth==='owner-token'?7:2,publicKey:'AQID',subscribed:true,subscriptionFingerprint:null,source:{connected:true},settings:{notify_enabled:true,rows:auth==='owner-token'?4:1,notify_interval_seconds:60,min_percent:null,excluded_ranks:[],excluded_coins:auth==='owner-token'?['BTC']:['ETH'],excluded_modes:[],excluded_exchanges:[]}});
+ const plan=auth=>({profileId:auth==='owner-token'?'legacy':'a'.repeat(32),revision:auth==='owner-token'?7:2,publicKey:'AQID',subscribed:true,subscriptionFingerprint:null,source:{connected:true},settings:{notify_enabled:true,rows:auth==='owner-token'?4:1,notify_interval_seconds:60,min_percent:null,excluded_ranks:[],excluded_coins:auth==='owner-token'?['BTC']:['ETH'],excluded_modes:[],excluded_exchanges:[]}});
  const fetch=async(url,options)=>{
   const route=url.split('/').pop(),auth=options.headers.Authorization.slice(7);requests.push({route,auth,body:options.body&&JSON.parse(options.body)});
+  if(route==='switch-subscription'&&transferFailure){if(transferFailure==='network')throw Error('offline');return {status:400,ok:false,json:async()=>({error:'目标推送码已绑定另一台手机'})}}
   if(route===failRoute&&auth==='other-token')return {status:401,ok:false,json:async()=>({error:'目标码读取失败'})};
   if(route==='pair')return JSON.parse(options.body).code==='87654321'?{ok:true,status:200,json:async()=>({token:'other-token'})}:{ok:false,status:400,json:async()=>({error:'推送码不正确'})};
   return {ok:true,status:200,json:async()=>route==='status'||route==='settings'?plan(auth):route==='binding'?{pushCode:auth==='owner-token'?'12345678':'87654321'}:{ok:true}};
  };
- const navigator={userAgent:ios?'iPhone':'Desktop',standalone:ios,serviceWorker:{register:async()=>({active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:true,version:'radar-delivery-v5'})}},pushManager:{getSubscription:async()=>null},update:async()=>{}}),addEventListener(){}}};
+ const navigator={userAgent:ios?'iPhone':'Desktop',standalone:ios,serviceWorker:{register:async()=>({active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?{toJSON:()=>({endpoint:'https://fixture.push.apple.com/local',keys:{p256dh:'test',auth:'test'}})}:null},update:async()=>{}}),addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
- const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:{permission:'default'},location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:ios}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
+ const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:{permission:subscribed?'granted':'default'},location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:ios}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
  return {elements,storage,requests,workerTokens,events,run};
@@ -65,7 +66,7 @@ test('restored selection never configures or reports the phone under the viewed 
  assert.equal(f.run('token'),'other-token');assert.ok(f.workerTokens.length>0);
  assert.ok(f.workerTokens.every(token=>token==='owner-token'));
  assert.ok(f.requests.filter(r=>r.route==='device').every(r=>r.auth==='owner-token'));
- assert.equal(f.elements.get('ns-enable').disabled,true);
+ assert.equal(f.elements.get('ns-enable').disabled,false);
  assert.equal(f.storage.get('radar-test-token'),'owner-token');
 });
 
@@ -74,4 +75,33 @@ test('cancelling switch leaves the form draft untouched',async()=>{
  f.elements.get('ns-switch-open').onclick();f.elements.get('ns-switch-code').value='87654321';f.elements.get('ns-switch-cancel').onclick();
  assert.equal(f.elements.get('ns-switch').hidden,true);assert.equal(f.elements.get('ns-switch-code').value,'');
  assert.equal(f.elements.get('ns-coins').value,'UNSAVED');assert.equal(f.run('token'),'owner-token');
+});
+
+
+test('phone switch moves only its subscription then configures target worker and device',async()=>{
+ const f=fixture({ios:true,subscribed:true});await settle(f);await f.run('load()');
+ await switchCode(f,'87654321');
+ const moved=f.requests.find(r=>r.route==='switch-subscription');assert.equal(moved.auth,'owner-token');assert.equal(moved.body.targetToken,'other-token');
+ assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.storage.get('radar-settings-token'),'other-token');
+ assert.equal(f.workerTokens.at(-1),'other-token');assert.equal(f.requests.filter(r=>r.route==='device').at(-1).auth,'other-token');
+ assert.equal(f.storage.has('radar-phone-switch'),false);assert.equal(f.elements.get('ns-coins').value,'ETH');
+});
+
+test('occupied target retains original phone binding and draft',async()=>{
+ const f=fixture({ios:true,subscribed:true,transferFailure:'occupied'});await settle(f);await f.run('load()');f.elements.get('ns-coins').value='DRAFT';
+ await switchCode(f,'87654321');assert.equal(f.storage.get('radar-test-token'),'owner-token');assert.equal(f.workerTokens.at(-1),'owner-token');
+ assert.equal(f.elements.get('ns-coins').value,'DRAFT');assert.equal(f.storage.has('radar-phone-switch'),false);
+});
+
+test('uncertain transfer retains recovery request and disables settings until retry',async()=>{
+ const f=fixture({ios:true,subscribed:true,transferFailure:'network'});await settle(f);await f.run('load()');await switchCode(f,'87654321');
+ assert.ok(f.storage.has('radar-phone-switch'));assert.equal(f.storage.get('radar-test-token'),'owner-token');assert.equal(f.elements.get('ns-save').disabled,true);
+ const original=JSON.parse(f.storage.get('radar-phone-switch'));await assert.rejects(f.run('load()'));
+ assert.equal(JSON.parse(f.storage.get('radar-phone-switch')).request.requestId,original.request.requestId);
+});
+
+test('worker configuration failure after server commit retains recoverable target binding',async()=>{
+ const f=fixture({ios:true,subscribed:true,workerFailure:true});await settle(f);await f.run('load()');await switchCode(f,'87654321');
+ assert.equal(f.storage.get('radar-test-token'),'other-token');assert.ok(f.storage.has('radar-phone-switch'));assert.equal(f.elements.get('ns-save').disabled,true);
+ assert.ok(!f.elements.get('ns-message').textContent.includes('本机现在'));
 });

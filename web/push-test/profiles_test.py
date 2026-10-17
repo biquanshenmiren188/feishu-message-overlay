@@ -184,6 +184,70 @@ class ProfilesTests(unittest.TestCase):
             finally: release.set()
         self.assertNotIn('synthetic-private-error', json.dumps(a.public_status()))
 
+    def test_transfer_preserves_plans_and_routes_only_target_after_device_ack(self):
+        created, target = self.create()
+        sub = self.old.state['subscription']
+        request = dict(targetToken=created['token'], subscription=sub, requestId='b'*32)
+        settings = copy.deepcopy(self.old.state['live'])
+        moved = self.app.transfer_subscription(self.old, request)
+        self.assertEqual(moved['profileId'], target.profile_id)
+        self.assertNotIn('subscription', self.old.state)
+        self.assertEqual(self.old.state['live'], settings)
+        self.assertEqual(self.old.state['seq'], 42)
+        self.assertEqual(target.state['live']['settings']['rows'], 4)
+        self.assertEqual(target.state['subscription'], sub)
+        self.assertFalse(target.state['device']['matches'])
+        # A lost HTTP response can safely retry the exact operation.
+        self.app.transfer_subscription(self.old, request)
+        now = time.time()+1
+        feed = self.feed([message(8, now)], now)
+        self.old.tick(feed, now); target.tick(feed, now)
+        self.assertFalse(self.sent)
+        target.device_status(dict(permission='granted', subscriptionFingerprint=fingerprint(sub), version='radar-delivery-v6'))
+        target.tick(feed, now)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0][1]['profile'], target.profile_id)
+        self.assertEqual(self.sent[0][1]['seq'], 1)
+        self.assertNotIn('web_push', self.sent[0][1])
+        self.app.transfer_subscription(target, dict(targetToken=self.old_token, subscription=sub, requestId='c'*32))
+        self.assertEqual(self.old.state['subscription'], sub)
+        self.assertNotIn('subscription', target.state)
+        with self.assertRaises(ValueError): self.app.transfer_subscription(self.old, request)
+
+    def test_transfer_rejects_occupied_target_wrong_device_and_bad_authorization(self):
+        created, target = self.create()
+        target.subscribe(subscription('other-phone'))
+        before = copy.deepcopy(target.state)
+        request = dict(targetToken=created['token'], subscription=self.old.state['subscription'], requestId='b'*32)
+        with self.assertRaisesRegex(ValueError, '另一台手机'): self.app.transfer_subscription(self.old, request)
+        self.assertEqual(target.state, before); self.assertEqual(self.old.state, self.before)
+        with self.assertRaises(ValueError): self.app.transfer_subscription(self.old, dict(request, subscription=subscription('forged')))
+        with self.assertRaises(ValueError): self.app.transfer_subscription(self.old, dict(request, targetToken='invalid'))
+        self.assertFalse(self.app.transfer_path.exists())
+
+    def test_interrupted_transfer_recovers_without_rewinding_settings_or_sequence(self):
+        created, target = self.create()
+        sub = self.old.state['subscription']
+        request = dict(targetToken=created['token'], subscription=sub, requestId='d'*32)
+        original = self.app.write_private
+        def fail_state(path, value):
+            if path.name == 'state.json': raise OSError('disk interrupted')
+            return original(path, value)
+        with patch.object(self.app, 'write_private', side_effect=fail_state):
+            with self.assertRaises(OSError): self.app.transfer_subscription(self.old, request)
+        self.assertTrue(self.app.transfer_path.exists())
+        now = time.time()+1
+        self.old.tick(self.feed([message(1, now)], now), now)
+        self.assertFalse(self.sent)
+        restarted = Profiles(self.root/'state', self.config, self.sender)
+        self.assertFalse(restarted.transfer_path.exists())
+        old, new = restarted.resolve(self.old_token), restarted.resolve(created['token'])
+        self.assertNotIn('subscription', old.state)
+        self.assertEqual(new.state['subscription'], sub)
+        self.assertEqual(old.state['seq'], 42)
+        self.assertEqual(old.state['live']['settings'], self.before['live']['settings'])
+        restarted.transfer_subscription(old, request)
+
     def test_pair_throttling_scoped_to_client_and_creation_retries_survive_limit(self):
         for _ in range(10):
             with self.assertRaises(ValueError): self.app.pair('00000000', client='bad-client')
@@ -230,6 +294,11 @@ class ProfilesTests(unittest.TestCase):
             self.assertNotIn(self.old_token, public)
             self.assertNotIn('original', public)
             self.assertFalse(self.sent)
+            self.assertEqual(request('switch-subscription', data={})[0], 401)
+            self.assertEqual(request('switch-subscription', self.old_token, dict(targetToken=token,
+                subscription=self.old.state['subscription'], requestId='e'*32))[0], 200)
+            self.assertFalse(request('status', self.old_token)[1]['subscribed'])
+            self.assertTrue(request('status', token)[1]['subscribed'])
         finally:
             server.shutdown(); server.server_close(); thread.join()
 

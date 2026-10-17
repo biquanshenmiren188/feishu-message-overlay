@@ -4,7 +4,9 @@ import pathlib, json, hashlib, uuid, paramiko, argparse, subprocess
 parser=argparse.ArgumentParser()
 parser.add_argument('--with-binding-api',action='store_true',help='Deploy the authenticated binding endpoint with its tests')
 parser.add_argument('--with-profiles',action='store_true',help='Deploy independent push plans and user code creation')
+parser.add_argument('--with-worker',action='store_true',help='Deploy phone subscription switching and profile-aware worker')
 args=parser.parse_args()
+if args.with_worker:args.with_profiles=True
 # The former binding API now lives in the profile-aware server bundle.
 if args.with_binding_api:args.with_profiles=True
 
@@ -20,6 +22,7 @@ try:
  files={name:web/'robot-push'/name for name in ['notification-settings.js','notification-settings.css']}
  if args.with_binding_api or args.with_profiles:files.update({name:web/'push-test'/name for name in ['server.py','server_test.py','live_test.py','delivery_test.py']})
  if args.with_profiles:files.update({name:web/'push-test'/name for name in ['live.py','profiles.py','profiles_test.py']})
+ if args.with_worker:files['sw.js']=web/'push-test/sw.js'
  baselines={}
  for name in (['server.py','live.py'] if args.with_profiles else ['server.py']):
   baseline=subprocess.check_output(['git','show','HEAD:web/push-test/'+name],cwd=web.parent).replace(b'\r\n',b'\n')
@@ -27,6 +30,9 @@ try:
  if args.with_profiles:
   old_profile=subprocess.run(['git','show','HEAD:web/push-test/profiles.py'],cwd=web.parent,capture_output=True)
   baselines['profiles.py']=hashlib.sha256(old_profile.stdout.replace(b'\r\n',b'\n')).hexdigest() if old_profile.returncode==0 else None
+ if args.with_worker:
+  baseline=subprocess.check_output(['git','show','HEAD:web/push-test/sw.js'],cwd=web.parent).replace(b'\r\n',b'\n')
+  baselines['public/sw.js']=hashlib.sha256(baseline).hexdigest()
  for name,path in files.items():
   raw=path.read_bytes();hashes[name]=hashlib.sha256(raw).hexdigest()
   with ftp.file(stage+'/'+name,'wb') as f:f.write(raw)
@@ -41,6 +47,8 @@ current=pathlib.Path('/opt/funding-radar-web/current')
 root=pathlib.Path('/opt/radar-webpush-test')
 backend='server.py' in HASHES
 backend_files=[name for name in HASHES if name.endswith('.py')]
+updated_files=backend_files+(['sw.js'] if 'sw.js' in HASHES else [])
+def destination(name):return (root/'public' if name=='sw.js' else root)/name
 def request(route,token=None):
  req=urllib.request.Request('http://127.0.0.1:18885/radar/push-test/api/'+route,headers={'Authorization':'Bearer '+token} if token else {})
  with urllib.request.urlopen(req,timeout=5) as response:return json.loads(response.read())
@@ -81,13 +89,13 @@ if backend:
    for key,value in profile_states.items():assert again.accounts[key].state==value,'Existing profile changed'
 with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  fcntl.flock(lock,fcntl.LOCK_EX)
- old=current.resolve();new=old.parent/('20261017-switch-code-'+str(int(time.time())))
+ old=current.resolve();new=old.parent/('20261017-phone-switch-'+str(int(time.time())))
  fallback=pathlib.Path('/opt/radar-webpush-test/public/index.html');previous=fallback.read_bytes()
  backup=root/('backup-'+new.name);backup.mkdir(mode=0o700)
  (backup/'index.html').write_bytes(previous)
  if backend:
-  for name in backend_files:
-   if (root/name).exists():shutil.copyfile(root/name,backup/name)
+  for name in updated_files:
+   if destination(name).exists():shutil.copyfile(destination(name),backup/name)
   # State backup is for recovery only; rollback never rewinds notification seq.
   (backup/'state.json').write_text(json.dumps(state));(backup/'state.json').chmod(0o600)
   if registry:
@@ -102,11 +110,11 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    shutil.copyfile(p/name,bot/name);(bot/name).chmod(0o644)
   index=bot/'index.html';html=index.read_text()
   assert 'notification-settings.js?v=' in html
-  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-switch1',html)
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-phone-switch1',html)
   index.write_text(html)
   if backend:
-   for name in backend_files:
-    temp=root/(name+'.next');shutil.copyfile(p/name,temp);temp.chmod(0o644);os.replace(temp,root/name)
+   for name in updated_files:
+    dest=destination(name);temp=dest.with_suffix('.next');shutil.copyfile(p/name,temp);temp.chmod(0o644);os.replace(temp,dest)
    subprocess.run(['systemctl','restart','radar-webpush-test'],check=True)
    for attempt in range(20):
     try:
@@ -131,7 +139,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    assert before.get('subscription')==after_profile.get('subscription') and before['token']==after_profile['token']
    assert before['live']['settings']==after_profile['live']['settings'] and before['live']['revision']==after_profile['live']['revision']
    assert after_profile['seq']>=before['seq']
-  assert all(hashlib.sha256(((root if k.endswith('.py') else current/'robot-push')/k).read_bytes()).hexdigest()==v for k,v in HASHES.items())
+  assert all(hashlib.sha256((destination(k) if k.endswith('.py') or k=='sw.js' else current/'robot-push'/k).read_bytes()).hexdigest()==v for k,v in HASHES.items())
   preserved=0
   for before in old.rglob('*'):
    relative=before.relative_to(old)
@@ -145,9 +153,9 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    link=current.with_name('current.settings-rollback');link.symlink_to(old);os.replace(link,current)
   if backend:
    subprocess.run(['systemctl','stop','radar-webpush-test'],check=True)
-   for name in backend_files:
-    if (backup/name).exists():shutil.copyfile(backup/name,root/name)
-    else:(root/name).unlink(missing_ok=True)
+   for name in updated_files:
+    if (backup/name).exists():shutil.copyfile(backup/name,destination(name))
+    else:destination(name).unlink(missing_ok=True)
    subprocess.run(['systemctl','restart','radar-webpush-test'],check=True)
   raise
 '''.replace('STAGE',repr(stage)).replace('HASHES',repr(hashes)).replace('BASELINES',repr(baselines))
