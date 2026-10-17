@@ -1,4 +1,5 @@
 import {subscribePush} from './push-subscription.js';
+import {mobileScrollGate} from './mobile-scroll.js';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005fill1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
 import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
@@ -18,6 +19,7 @@ let hasRendered=false;
 const time = value => { const d = new Date(value); return Number.isFinite(+d) ? d.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—'; };
 function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? n>=3600?`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`:n>=60?`${Math.floor(n/60)}m ${n%60}s`:`${n}s` : '—'; }
 function render() {
+  const deferStructure=mobileScrollGate.defer(render);
   const now=Date.now(), rows=model.tick(now);
   const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000;
   const text=healthy ? `同步中 · 源时间 ${time(envelope.snapshot.sampledAt)} · UTC+8${envelope.snapshot.complete?'':' · 数据暂不完整'}` : envelope?.status==='auth_required' ? '接口授权失效 · 后台正在重试' : '正在自动重连 · 旧数据不计入活跃机会';
@@ -29,16 +31,20 @@ function render() {
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
     const matrix=radarMatrix(c.data.details?.legs || [],()=>null,now,c.data.details?.transferWallets || []);
-    if(!node || node.stamp!==JSON.stringify([c.data,matrix])) {
+    if(!deferStructure && (!node || node.stamp!==JSON.stringify([c.data,matrix]))) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
       const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next; nodes.set(id,node);
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
+    if(!node)continue;
     node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; node.age.textContent=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';
-    const desired=board.children[shown-1]; if(desired!==node.card)board.insertBefore(node.card,desired || null);
+    const desired=board.children[shown-1]; if(!deferStructure && desired!==node.card)board.insertBefore(node.card,desired || null);
   }
-  for(const [id,node]of nodes)if(!keep.has(id)){node.card.remove();nodes.delete(id);}
-  count.textContent=`${active} ACTIVE`; empty.hidden=shown>0;
+  for(const [id,node]of nodes)if(!keep.has(id)){
+    if(deferStructure){node.card.classList.add('bp-expired');node.card.dataset.state='expired';node.age.textContent='已失效';}
+    else{node.card.remove();nodes.delete(id);}
+  }
+  count.textContent=`${active} ACTIVE`; if(!deferStructure)empty.hidden=shown>0;
   empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
 }
 subscribePush('basispulse',{

@@ -22,9 +22,9 @@ body.split-mode{height:100dvh;min-height:0;overflow:hidden;display:flex;flex-dir
 }
 @media(max-width:900px){
  html.split-layout{height:auto;overflow:auto}
- body.split-mode{height:auto;min-height:100dvh;overflow:auto}
+ body.split-mode{height:auto;min-height:100svh;overflow:visible}
  .split-mode main{display:flex;flex-direction:column;overflow:visible;flex:none;gap:16px;margin:8px}
- .feed-pane{height:60dvh;min-height:350px;flex:none}
+ .feed-pane{height:60svh;min-height:350px;flex:none}
  .split-mode #basis-pane{overflow:visible;border-left:0;border-top:1px solid #dce3e8;padding:12px 0;flex:none}
  .split-mode .message-head time{flex-basis:54px}
  .split-mode .bp-tools h1{width:100%}
