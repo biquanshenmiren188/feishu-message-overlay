@@ -14,7 +14,7 @@ baseline=json.loads((args.baseline/'manifest.json').read_text(encoding='utf-8'))
 html=baseline['pages']['robot-push/index.html']['html']
 entry=re.search(r'src="\./([^"/]+)/source-entry\.js[^"\s]*"',html)
 assert entry,'Inspect the current BOT entry before updating'
-oldfolder=entry[1];newfolder='clipboard-20261017'
+oldfolder=entry[1];newfolder='clipboard-20261017-v2'
 assert oldfolder!=newfolder
 oldroot=args.baseline/'robot-push'/oldfolder
 sources={n:(oldroot/n).read_text(encoding='utf-8') for n in ['source-entry.js','basispulse.js','basispulse-card.js']}
@@ -25,15 +25,18 @@ start="  const footer=el('footer','bp-card-foot')"
 end="  const radar=safeRadar(d.radarUrl);"
 assert original.count(start)==old_card.count(start)==1
 assert original.count(end)==old_card.count(end)==1
-assert original.count('navigator.clipboard.writeText(')==2
+assert original.count('copyText(')==2
+original=re.sub(r"^import \{copyText,showCopyFallback\} from '[^']+/clipboard\.js\?v=20261017-copy1';\n",'',original,count=1)
+assert 'import {copyText' not in original
 replacement=old_card[old_card.index(start):old_card.index(end)]
-sources['basispulse-card.js']="import {copyText,showCopyFallback} from './clipboard.js?v=20261017-copy1';\n"+original[:original.index(start)]+replacement+original[original.index(end):]
+sources['basispulse-card.js']="import {copyText} from './clipboard.js?v=20261017-copy2';\n"+original[:original.index(start)]+replacement+original[original.index(end):]
 sources['clipboard.js']=(HERE/'clipboard.js').read_text(encoding='utf-8')
 # Only these modules get a new URL. Shared worker and all unchanged imports retain identity.
 def rebase(match):
     quote,name=match.groups();target=newfolder if name.split('?')[0] in sources else oldfolder
     return quote+'/radar/robot-push/'+target+'/'+name+quote
-files={'robot-push/'+newfolder+'/'+n:re.sub(r'''(['"])\./([^'"\n]+)\1''',rebase,s) for n,s in sources.items()}
+import_pattern=r'''(['"])(?:\./|/radar/robot-push/'''+re.escape(oldfolder)+r'''/)([^'"\n]+)\1'''
+files={'robot-push/'+newfolder+'/'+n:re.sub(import_pattern,rebase,s) for n,s in sources.items()}
 payload=dict(baseline=baseline,files=files,oldfolder=oldfolder,newfolder=newfolder,
              originals={n:(oldroot/n).read_text(encoding='utf-8') for n in ['source-entry.js','basispulse.js','basispulse-card.js']})
 if args.prepare:

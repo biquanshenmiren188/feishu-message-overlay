@@ -1,4 +1,4 @@
-import {copyText,showCopyFallback} from './clipboard.js?v=20261017-copy1';
+import {copyText} from './clipboard.js?v=20261017-copy2';
 import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005fill1';
 import {strategyCopy,gcStrategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261010gc1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
@@ -60,12 +60,12 @@ export function cardNode(c, matrix) {
   copy.onclick=async()=>{
     // Read the displayed status at click time: retained cards can expire without rebuilding.
     const payload=strategyPayload || [...card.children].filter(n=>n!==footer).map(n=>n.innerText).filter(Boolean).join('\n')+`\n更新时间：${clock(d.updatedAt)}`+(safeRadar(d.radarUrl)?`\n${safeRadar(d.radarUrl)}`:'');
-    try{if(!await copyText(payload))return;copy.textContent='已复制';copy.setAttribute('aria-label',`${copyKind}已复制`);}
-    catch{copy.textContent='复制未成功';copy.setAttribute('aria-label',`${copyKind}复制未成功`);showCopyFallback(`复制${copyKind}`,payload,copy);}
+    try{if(!await copyText(payload))return;copy.textContent='已复制';copy.setAttribute('aria-label',`${copyKind}已复制`);copy.title='复制成功';}
+    catch{copy.textContent='重试复制';copy.setAttribute('aria-label',`${copyKind}复制失败，请重试`);copy.title='复制未成功，请再点一次';}
   };
   footer.append(copy);
   const gcPayload=gcStrategyCopy(d);
-  if(gcPayload){const gc=el('button','','复制 GC');gc.type='button';gc.dataset.action='copy-gc';gc.title='复制 Gate Crossex 代码';gc.setAttribute('aria-live','polite');gc.onclick=async()=>{try{if(!await copyText(gcPayload))return;gc.textContent='GC 已复制';}catch{gc.textContent='复制未成功';showCopyFallback('复制 GC 代码',gcPayload,gc);}};footer.append(gc);}
+  if(gcPayload){const gc=el('button','','复制 GC');gc.type='button';gc.dataset.action='copy-gc';gc.title='复制 Gate Crossex 代码';gc.setAttribute('aria-live','polite');gc.onclick=async()=>{try{if(!await copyText(gcPayload))return;gc.textContent='GC 已复制';gc.title='复制成功';}catch{gc.textContent='重试 GC';gc.title='复制未成功，请再点一次';}};footer.append(gc);}
   const radar=safeRadar(d.radarUrl);if(radar){const link=el('a','bp-radar','雷达 ↗');link.href=radar;link.target='_blank';link.rel='noopener noreferrer';link.dataset.action='radar';footer.append(link);}
   card.append(footer);
   return {card,age,stamp:JSON.stringify([d,matrix])};
