@@ -17,3 +17,8 @@
 ## 验证
 
 86项网页Node测试通过，包含新增7项剪贴板回归：普通/GC、Unicode/倍率/FS、同步调用、原生拒绝、无API、失败清理、并发点击。浏览器验证候选模块实际普通与GC复制、JSON粘贴、SIREN Binance→Aster及中文币名；模拟双接口拒绝后320px弹窗完整选取83个字符。自动化浏览器的虚拟剪贴板不作为实体iPhone跨应用粘贴验收。
+
+
+上线：提交 `ecc9143`，release `/opt/funding-radar-web/releases/20261017-bot-clipboard-1792226158`，前版 `20261017-apple-ui-1792208068`；备份 `/opt/funding-radar-web/backups/20261017-bot-clipboard-1792226158`。2,637个原文件保持SHA不变，两个服务PID不变。实际线上加载新入口，消息源连接、消息区及卡片区运行正常，无站点脚本错误；验收时没有活跃机会，卡片复制用相同候选模块的本地样例验证。723组现行模型载荷逐字段一致验证通过，含普通/GC、SF/FS/FF、混合交易所、Unicode与倍率币。
+
+回滚：持维护锁，恢复backup的PWA HTML，并原子切换current至previous；有后续发布时先检查差异。实体iPhone最终跨应用粘贴未代验；已打开旧页需要刷新。
