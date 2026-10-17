@@ -8,6 +8,25 @@ export function mobileSummary(message) {
   const shortExchanges=text=>text.replace(/\b(?:gate\.io|gate|binance|bitget|bybit|okx|aster|hyperliquid|hl|hy)\b/giu,abbreviation);
   let title=String(message.title??'').replace(/V2\s*收敛/iu,match=>route?abbreviation(route[1])+'→'+abbreviation(route[2]):match);
   const signals=[];
+  // DEX monitor messages put their instruments in numbered body entries, not
+  // the message title. Parse those entries only; config blacklists are not coins.
+  const dex=[];
+  for(const [index,line] of lines.entries()){
+    const entry=line.match(/^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)\s*[/／]\s*空\s+(\S+)\s*$/iu);
+    if(entry)dex.push({index,rank:entry[1].toUpperCase(),mode:({期期:'FF',现期:'SF',期现:'FS'})[entry[2]]??entry[2].toUpperCase(),coin:entry[3],route:abbreviation(entry[4])+'→'+abbreviation(entry[5])});
+  }
+  if(dex.length){
+    title=dex.length===1?`${dex[0].coin}｜${dex[0].mode}｜${dex[0].route}｜${dex[0].rank}`:`DEX套利｜${[...new Set(dex.map(x=>x.coin))].join('、')}｜${dex.length}组`;
+    dex.forEach((entry,i)=>{
+      const block=lines.slice(entry.index+1,dex[i+1]?.index??lines.length);
+      const fee=block.map(s=>s.match(/^净费率\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%\s*\/\s*(?:h|小时))\s*$/iu)?.[1]).find(Boolean);
+      const quality=block.map(s=>s.match(/^质量\s*[:：]\s*(.+)$/u)?.[1]).find(Boolean);
+      const details=[dex.length>1?`${entry.coin}｜${entry.mode}｜${entry.route}｜${entry.rank}`:'',fee?'净费率 '+fee:'',quality?'质量：'+quality:''].filter(Boolean);
+      if(details.length)signals.push(details.join(' · '));
+    });
+  }else if(!title.trim()||/^机器人消息$/u.test(title.trim())){
+    title=lines.find(s=>!/^https?:\/\//iu.test(s)&&!(/^(?:时间|阈值|价格最大延迟|symbol黑名单|排除合约交易所)\s*[:：]/iu.test(s)))??'';
+  }
   if(/强信号/u.test(title)){
     for(const [index,line] of lines.entries()){
       const signal=line.match(/^(R\d+\+?)\s*[｜|]\s*(SF|FS|FF)\s*[｜|]\s*买\s+(\S+)\s*→\s*卖\s+(\S+)/iu);
@@ -38,6 +57,8 @@ export function mobileSummary(message) {
   const actionable=/下架|退市|停止交易|终止|暂停|维护|充关|提关|充值关闭|提现关闭|关闭|延迟|失败|异常|过期|禁止|不支持|不可用|不保证|勿|谨慎/iu;
   const warnings=[];let hasWarningLabel=false;
   for(const [index,line] of lines.entries()){
+    // A configured maximum age is not evidence that a price is delayed.
+    if(/^价格最大延迟\s*[:：]\s*\d+(?:\.\d+)?\s*(?:s|秒)\s*$/iu.test(line))continue;
     const labelled=warningLabel.test(line);
     let detail=line.replace(warningLabel,'').replace(/官方原文\s*[:：].*$/u,'').trim();
     if(!detail||placeholder.test(detail))continue;
