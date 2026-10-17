@@ -48,7 +48,18 @@ $('ns-form').onsubmit=e=>{e.preventDefault();task(async()=>{const settings={noti
 let registration;
 async function configureWorker(){if(!registration?.active||!token)return;await new Promise((resolve,reject)=>{const c=new MessageChannel(),timer=setTimeout(()=>reject(Error('通知组件未就绪，请重新打开页面。')),8000);c.port1.onmessage=e=>{clearTimeout(timer);e.data?.ok?resolve():reject(Error('通知配置失败'))};registration.active.postMessage({type:'configure',token},[c.port2])})}
 $('ns-enable').onclick=()=>task(async()=>{if(!registration)throw Error('请从 iPhone 主屏幕打开雷达通知页面。');const p=await Notification.requestPermission();if(p!=='granted')throw Error('请在 iPhone 设置中允许雷达通知。');let sub=await registration.pushManager.getSubscription();if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}await configureWorker();await api('subscribe',{subscription:sub.toJSON()});await load()});
-if(location.pathname.startsWith(BASE)){
- if('serviceWorker'in navigator)navigator.serviceWorker.register(BASE+'sw.js',{scope:BASE,updateViaCache:'none'}).then(async reg=>{registration=reg;await navigator.serviceWorker.ready;await reg.update();await configureWorker()}).catch(()=>{});
- button.click();
+if(location.pathname.startsWith(BASE)||standalone){
+ if('serviceWorker'in navigator)navigator.serviceWorker.register(BASE+'sw.js',{scope:BASE,updateViaCache:'none'}).then(async reg=>{
+  registration=reg;
+  // The canonical BOT URL is outside the legacy scope: do not await page.ready.
+  if(!reg.active)await new Promise((resolve,reject)=>{
+   const worker=reg.installing||reg.waiting;
+   if(!worker){reject(Error('通知组件未就绪'));return}
+   const timer=setTimeout(()=>reject(Error('通知组件启动超时')),10000);
+   const check=()=>{if(worker.state==='activated'){clearTimeout(timer);resolve()}else if(worker.state==='redundant'){clearTimeout(timer);reject(Error('通知组件启动失败'))}};
+   worker.addEventListener('statechange',check);check();
+  });
+  await configureWorker();
+  reg.update().catch(()=>{});
+ }).catch(()=>{});
 }
