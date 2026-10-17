@@ -50,10 +50,17 @@ def validate_subscription(value):
     if not isinstance(value, dict):
         raise ValueError('订阅格式错误')
     endpoint = value.get('endpoint', '')
+    if not isinstance(endpoint, str) or any(ord(char) <= 32 for char in endpoint):
+        raise ValueError('推送地址格式错误')
     u = urlsplit(endpoint)
-    if (u.scheme != 'https' or not u.hostname or not u.hostname.endswith('.push.apple.com')
+    # Preserve Apple; accept only the production Web Push services used by
+    # Android Chrome (both current /wp/ and legacy /fcm/send/) and Firefox.
+    provider = bool(u.hostname and u.hostname.endswith('.push.apple.com')) or (
+        u.hostname == 'fcm.googleapis.com' and u.path.startswith(('/wp/', '/fcm/send/'))) or (
+        u.hostname == 'updates.push.services.mozilla.com' and u.path.startswith(('/wpush/', '/push/', '/v1/')))
+    if (u.scheme != 'https' or not provider
             or u.username or u.password or u.port not in (None, 443) or u.fragment or len(endpoint) > 2048):
-        raise ValueError('测试版仅接受 iPhone 的苹果推送订阅')
+        raise ValueError('不支持此推送服务，请在安卓 Chrome、Firefox 或 iPhone 主屏幕雷达中开启通知')
     keys = value.get('keys', {})
     decoded = {}
     for key, size in [('auth', 16), ('p256dh', 65)]:

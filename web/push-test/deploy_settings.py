@@ -89,7 +89,7 @@ if backend:
    for key,value in profile_states.items():assert again.accounts[key].state==value,'Existing profile changed'
 with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  fcntl.flock(lock,fcntl.LOCK_EX)
- old=current.resolve();new=old.parent/('20261017-phone-switch-'+str(int(time.time())))
+ old=current.resolve();new=old.parent/('20261017-android-push-'+str(int(time.time())))
  fallback=pathlib.Path('/opt/radar-webpush-test/public/index.html');previous=fallback.read_bytes()
  backup=root/('backup-'+new.name);backup.mkdir(mode=0o700)
  (backup/'index.html').write_bytes(previous)
@@ -110,7 +110,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    shutil.copyfile(p/name,bot/name);(bot/name).chmod(0o644)
   index=bot/'index.html';html=index.read_text()
   assert 'notification-settings.js?v=' in html
-  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-phone-switch1',html)
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-android1',html)
   index.write_text(html)
   if backend:
    for name in updated_files:

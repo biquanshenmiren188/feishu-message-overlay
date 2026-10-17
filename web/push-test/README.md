@@ -5,6 +5,39 @@ Production ordinary Web Push, configured from **BOT → 推送设置**. The exis
 pair token and increasing sequence are intentionally retained so the accepted
 iPhone installation continues working without reinstalling.
 
+## Android Web Push (2026-10-17)
+
+Android Chrome and Firefox can enable notifications directly in a normal browser
+tab or installed app. Open BOT → 推送设置 → 通知与推送码 → 开启通知 and allow
+notifications. Android code switching moves this browser's subscription and loads
+the destination settings; desktop switching still only manages settings. The
+existing one-phone-per-code constraint remains. iPhone still requires the
+installed Home Screen app.
+
+The API accepts HTTPS Apple endpoints plus exact production hosts
+`fcm.googleapis.com` (`/wp/`, `/fcm/send/`) and
+`updates.push.services.mozilla.com` (`/wpush/`, `/push/`, `/v1/`). Endpoint/key
+validation, subscription fingerprint CAS, profile isolation and worker v6 remain.
+Unsupported/insecure browsers, denied permissions and provider connectivity
+failures have actionable messages. Browser/system notification permission and
+access to the provider are required; not every Android browser is supported.
+
+Release `20261017-android-push-1792226291` preserves the actual prior release
+`20261017-bot-clipboard-1792226158`, including its compact settings, branding
+and clipboard modules. Backup:
+`/opt/radar-webpush-test/backup-20261017-android-push-1792226291`.
+Deployment used `deploy_settings.py --with-profiles`; only the push service
+restarted, 2,639 other files and existing subscriptions/settings were preserved.
+49 Python and 26 Node tests passed. An isolated real backend with simulated
+Android browser APIs verified enable, transfer, destination settings and binding;
+393px layout and live desktop settings/source status were checked. No production
+test code or diagnostic push was created. Physical Android lock-screen delivery
+has not been verified.
+
+References: [Web Push subscription](https://web.dev/articles/push-notifications-subscribing-a-user),
+[Chromium FCM endpoint change](https://chromium.googlesource.com/chromium/src/%2B/40644b8cf2b03be542976e7d1192c653e389c14e),
+[Mozilla Autopush](https://mozilla-services.github.io/autopush-rs/).
+
 ## Defaults and behavior
 
 2026-10-17: 合并通知改为最新消息在最上面。只在 render 层按原始时间倒序，
@@ -52,8 +85,8 @@ identity has been checked.
 
 ## Settings and ownership
 
-2026-10-17 update: switching inside the installed iPhone PWA now also transfers
-that phone's subscription. Desktop/browser switching continues to select only
+2026-10-17 update: switching inside Android Chrome/Firefox or the installed
+iPhone PWA also transfers that phone's subscription. Desktop switching selects only
 the settings being managed and never remotely switches the phone. Each code's
 settings and sequence stay intact. An occupied destination is rejected rather
 than replacing another phone. A phone without a local subscription is prompted

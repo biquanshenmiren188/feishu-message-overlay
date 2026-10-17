@@ -225,6 +225,23 @@ class ProfilesTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.app.transfer_subscription(self.old, dict(request, targetToken='invalid'))
         self.assertFalse(self.app.transfer_path.exists())
 
+    def test_android_subscription_delivers_and_switches_without_affecting_iphone(self):
+        created, android = self.create()
+        other, destination = self.create(2)
+        sub = subscription('android')
+        sub['endpoint'] = 'https://fcm.googleapis.com/wp/fixture'
+        android.subscribe(sub)
+        android.device_status(dict(permission='granted', subscriptionFingerprint=fingerprint(sub), version='radar-delivery-v6'))
+        now = time.time()+1
+        android.tick(self.feed([message(1, now)], now), now)
+        self.assertEqual(self.sent[0][0], sub['endpoint'])
+        self.assertEqual(self.sent[0][1]['profile'], android.profile_id)
+        self.assertNotIn('web_push', self.sent[0][1])
+        self.app.transfer_subscription(android, dict(targetToken=other['token'], subscription=sub, requestId='f'*32))
+        self.assertNotIn('subscription', android.state)
+        self.assertEqual(destination.state['subscription'], sub)
+        self.assertEqual(self.old.state, self.before)
+
     def test_interrupted_transfer_recovers_without_rewinding_settings_or_sequence(self):
         created, target = self.create()
         sub = self.old.state['subscription']

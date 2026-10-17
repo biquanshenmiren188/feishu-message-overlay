@@ -1,5 +1,5 @@
 const BASE='/radar/push-test/', API=BASE+'api/';
-const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-phone-switch1';document.head.append(css);
+const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-android1';document.head.append(css);
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
 const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';mount?.append(button);
 const dialog=document.createElement('dialog');dialog.id='notification-settings';dialog.setAttribute('aria-labelledby','notification-settings-title');
@@ -30,25 +30,30 @@ let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0,
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-const phoneApp=standalone&&ios;
+const android=/Android/i.test(navigator.userAgent)||navigator.userAgentData?.platform==='Android';
+const phoneApp=android||(standalone&&ios);
+const pushSupported=typeof isSecureContext!=='undefined'&&isSecureContext&&'serviceWorker'in navigator&&typeof Notification!=='undefined'&&typeof PushManager!=='undefined';
+const unsupportedHelp=android?'当前浏览器不支持网页推送，请用最新版安卓 Chrome 或 Firefox 打开雷达。':'当前浏览器不支持网页推送，请更新系统和浏览器。';
+const deniedHelp=android?'通知权限已关闭，请在浏览器的网站设置和安卓系统的应用通知设置中允许通知。':'通知权限已关闭，请前往 iPhone 设置中允许雷达通知。';
+let registrationError='';
 const pendingSwitch=()=>JSON.parse(localStorage.getItem('radar-phone-switch')||'null');
-$('ns-switch-help').textContent=phoneApp?'切换后，本机接收新码的推送，并载入该码已保存的设置。当前未保存内容不会带过去。':'切换后载入该码已保存的设置，不改变手机绑定。要切换手机接收的推送，请在手机主屏幕打开雷达操作。';
+$('ns-switch-help').textContent=phoneApp?'切换后，本机接收新码的推送，并载入该码已保存的设置。当前未保存内容不会带过去。':'切换后载入该码已保存的设置，不改变手机绑定。要切换手机推送，请在安卓浏览器或 iPhone 主屏幕雷达中操作。';
 function message(text,error=false){$('ns-message').textContent=text;$('ns-message').classList.toggle('ns-error',error)}
 async function api(route,data,auth=token,clearSession=true){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error'});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401&&clearSession&&auth===token){token='';localStorage.removeItem('radar-settings-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok){const error=Error(body.error||'请求失败');error.status=r.status;throw error}return body}
 function renderNotification(){
  const otherPlan=!!(token&&deviceToken&&token!==deviceToken);
- notificationReady=!!(!otherPlan&&token&&standalone&&ios&&phone?.permission==='granted'&&phone.subscriptionFingerprint&&phone.subscriptionFingerprint===serverFingerprint);
+ notificationReady=!!(!otherPlan&&token&&phoneApp&&pushSupported&&phone?.permission==='granted'&&phone.subscriptionFingerprint&&phone.subscriptionFingerprint===serverFingerprint);
  $('ns-enable').textContent=otherPlan?(phoneApp?'切换本机通知到此码':'手机绑定保持不变'):notificationReady?'通知已开启':'开启通知';
  $('ns-enable').disabled=busy||notificationReady||(otherPlan&&!phoneApp);
- $('ns-notification-help').textContent=otherPlan?(phoneApp?'正在查看另一推送码。点击上方按钮，将本机通知也切换到此码。':'正在管理另一推送码的设置。电脑切换不会改变手机接收的推送。'):!token?'请先输入推送码连接，再开启通知。':!ios?'请在 iPhone 上打开雷达，添加到主屏幕后开启通知。':!standalone?'请在 Safari 中将雷达添加到主屏幕，再从主屏幕打开并开启通知。':phone?.permission==='denied'?'通知权限已关闭，请前往 iPhone 设置中允许雷达通知。':notificationReady?'本机通知已开启，消息接收由下方“接收消息”控制。':'点击后允许系统通知；如订阅已失效，会重新连接本机通知。';
+ $('ns-notification-help').textContent=otherPlan?(phoneApp?'正在查看另一推送码。点击上方按钮，将本机通知也切换到此码。':'正在管理另一推送码的设置。电脑切换不会改变手机接收的推送。'):!token?'请先输入推送码连接，再开启通知。':ios&&!standalone?'请在 Safari 中将雷达添加到主屏幕，再从主屏幕打开并开启通知。':!phoneApp?'请用安卓 Chrome、Firefox 或 iPhone 主屏幕雷达开启手机通知。':!pushSupported?unsupportedHelp:registrationError?registrationError:phone?.permission==='denied'||Notification.permission==='denied'?deniedHelp:notificationReady?(android?'本机通知已开启。请保持浏览器的系统通知权限开启，接收内容由下方设置控制。':'本机通知已开启，消息接收由下方“接收消息”控制。'):(android?'点击后允许通知，可直接在浏览器使用，也可添加到主屏幕。':'点击后允许系统通知；如订阅已失效，会重新连接本机通知。');
 }
 function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.subscriptionFingerprint??null;$('ns-pair').hidden=true;$('ns-form').hidden=false;$('ns-actions').hidden=false;const p=s.settings;
  $('ns-enabled').checked=p.notify_enabled;$('ns-rows').value=p.rows;$('ns-interval').value=p.notify_interval_seconds;$('ns-percent').value=p.min_percent??'';$('ns-ranks').value=p.excluded_ranks.join(', ');$('ns-coins').value=p.excluded_coins.join(', ');
  for(const [id,key] of [['ns-modes','excluded_modes'],['ns-exchanges','excluded_exchanges']])for(const el of $(id).querySelectorAll('input'))el.checked=p[key].includes(el.value);
  const needsRepair=token===deviceToken&&phone&&(phone.permission!=='granted'||!phone.subscriptionFingerprint||phone.subscriptionFingerprint!==serverFingerprint);
  renderNotification();
- message(!s.subscribed?'手机订阅未连接，请从 iPhone 主屏幕打开雷达并启用通知。':!p.notify_enabled?'手机推送已关闭。':s.source?.connected?'推送已开启，消息源在线。':'推送已开启，等待消息源恢复。');
- if(needsRepair)message(phone.permission==='denied'?'这台手机的通知权限已关闭，请在 iPhone 设置中允许通知。':'手机订阅未连接或与服务器不一致，请点“开启通知”重新连接。',true);
+ message(!s.subscribed?'手机订阅未连接，请在手机上点击“开启通知”。':!p.notify_enabled?'手机推送已关闭。':s.source?.connected?'推送已开启，消息源在线。':'推送已开启，等待消息源恢复。');
+ if(needsRepair)message(phone.permission==='denied'?deniedHelp:'手机订阅未连接或与服务器不一致，请点“开启通知”重新连接。',true);
 }
 async function task(fn){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=true;try{await fn()}catch(e){message(e.message,true);if(!$('ns-switch').hidden)$('ns-switch-error').textContent=e.message}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=!!pendingSwitch();$('ns-save').disabled=!!pendingSwitch();for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=false;renderNotification()}}
 async function readPlan(auth){const [status,binding]=await Promise.all([api('status',undefined,auth,false),api('binding',undefined,auth,false)]);return {status,binding}}
@@ -66,7 +71,7 @@ async function activatePlan(result,movePhone=false){
  dialog.querySelector('.ns-body').scrollTop=0;
 }
 button.onclick=()=>{dialog.showModal();dialog.querySelector('.ns-body').scrollTop=0;task(load)};$('ns-close').onclick=()=>dialog.close();
-$('ns-pair').onsubmit=e=>{e.preventDefault();task(async()=>{const result=await api('pair',{code:$('ns-code').value.trim()},token,false);await activatePlan(result);$('ns-code').value='';if(standalone)await configureWorker()})};
+$('ns-pair').onsubmit=e=>{e.preventDefault();task(async()=>{const result=await api('pair',{code:$('ns-code').value.trim()},token,false);await activatePlan(result);$('ns-code').value='';if(phoneApp&&pushSupported)await configureWorker()})};
 $('ns-switch-open').onclick=()=>{if(busy)return;$('ns-switch').hidden=false;$('ns-switch-open').setAttribute('aria-expanded','true');$('ns-switch-error').textContent='';$('ns-switch-code').focus()};
 $('ns-switch-cancel').onclick=()=>{closeSwitch();$('ns-switch-open').focus()};
 $('ns-switch').onsubmit=e=>{e.preventDefault();task(async()=>{
@@ -123,6 +128,7 @@ async function finishPhoneSwitch(){
  await syncPhone();const plan=await readPlan(operation.targetToken);showPlan(plan);localStorage.removeItem('radar-phone-switch');return plan;
 }
 async function switchPhone(targetToken,plan){
+ if(!pushSupported)throw Error(unsupportedHelp);
  if(pendingSwitch())await finishPhoneSwitch();
  if(!registration?.active)throw Error('通知组件正在准备，请稍后再试。');
  deviceToken=localStorage.getItem('radar-test-token')||deviceToken;
@@ -136,7 +142,7 @@ async function switchPhone(targetToken,plan){
   localStorage.setItem('radar-test-token',targetToken);deviceToken=targetToken;phone=null;
   return;
  }
- if(Notification.permission!=='granted')throw Error('请先在 iPhone 设置中允许雷达通知，再切换。');
+ if(Notification.permission!=='granted')throw Error(deniedHelp);
  const requestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
  localStorage.setItem('radar-phone-switch',JSON.stringify({sourceToken:deviceToken,targetToken,profile:plan.status.profileId,request:{targetToken,subscription:sub.toJSON(),requestId}}));
  return await finishPhoneSwitch();
@@ -146,7 +152,7 @@ let syncing=null, syncingToken='';
 async function syncPhone(){
  if(syncing){if(syncingToken===deviceToken)return syncing;await syncing.catch(()=>{});return syncPhone()}
  const pending=pendingSwitch();if(pending&&deviceToken!==pending.targetToken)return;
- if(!standalone||!ios||!registration||!deviceToken)return;
+ if(!phoneApp||!pushSupported||!registration||!deviceToken)return;
  const auth=deviceToken;
  syncingToken=auth;
  syncing=(async()=>{
@@ -161,20 +167,22 @@ async function syncPhone(){
 $('ns-enable').onclick=()=>task(async()=>{
  if(!token){$('ns-code').focus();throw Error('请先输入推送码连接。')}
  if(deviceToken&&token!==deviceToken&&phoneApp){await activatePlan({token},true);message('本机通知已切换到当前推送码。');return}
- if(!ios||!standalone)throw Error('请在 iPhone Safari 中将雷达添加到主屏幕，再从主屏幕打开并点击“开启通知”。');
- if(!registration?.active||!publicKey)throw Error('通知组件正在准备，请稍后再点“开启通知”。');
- if(typeof Notification==='undefined'||!registration.pushManager)throw Error('当前系统不支持网页通知，请更新 iOS 后重试。');
+ if(ios&&!standalone)throw Error('请在 Safari 中将雷达添加到主屏幕，再从主屏幕打开并点击“开启通知”。');
+ if(!phoneApp)throw Error('请在手机上开启通知，电脑只管理推送设置。');
+ if(!pushSupported)throw Error(unsupportedHelp);
+ if(!registration?.active||!publicKey)throw Error(registrationError||'通知组件正在准备，请稍后再点“开启通知”。');
+ if(!registration.pushManager)throw Error(unsupportedHelp);
  $('ns-enable').textContent='正在开启…';message('请允许系统通知，正在连接本机推送。');
  // Request permission directly in the click gesture, before any network/worker awaits.
  const p=await Notification.requestPermission();
- if(p!=='granted'){await syncPhone();throw Error(p==='denied'?'请在 iPhone 设置中允许雷达通知，再返回此处。':'尚未允许通知，可以再次点击“开启通知”。')}
+ if(p!=='granted'){await syncPhone();throw Error(p==='denied'?deniedHelp:'尚未允许通知，可以再次点击“开启通知”。')}
  let sub=await registration.pushManager.getSubscription();
- if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}
+ if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));try{sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}catch(error){throw Error(error.name==='NotAllowedError'?deniedHelp:android?'无法连接浏览器推送服务，请检查网络及浏览器通知权限后重试。':'无法连接推送服务，请检查网络后重试。')}}
  await api('subscribe',{subscription:sub.toJSON(),replaceFingerprint:serverFingerprint});await configureWorker();
  serverFingerprint=await subscriptionFingerprint(sub);await syncPhone();
  message('本机通知已开启；按“接收消息”和已保存的筛选设置接收提醒。');
 });
-if(location.pathname.startsWith(BASE)||standalone){
+if(phoneApp&&pushSupported){
  if('serviceWorker'in navigator)navigator.serviceWorker.register(BASE+'sw.js',{scope:BASE,updateViaCache:'none'}).then(async reg=>{
   registration=reg;
   // The canonical BOT URL is outside the legacy scope: do not await page.ready.
@@ -189,7 +197,7 @@ if(location.pathname.startsWith(BASE)||standalone){
   await configureWorker();
   await syncPhone();
   reg.update().catch(()=>{});
- }).catch(()=>{});
+ }).catch(()=>{registrationError='通知组件加载失败，请检查网络后刷新页面。';renderNotification()});
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(phoneApp&&pendingSwitch())task(load);else configureWorker().then(syncPhone).catch(()=>{})}});
 navigator.serviceWorker?.addEventListener('controllerchange',()=>{if(phoneApp&&pendingSwitch())task(load);else configureWorker().then(syncPhone).catch(()=>{})});

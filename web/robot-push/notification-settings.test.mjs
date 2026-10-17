@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
 
 const source=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
-function fixture({failRoute='',savedSelection='',ios=false,subscribed=false,transferFailure='',workerFailure=false}={}){
- const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={};
+function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false}={}){
+ const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={},actions=[];
  if(savedSelection)storage.set('radar-settings-token',savedSelection);
  class Element{
   constructor(){this.children=[];this.value='';this.textContent='';this.hidden=false;this.classList={toggle(){}};this.attrs={}}
@@ -27,12 +27,14 @@ function fixture({failRoute='',savedSelection='',ios=false,subscribed=false,tran
   if(route==='pair')return JSON.parse(options.body).code==='87654321'?{ok:true,status:200,json:async()=>({token:'other-token'})}:{ok:false,status:400,json:async()=>({error:'推送码不正确'})};
   return {ok:true,status:200,json:async()=>route==='status'||route==='settings'?plan(auth):route==='binding'?{pushCode:auth==='owner-token'?'12345678':'87654321'}:{ok:true}};
  };
- const navigator={userAgent:ios?'iPhone':'Desktop',standalone:ios,serviceWorker:{register:async()=>({active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?{toJSON:()=>({endpoint:'https://fixture.push.apple.com/local',keys:{p256dh:'test',auth:'test'}})}:null},update:async()=>{}}),addEventListener(){}}};
+ const subscription={toJSON:()=>({endpoint:android?'https://fcm.googleapis.com/wp/synthetic':'https://fixture.push.apple.com/local',keys:{p256dh:'test',auth:'test'}})};
+ const notification={permission:permission||(subscribed?'granted':'default'),requestPermission:async()=>{actions.push('permission');notification.permission=permission||'granted';return notification.permission}};
+ const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
- const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:{permission:subscribed?'granted':'default'},location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:ios}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
+ const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
- return {elements,storage,requests,workerTokens,events,run};
+ return {elements,storage,requests,workerTokens,events,actions,run};
 }
 async function settle(f){for(let i=0;i<30;i++){await new Promise(resolve=>setImmediate(resolve));if(!f.run('busy'))return}throw Error('operation did not settle')}
 async function switchCode(f,code){f.elements.get('ns-switch').hidden=false;f.elements.get('ns-switch-code').value=code;f.elements.get('ns-switch').onsubmit({preventDefault(){}});await settle(f)}
@@ -104,4 +106,38 @@ test('worker configuration failure after server commit retains recoverable targe
  const f=fixture({ios:true,subscribed:true,workerFailure:true});await settle(f);await f.run('load()');await switchCode(f,'87654321');
  assert.equal(f.storage.get('radar-test-token'),'other-token');assert.ok(f.storage.has('radar-phone-switch'));assert.equal(f.elements.get('ns-save').disabled,true);
  assert.ok(!f.elements.get('ns-message').textContent.includes('本机现在'));
+});
+
+
+test('Android browser enables notifications without requiring home-screen installation',async()=>{
+ const f=fixture({android:true});await settle(f);await f.run('load()');
+ assert.ok(f.actions.includes('register'));assert.equal(f.run('phoneApp'),true);assert.equal(f.run('standalone'),false);
+ f.elements.get('ns-enable').onclick();await settle(f);
+ assert.deepEqual(f.actions.slice(-2),['permission','subscribe']);
+ const request=f.requests.find(r=>r.route==='subscribe');assert.ok(request.body.subscription.endpoint.startsWith('https://fcm.googleapis.com/wp/'));
+ assert.equal(request.auth,'owner-token');assert.equal(f.elements.get('ns-enable').textContent,'通知已开启');
+});
+
+test('Android browser and installed app transfer the local subscription when switching',async()=>{
+ for(const installed of [false,true]){
+  const f=fixture({android:true,installed,subscribed:true});await settle(f);await f.run('load()');await switchCode(f,'87654321');
+  assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.workerTokens.at(-1),'other-token');
+  assert.equal(f.requests.find(r=>r.route==='switch-subscription').body.targetToken,'other-token');
+ }
+});
+
+test('denied Android permission and push-service failures show actionable errors without saving a subscription',async()=>{
+ for(const options of [{permission:'denied'},{subscribeError:'AbortError'}]){
+  const f=fixture({android:true,...options});await settle(f);await f.run('load()');f.elements.get('ns-enable').onclick();await settle(f);
+  assert.equal(f.requests.some(r=>r.route==='subscribe'),false);assert.equal(f.elements.get('ns-enable').disabled,false);
+  assert.match(f.elements.get('ns-message').textContent,options.permission?/安卓系统/:/推送服务/);
+ }
+});
+
+test('unsupported Android, desktop and Safari tab cannot silently subscribe',async()=>{
+ for(const options of [{android:true,supported:false},{android:true,secure:false},{},{ios:true,installed:false}]){
+  const f=fixture(options);await settle(f);await f.run('load()');f.elements.get('ns-enable').onclick();await settle(f);
+  assert.equal(f.actions.includes('register'),false);assert.equal(f.actions.includes('permission'),false);
+  assert.equal(f.requests.some(r=>r.route==='subscribe'),false);assert.ok(f.elements.get('ns-message').textContent);
+ }
 });
