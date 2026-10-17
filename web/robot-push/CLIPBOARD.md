@@ -12,6 +12,8 @@
 
 ## 发布
 
+当前发布：`e976014`，release `/opt/funding-radar-web/releases/20261017-bot-clipboard-1792226858`，基于实际安卓推送版 `20261017-android-push-1792226291`。模块目录 `clipboard-20261017-v2`，取消手动备用弹窗，保留自动隐藏文本复制兼容处理。2,641个原文件SHA不变、两服务PID不变；线上新入口及消息源/卡片区正常，无站点脚本错误。备份同名目录 `/opt/funding-radar-web/backups/20261017-bot-clipboard-1792226858`。
+
 `deploy_clipboard.py --baseline <已检查的线上快照>` 读取实际加载目录，仅将 source-entry、basispulse、card、clipboard 四个模块放入新目录，并更新 BOT/PWA 入口。旧模型、GC 单腿与 FS 支持、中文币名规则、样式、SharedWorker 及其 URL 身份原样保留。部署持维护锁、验证当前release及SHA、备份PWA fallback、逐文件核对并原子切换。不得以仓库main旧页面或旧卡片模型覆盖线上。
 
 `--prepare <目录>` 生成同一候选图供本地浏览器验收；尚未提交部署不会更改服务器。
@@ -21,6 +23,6 @@
 86项网页Node测试通过，包含新增7项剪贴板回归：普通/GC、Unicode/倍率/FS、同步调用、原生拒绝、无API、失败清理、并发点击。浏览器验证候选模块实际普通与GC复制、JSON粘贴、SIREN Binance→Aster及中文币名；模拟双接口拒绝后两个按钮均原位提示重试，无备用窗口。自动化浏览器的虚拟剪贴板不作为实体iPhone跨应用粘贴验收。
 
 
-上线：提交 `ecc9143`，release `/opt/funding-radar-web/releases/20261017-bot-clipboard-1792226158`，前版 `20261017-apple-ui-1792208068`；备份 `/opt/funding-radar-web/backups/20261017-bot-clipboard-1792226158`。2,637个原文件保持SHA不变，两个服务PID不变。实际线上加载新入口，消息源连接、消息区及卡片区运行正常，无站点脚本错误；验收时没有活跃机会，卡片复制用相同候选模块的本地样例验证。723组现行模型载荷逐字段一致验证通过，含普通/GC、SF/FS/FF、混合交易所、Unicode与倍率币。
+历史首次上线：提交 `ecc9143`，release `/opt/funding-radar-web/releases/20261017-bot-clipboard-1792226158`，前版 `20261017-apple-ui-1792208068`；备份 `/opt/funding-radar-web/backups/20261017-bot-clipboard-1792226158`。2,637个原文件保持SHA不变，两个服务PID不变。实际线上加载新入口，消息源连接、消息区及卡片区运行正常，无站点脚本错误；验收时没有活跃机会，卡片复制用相同候选模块的本地样例验证。723组现行模型载荷逐字段一致验证通过，含普通/GC、SF/FS/FF、混合交易所、Unicode与倍率币。此版备用弹窗已在后续按用户要求删除。
 
 回滚：持维护锁，恢复backup的PWA HTML，并原子切换current至previous；有后续发布时先检查差异。实体iPhone最终跨应用粘贴未代验；已打开旧页需要刷新。
