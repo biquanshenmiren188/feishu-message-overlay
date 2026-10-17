@@ -14,4 +14,4 @@
 
 部署源码 `32345c1d7829ad01b9ae379606b1624598eb242e`，release `/opt/funding-radar-web/releases/20261017-mobile-scroll-1792229554`，previous `20261017-chart-loading-1792229169`；同名 backup 保存部署报告与 PWA fallback。保留其他 2,718 个文件，消息源/推送 PID 未变。AST 对照确认只改 qe（fitCards）、q（消息render）、Nt（卡片render）三个顶层函数，其余 68 个函数逐字相同。
 
-补充回归：原生触摸模拟 scrollY 单调从 0 到 384.85，消息框始终 345px。持续手势期间收到完整空快照，仍保留同一个卡片节点但变为 expired、计数为 0 ACTIVE。正式域名加载了新 bundle/CSS，393px 无横向溢出并保留新 Logo；正式站当时没有活跃卡片，因此多卡片手势证据来自隔离合成场景。PR #28 未合并。
+补充回归：三卡片场景原生触摸模拟 scrollY 单调从 0 到 384.85，消息框始终 345px。持续手势期间收到完整空快照，仍保留同一个卡片节点但变为 expired、计数为 0 ACTIVE。正式域名和 PWA 入口加载新 bundle/CSS，320/393px 无横向溢出并保留新 Logo。随后在正式站新到的一张 SPACE 卡片上补验触摸下滑：scrollY 从 0 到 129.70（页面底部）单调不回跳，消息框保持 413px，卡片失效状态正常更新。多卡片证据来自隔离合成场景；全部触摸为 Chrome 模拟，未做实体 iPhone Safari 验收。PR #28 未合并。
