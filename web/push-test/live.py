@@ -142,6 +142,8 @@ class Live(Trial):
     @staticmethod
     def render(rows):
         zone = timezone(timedelta(hours=8))
+        # Reverse display only; chronological history/pending and dedup stay intact.
+        rows = sorted(rows, key=lambda r: (r['at'], r['id']), reverse=True)
         return compact_rows([f"{r['coin']} {r['mode']} {r['buy']}→{r['sell']} {r['rank']} {r['value']} "
                              + datetime.fromtimestamp(r['at'], zone).strftime('%H:%M:%S') for r in rows])
 

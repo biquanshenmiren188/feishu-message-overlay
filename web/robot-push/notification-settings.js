@@ -3,7 +3,7 @@ const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/r
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
 const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';mount?.append(button);
 const dialog=document.createElement('dialog');dialog.id='notification-settings';dialog.setAttribute('aria-labelledby','notification-settings-title');
-dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在下。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
+dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在上。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
 <div class="ns-body"><p id="ns-message" role="status" aria-live="polite"></p>
 <form id="ns-pair" hidden><label for="ns-code">连接码</label><div class="ns-inline"><input id="ns-code" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位连接码"><button>连接</button></div><p>原测试通知已沿用，不需要重新安装。</p></form>
 <form id="ns-form" hidden><fieldset id="ns-fields"><label class="ns-toggle"><span>接收消息</span><input id="ns-enabled" type="checkbox"></label>

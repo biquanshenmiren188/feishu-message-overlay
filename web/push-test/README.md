@@ -7,7 +7,16 @@ iPhone installation continues working without reinstalling.
 
 ## Defaults and behavior
 
-- Real BOT messages, enabled, at most four entries per notification, oldest first.
+2026-10-17: 合并通知改为最新消息在最上面。只在 render 层按原始时间倒序，
+history/pending 保持原顺序；普通 worker 与声明式 fallback 共用 rows。
+已定点发布 `20261017-newest-first-1792204285`，保留此前全站UI。
+备份 `/opt/radar-webpush-test/backup-20261017-newest-first-1792204285` 包含旧 live.py、
+PWA fallback 和发布摘要。只重启推送服务，接收服务不变；原订阅和设置保持。
+回滚在维护锁内恢复上述两文件、切回 `20261017-ui-polish-1792203765` 并重启推送服务。
+32 Python / 12 Node 测试通过；线上健康、源连接、订阅与排序函数已核验，
+未额外发送测试通知，未声称亲眼验证 iPhone 锁屏。
+
+- Real BOT messages, enabled, at most four entries per notification, newest first (updated 2026-10-17).
 - A 60-second minimum interval between alerts; messages arriving during it are
   batched. No new eligible message means no periodic notification.
 - All R levels received by default, including R5+ and R1000+. Settings allow
