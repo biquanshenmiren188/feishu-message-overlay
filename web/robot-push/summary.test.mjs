@@ -1,6 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mobileSummary} from './summary.mjs';
+
+test('untitled DEX opportunities use the instrument, direction and original P rank',()=>{
+ const message={title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%\n净费率: 0.0228%/h\n质量: 样本少'};
+ const before=JSON.stringify(message),x=mobileSummary(message);
+ assert.equal(x.title,'TOKEN｜FF｜BN→AS｜P3');assert.equal(x.signals,'净费率 0.0228%/h · 质量：样本少');
+ assert.equal(x.warning,false);assert.equal(x.risk,'');assert.equal(x.spread,'');assert.equal(JSON.stringify(message),before);
+});
+
+test('DEX batches retain each coin, route and own fee without taking config blacklist coins',()=>{
+ const x=mobileSummary({body:'[Dex 套利监控命中][最高P9]\nsymbol黑名单: BLACKLIST\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\n净费率: -0.01%/h\n质量: 样本少\n2. [P9][期现] SECOND | 多 OKX / 空 Binance\n净费率: +0.02%/h\n3. [P2][FF] THIRD | 多 Aster / 空 Bybit'});
+ assert.equal(x.title,'DEX套利｜FIRST、SECOND、THIRD｜3组');
+ assert.equal(x.signals,'FIRST｜SF｜GT→BG｜P3 · 净费率 -0.01%/h · 质量：样本少\nSECOND｜FS｜OK→BN｜P9 · 净费率 +0.02%/h\nTHIRD｜FF｜AS→BY｜P2');
+ assert.ok(!x.title.includes('BLACKLIST'));
+});
+
+test('configuration maximum age is hidden but actual delay warnings remain',()=>{
+ assert.equal(mobileSummary({body:'价格最大延迟: 45s'}).risk,'');
+ assert.equal(mobileSummary({body:'价格最大延迟: 45s\n警告：TOKEN 价格已延迟90秒'}).risk,'警告：TOKEN 价格已延迟90秒');
+ assert.equal(mobileSummary({body:'TOKEN 价格延迟，暂不可用'}).warning,true);
+});
+
+test('unknown untitled messages use meaningful original context instead of a generic heading',()=>{
+ assert.equal(mobileSummary({body:'系统自定义提醒\n检查原文'}).title,'系统自定义提醒');
+ assert.equal(mobileSummary({title:'机器人消息',body:'TOKEN 合约即将下架\n其他细节'}).title,'TOKEN 合约即将下架');
+ assert.equal(mobileSummary({body:'symbol黑名单: BLACKLIST\n价格最大延迟: 45s'}).title,'');
+ assert.equal(mobileSummary({title:'正常标题',body:'普通正文'}).title,'正常标题');
+});
 test('extracts only observed fields, with direction and exchange fee context',()=>{
  const x=mobileSummary({body:'买 OKX 永续 → 卖 Bybit 永续\n均值：净收益+0.29% | 盘口差+0.505% | 资金费差+0.015%\nOKX: 资费+0.338%/4h | 市值\nBybit: 资费+0.001%/1h\nOKX：充开提开\nBybit：充开提开'});
  assert.equal(x.direction,'买 OKX 永续 → 卖 Bybit 永续');assert.match(x.metrics,/净收益\+0.29%/);assert.match(x.metrics,/盘口差\+0.505%/);assert.match(x.fees,/OKX:\s*\+0.338%\/4h/);assert.equal(x.risk,'充提：充开提开');assert.equal(x.warning,false);
