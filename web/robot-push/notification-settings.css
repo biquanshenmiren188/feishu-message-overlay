@@ -1,17 +1,40 @@
-#notification-settings-open{min-height:44px;padding:6px 14px;border:1px solid #b9d4cb;border-radius:8px;background:#fff;color:#146552;font:inherit;cursor:pointer;margin-left:auto;white-space:nowrap}
-#notification-settings{box-sizing:border-box;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 32px);border:1px solid #d5e2dc;border-radius:18px;padding:24px;background:#fff;color:#19392e;font:16px/1.5 system-ui,sans-serif;overflow-y:auto}
+#notification-settings-open{min-height:44px;padding:6px 14px;border:1px solid #b9d4cb;border-radius:10px;background:#fff;color:#146552;font:inherit;cursor:pointer;margin-left:auto;white-space:nowrap}
+#notification-settings{box-sizing:border-box;width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 40px);border:1px solid #d5e2dc;border-radius:20px;padding:0;background:#fff;color:#19392e;font:16px/1.5 system-ui,sans-serif;overflow:hidden}
+#notification-settings[open]{display:flex;flex-direction:column}
 #notification-settings::backdrop{background:#10251d88;backdrop-filter:blur(3px)}
 #notification-settings *{box-sizing:border-box}#notification-settings [hidden]{display:none!important}
-#notification-settings h2{font-size:21px;margin:0}#notification-settings p{margin:8px 0 18px;color:#526b61;font-size:14px}
-#notification-settings .ns-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}#notification-settings .ns-head p{margin:6px 0}
-#notification-settings button{min-height:44px;border:1px solid #c4d5cd;border-radius:8px;padding:8px 16px;background:#f7faf8;color:#184c3c;font:inherit;cursor:pointer}
-#notification-settings :is(button,input,select,summary):focus-visible,#notification-settings-open:focus-visible{outline:3px solid #388de0;outline-offset:3px}
+#notification-settings h2{font-size:21px;line-height:1.35;margin:0}#notification-settings p{margin:8px 0 18px;color:#526b61;font-size:14px;overflow-wrap:anywhere}
+#notification-settings .ns-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 24px 16px;border-bottom:1px solid #e5ede8;flex:none;background:#fff}#notification-settings .ns-head p{margin:5px 0 0;font-size:13px}
+#notification-settings .ns-body{overflow-y:auto;overscroll-behavior:contain;min-height:0;padding:0 24px 8px;scroll-padding-block:16px}
+#notification-settings button{min-height:44px;border:1px solid #c4d5cd;border-radius:10px;padding:8px 16px;background:#f7faf8;color:#184c3c;font:inherit;cursor:pointer;touch-action:manipulation}
+#notification-settings #ns-close{flex:none;padding:8px 12px;font-size:14px}
+#notification-settings :is(button,input,select):focus-visible,#notification-settings-open:focus-visible{outline:3px solid #388de0;outline-offset:3px}
 #notification-settings button:disabled{opacity:.55;cursor:wait}#notification-settings fieldset{border:0;padding:0;margin:0;min-width:0}
-#notification-settings label{display:block;margin-bottom:14px;font-weight:550}#notification-settings :is(input:not([type=checkbox]),select){display:block;width:100%;min-height:44px;border:1px solid #bccfc5;border-radius:8px;padding:9px 10px;background:white;color:#163b2d;font:inherit;margin-top:6px}
+#notification-settings label{display:block;margin-bottom:16px;font-weight:550}#notification-settings :is(input:not([type=checkbox]),select){display:block;width:100%;min-height:48px;border:1px solid #bccfc5;border-radius:10px;padding:10px 12px;background:#fff;color:#163b2d;font:inherit;margin-top:7px}
+#notification-settings input::placeholder{color:#708079;font-size:14px;font-weight:400}
 #notification-settings input[type=checkbox]{width:20px;height:20px;accent-color:#087f68;flex-shrink:0;margin:0}
-#notification-settings .ns-toggle{display:flex;justify-content:space-between;align-items:center;min-height:52px;border-bottom:1px solid #e1eae5;padding-bottom:14px}
-#notification-settings .ns-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}#notification-settings .ns-help{font-size:13px;margin-top:-4px}
-#notification-settings .ns-options>div{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}#notification-settings .ns-options label{display:flex;align-items:center;gap:8px;min-height:44px;border:1px solid #d7e3dc;padding:8px 10px;border-radius:8px;margin:0;font-size:14px;font-weight:400}
-#notification-settings .ns-options strong{font-weight:550}#notification-settings details{border-top:1px solid #e1eae5;padding:12px 0}#notification-settings summary{cursor:pointer;min-height:44px;padding:8px 0}#notification-settings pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;background:#f2f7f4;padding:12px;border-radius:8px}
-#notification-settings .ns-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:12px}#notification-settings .ns-primary{background:#087f68;border-color:#087f68;color:white}#notification-settings .ns-error{color:#b62222}#notification-settings .ns-inline{display:flex;gap:12px;align-items:center}
-@media(max-width:480px){#notification-settings{padding:18px}.feed-tools{flex-wrap:wrap}#notification-settings .ns-grid{gap:10px}#notification-settings .ns-head{gap:8px}#notification-settings .ns-actions{flex-wrap:wrap}}
+#notification-settings .ns-toggle{display:flex;justify-content:space-between;align-items:center;min-height:56px;border-bottom:1px solid #e1eae5;padding:0 0 14px;margin-bottom:20px}
+#notification-settings .ns-toggle input{appearance:none;width:46px;height:28px;border:1px solid #73877d;border-radius:20px;background:#e1e8e4;position:relative;cursor:pointer}
+#notification-settings .ns-toggle input::before{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #19392e33}
+#notification-settings .ns-toggle input:checked{background:#087f68;border-color:#087f68}#notification-settings .ns-toggle input:checked::before{transform:translateX(18px)}
+#notification-settings .ns-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}#notification-settings .ns-help{font-size:13px;margin-top:-6px;line-height:1.55}
+#notification-settings .ns-options>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 20px}
+#notification-settings #ns-exchanges{grid-template-columns:repeat(2,minmax(0,1fr))}
+#notification-settings .ns-options label{display:flex;align-items:center;gap:8px;min-height:46px;border:1px solid #d7e3dc;padding:10px;border-radius:10px;margin:0;font-size:14px;font-weight:400;cursor:pointer}
+#notification-settings .ns-options label:has(input:checked){background:#eaf6f0;border-color:#087f68;color:#075e4b}
+#notification-settings .ns-options strong{font-weight:550}
+#notification-settings .ns-actions{display:flex;justify-content:flex-end;gap:10px;padding:14px 24px;border-top:1px solid #e1eae5;flex:none;background:#fff}
+#notification-settings .ns-primary{background:#087f68;border-color:#087f68;color:#fff;font-weight:600;min-width:140px}
+#notification-settings .ns-error{color:#b62222}#notification-settings .ns-inline{display:flex;gap:10px;align-items:center}
+#notification-settings #ns-message{margin:16px 0;padding:10px 12px;background:#f1f7f4;border-radius:10px;font-size:13px}
+@media(max-width:640px){
+ #notification-settings{width:100%;max-width:none;max-height:94dvh;margin:auto 0 0;border-radius:22px 22px 0 0;border-bottom:0}
+ #notification-settings .ns-head{padding:18px 18px 14px;gap:10px}#notification-settings h2{font-size:20px}
+ #notification-settings .ns-body{padding:0 18px 4px}#notification-settings .ns-grid{gap:12px}
+ #notification-settings .ns-actions{padding:12px 18px max(12px,env(safe-area-inset-bottom));flex-wrap:wrap}
+ #notification-settings .ns-actions button{width:100%;min-height:48px}
+ #notification-settings label{font-size:15px}#notification-settings :is(input:not([type=checkbox]),select){font-size:16px}
+ #notification-settings .ns-options label{font-size:13px;gap:7px;padding:10px 8px}
+ .feed-tools{flex-wrap:wrap;gap:8px}#notification-settings-open{font-size:14px;padding:6px 12px}
+ .feed-tools #sound,.feed-tools #seconds{min-width:44px;min-height:44px}.feed-tools #new-messages{min-height:44px;display:inline-flex;align-items:center}
+}

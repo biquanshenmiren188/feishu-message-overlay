@@ -63,7 +63,7 @@ try:
   if 'notification-settings.js' not in html:
    html=html.replace('</body>','<script type="module" src="./notification-settings.js?v=20261017-live1"></script></body>')
   import re
-  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-delivery-v5',html)
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-mobile1',html)
   index.write_text(html)
   for name,dest in targets.items():shutil.copyfile(p/name,dest);dest.chmod(0o644)
   cmd(['systemd-analyze','verify',str(unit)])

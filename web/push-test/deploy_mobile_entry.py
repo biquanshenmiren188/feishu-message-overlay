@@ -50,7 +50,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   assert '<head>' in html and 'id="feed"' in html
   if '<base ' not in html:html=html.replace('<head>','<head><base href="/radar/robot-push/">',1)
   if 'manifest.webmanifest' not in html:html=html.replace('</head>','<link rel="manifest" href="/radar/push-test/manifest.webmanifest"></head>',1)
-  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-delivery-v5',html)
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-mobile1',html)
   index.write_text(html)
   shutil.copyfile(p/'notification-settings.js',bot/'notification-settings.js')
   (bot/'notification-settings.js').chmod(0o644)
@@ -60,7 +60,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   shutil.copyfile(p/'nginx.conf',nginx);nginx.chmod(0o644)
   cmd(['nginx','-t']);switch(new);cmd(['systemctl','reload','nginx'])
   assert '<base href="/radar/robot-push/">' in html
-  assert '20261017-delivery-v5' in html
+  assert '20261017-mobile1' in html
   assert 'button.click()' not in (bot/'notification-settings.js').read_text()
   assert 'radar-delivery-v5' in (public/'sw.js').read_text()
   # The origin denies non-CDN requests; verify public routes in the authenticated browser.
