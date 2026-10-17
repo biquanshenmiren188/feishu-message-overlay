@@ -36,7 +36,9 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
  const run=code=>vm.runInContext(code,context);
  return {elements,storage,requests,workerTokens,events,actions,run};
 }
-async function settle(f){for(let i=0;i<30;i++){await new Promise(resolve=>setImmediate(resolve));if(!f.run('busy'))return}throw Error('operation did not settle')}
+// WebCrypto completes on native workers; event-loop turns are not a time budget
+// and can all finish before a loaded CI runner delivers its digest result.
+async function settle(f){const deadline=Date.now()+3000;do{await new Promise(resolve=>setTimeout(resolve,5));if(!f.run('busy'))return}while(Date.now()<deadline);throw Error('operation did not settle within 3 seconds')}
 async function switchCode(f,code){f.elements.get('ns-switch').hidden=false;f.elements.get('ns-switch-code').value=code;f.elements.get('ns-switch').onsubmit({preventDefault(){}});await settle(f)}
 
 test('switch loads the target revision/settings and saves only to its token',async()=>{
