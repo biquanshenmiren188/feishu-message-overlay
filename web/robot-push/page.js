@@ -71,16 +71,17 @@ function card(message,pinned=false,detail=false){
  const header=document.createElement('div');header.className='message-head';header.dataset.tone=message.headerTone||'grey';const title=document.createElement('h2');title.className='message-title';title.textContent=message.title||(pinned?'置顶群最新一条':'机器人消息');
  const time=document.createElement('time');time.dateTime=message.sentAt;time.textContent=timeUTC8(message.sentAt);time.title=new Date(Date.parse(message.sentAt)+8*3600000).toISOString().slice(0,19).replace('T',' ')+' UTC+8';header.append(title,time);article.append(header);
  const body=document.createElement('div');body.className='body';for(const line of message.body.split(/\r\n|\r|\n/)){const p=document.createElement('p');bodyText(p,line);if(!line)p.append(document.createElement('br'));body.append(p);}article.append(body);
- if(!detail&&mobile.matches){
+ if(!detail){
   const summary=mobileSummary(message),compact=document.createElement('div');compact.className='mobile-summary';
-  for(const [name,text] of Object.entries({direction:summary.direction,metrics:summary.metrics,fees:summary.fees,preview:summary.preview,risk:summary.risk})){if(!text)continue;const row=document.createElement('p');row.className='summary-'+name;row.textContent=text;row.title=text;if(name==='risk')row.dataset.warning=String(summary.warning);compact.append(row);}
+  title.textContent=summary.title||title.textContent;
+  for(const [name,text] of Object.entries({signals:summary.signals,spread:summary.spread,risk:summary.warning?summary.risk:''})){if(!text)continue;const row=document.createElement('p');row.className='summary-'+name;row.textContent=text;row.title=text;if(name==='risk')row.dataset.warning=String(summary.warning);compact.append(row);}
   const hint=document.createElement('span');hint.className='detail-hint';hint.textContent='全文 ›';header.append(hint);article.append(compact);article.classList.add('compact-card');article.tabIndex=0;article.setAttribute('role','button');article.setAttribute('aria-label',(message.title||'消息')+'，查看完整原文');
   article.addEventListener('click',()=>openDetail(message,pinned));article.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();openDetail(message,pinned);}});
  }
  if(message.actions.length){const actions=document.createElement('div');actions.className='actions';for(const action of message.actions)actions.append(link(action.label,action.url));article.append(actions);}return article;
 }
 function openDetail(message,pinned){
- if(!mobile.matches||detailOpen)return;
+ if(detailOpen)return;
  const now=Date.now();detailOpen={scroll:board.scrollTop,focus:message.id,remaining:Math.max(1,reader.deadline-now),idle:reader.paused?Math.max(1,reader.idleUntil-now):null};
  clearTimeout(timer);timer=null;
  // Build a snapshot. Live receipt continues, but never replaces the open original text.

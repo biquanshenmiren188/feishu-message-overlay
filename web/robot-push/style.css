@@ -90,7 +90,7 @@ html,body{height:100%;overflow:hidden;}
  .mobile-summary{font-size:13px;line-height:1.3;}.mobile-summary p{margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
  .mobile-summary .summary-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;}
  .summary-metrics{font-weight:600;}.summary-fees{color:#475569;}.summary-risk{color:#596676;font-size:12px;}
- .summary-risk[data-warning=true]{color:#a33e25;font-weight:600;}.compact-card:focus-visible{outline:2px solid #007552;outline-offset:-2px;}
+ .summary-risk[data-warning=true]{color:#a33e25;font-weight:600;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.3;}.compact-card:focus-visible{outline:2px solid #007552;outline-offset:-2px;}
 }
 
 /* A single global history rail combines real range position with scroll within that range. */
