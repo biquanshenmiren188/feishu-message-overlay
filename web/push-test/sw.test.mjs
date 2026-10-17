@@ -8,15 +8,39 @@ function setup({fail=false,latest=null}={}){
  const old={data:{kind:'radar-six-test',seq:1},close(){events.push('close-old')}};
  const unrelated={data:{kind:'unrelated'},close(){throw Error('must not close unrelated')}};
  let shown=false;
- const context=vm.createContext({console,URL,Response,setTimeout,self:{location:{origin:'https://leida.shenmiren.work'},addEventListener(){},registration:{async getNotifications(){return shown?[{data:{kind:'radar-six-test'}}]:[old,unrelated]},async showNotification(title,opts){events.push({title,opts});if(fail)throw Error('display failed');shown=true}}}});
+ const context=vm.createContext({console,URL,Response,setTimeout,clearTimeout,self:{location:{origin:'https://leida.shenmiren.work'},addEventListener(){},registration:{async getNotifications(){return shown?[{data:{kind:'radar-six-test'}}]:[old,unrelated]},async showNotification(title,opts){events.push({title,opts});if(fail)throw Error('display failed');shown=true}}}});
  vm.runInContext(source,context);
  context.state=state;context.reports=reports;
  vm.runInContext('get=async key=>state.get(key);put=async(key,value)=>{state.set(key,value)};report=async record=>{reports.push(record)};',context);
  return {context,events,reports};
 }
 const payload={kind:'radar-six-test',seq:2,run:'abc',rows:['A 10:00','B 10:01']};
-test('show succeeds before closing only captured test notifications',async()=>{const s=setup();s.context.p=payload;await vm.runInContext('display(p)',s.context);assert.equal(s.events[0].title,'雷达 · 测试');assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01');assert.equal(s.events[1],'close-old');assert.equal(s.reports[0].closeCalls,1);assert.equal(s.reports[0].after,1)});
+test('show succeeds before closing only captured test notifications',async()=>{const s=setup();s.context.p=payload;await vm.runInContext('display(p)',s.context);assert.equal(s.events[0].title,'雷达 · 测试');assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01');assert.equal(s.events[1],'close-old');assert.equal(s.reports.at(-1).closeCalls,1);assert.equal(s.reports.at(-1).after,1)});
 test('failed new notification preserves old notification',async()=>{const s=setup({fail:true});s.context.p=payload;await assert.rejects(vm.runInContext('display(p)',s.context));assert.equal(s.events.length,1)});
-test('late push cannot roll content backward',async()=>{const latest={...payload,seq:9,rows:['Newest']};const s=setup({latest});s.context.p=payload;await vm.runInContext('display(p)',s.context);assert.equal(s.events[0].opts.body,'Newest');assert.equal(s.reports[0].seq,9)});
+test('late push cannot roll content backward',async()=>{const latest={...payload,seq:9,rows:['Newest']};const s=setup({latest});s.context.p=payload;await vm.runInContext('display(p)',s.context);assert.equal(s.events[0].opts.body,'Newest');assert.equal(s.reports.at(-1).seq,9)});
 test('rejects more than six rows',async()=>{const s=setup();s.context.p={...payload,rows:Array(7).fill('test')};await assert.rejects(vm.runInContext('display(p)',s.context));assert.equal(s.events.length,0)});
 test('explicit empty title stays empty',async()=>{const s=setup();s.context.p={...payload,title:''};await vm.runInContext('display(p)',s.context);assert.equal(s.events[0].title,'');assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01')});
+
+test('storage failure cannot prevent the user-visible notification',async()=>{
+ const s=setup();s.context.p=payload;
+ vm.runInContext("get=async()=>{throw Error('storage unavailable')};put=async()=>{throw Error('storage unavailable')}",s.context);
+ await vm.runInContext('display(p)',s.context);
+ assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01');
+});
+test('hung database and enumeration are bounded before display',async()=>{
+ const s=setup();s.context.p=payload;
+ vm.runInContext('get=()=>new Promise(()=>{});put=()=>new Promise(()=>{});self.registration.getNotifications=()=>new Promise(()=>{})',s.context);
+ const started=Date.now();await vm.runInContext('display(p)',s.context);
+ assert.ok(Date.now()-started<1200);assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01');
+});
+test('failed display does not advance persisted latest sequence',async()=>{
+ const s=setup({fail:true});s.context.p=payload;
+ await assert.rejects(vm.runInContext('display(p)',s.context));
+ assert.equal(s.context.state.get('latest'),undefined);
+});
+test('declarative wrapper remains compatible with old data fields and empty normal title',async()=>{
+ const s=setup();s.context.p={...payload,title:'',web_push:8030,mutable:true,notification:{title:'雷达',body:payload.rows.join('\n'),navigate:'https://leida.shenmiren.work/radar/push-test/'}};
+ await vm.runInContext('display(p)',s.context);
+ assert.equal(s.events[0].title,'');assert.equal(s.events[0].opts.body,'A 10:00\nB 10:01');
+ assert.equal(s.events.filter(x=>typeof x==='object').length,1);
+});

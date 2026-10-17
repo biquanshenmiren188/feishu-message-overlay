@@ -17,7 +17,7 @@ def run(client,script,timeout):
  output,error=stdout.read().decode('utf-8'),stderr.read().decode('utf-8')
  if stdout.channel.recv_exit_status():raise RuntimeError(error[:3000])
  return output
-files={name:source/'push-test'/name for name in ['server.py','server_test.py','live.py','live_test.py','signals.py','preferences.py','radar-webpush-test.service','index.html','app.js']}
+files={name:source/'push-test'/name for name in ['server.py','server_test.py','live.py','live_test.py','delivery.py','delivery_test.py','signals.py','preferences.py','radar-webpush-test.service','index.html','app.js','sw.js']}
 files.update({name:source/'robot-push'/name for name in ['notification-settings.js','notification-settings.css']})
 s=connect()
 try:
@@ -45,7 +45,7 @@ backup=root/('backup-live-'+str(int(time.time())));backup.mkdir(mode=0o700)
 targets={}
 for name in expected:
  if name.startswith('notification-settings'):continue
- targets[name]=unit if name.endswith('.service') else (public if name in ['index.html','app.js'] else root)/name
+ targets[name]=unit if name.endswith('.service') else (public if name in ['index.html','app.js','sw.js'] else root)/name
 for name,dest in targets.items():
  if dest.exists():shutil.copyfile(dest,backup/name)
 current=pathlib.Path('/opt/funding-radar-web/current');old=current.resolve()
@@ -62,6 +62,8 @@ try:
   assert '</body>' in html
   if 'notification-settings.js' not in html:
    html=html.replace('</body>','<script type="module" src="./notification-settings.js?v=20261017-live1"></script></body>')
+  import re
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-delivery-v5',html)
   index.write_text(html)
   for name,dest in targets.items():shutil.copyfile(p/name,dest);dest.chmod(0o644)
   cmd(['systemd-analyze','verify',str(unit)])

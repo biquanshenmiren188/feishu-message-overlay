@@ -182,14 +182,16 @@ class Trial:
     def send_webpush(self, subscription, payload):
         import requests
         from pywebpush import webpush
+        from delivery import TTL, TOPIC, vapid_headers
         class NoRedirect(requests.Session):
             def request(self, *args, **kwargs):
                 kwargs['allow_redirects'] = False
                 return super().request(*args, **kwargs)
         with NoRedirect() as session:
+            headers = vapid_headers(self.directory, self.config['privateKeyPath'], subscription['endpoint'], ORIGIN)
+            headers.update(Urgency='high', Topic=TOPIC)
             response = webpush(subscription_info=subscription, data=json.dumps(payload, ensure_ascii=False),
-                               vapid_private_key=self.config['privateKeyPath'], vapid_claims={'sub': ORIGIN},
-                               ttl=90, headers={'Urgency': 'high'}, timeout=12, requests_session=session)
+                               ttl=TTL, headers=headers, timeout=12, requests_session=session)
             if response.status_code != 201:
                 raise RuntimeError('push_not_accepted')
             return response.status_code
@@ -234,18 +236,18 @@ class Trial:
 
     def receipt(self, value):
         safe = {'at': time.time()}
-        for key in ('seq', 'rows', 'before', 'closeCalls', 'after'):
+        for key in ('seq', 'rows', 'before', 'closeCalls', 'after', 'eventAt'):
             x = value.get(key)
-            if isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 100000:
+            if isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 10000000000:
                 safe[key] = x
-        for key in ('run', 'stage', 'version'):
+        for key in ('run', 'stage', 'version', 'error', 'operation'):
             x = value.get(key)
             if isinstance(x, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', x):
                 safe[key] = x
         safe['enumerationError'] = value.get('enumerationError') is True
         with self.lock:
             self.state['receipts'].append(safe)
-            self.state['receipts'] = self.state['receipts'][-30:]
+            self.state['receipts'] = self.state['receipts'][-2000:]
             self.save()
 
 
@@ -289,14 +291,27 @@ def handler(trial):
                     return self.reply(401, {'error': '请先用测试码连接'})
                 if route == 'settings' and hasattr(trial, 'configure'):
                     return self.reply(200, trial.configure(data))
+                if route == 'device' and hasattr(trial, 'device_status'):
+                    return self.reply(200, trial.device_status(data))
+                if route == 'verify' and hasattr(trial, 'verify_delivery'):
+                    return self.reply(200, trial.verify_delivery())
                 if route == 'subscribe':
-                    trial.subscribe(data.get('subscription'))
+                    if 'replaceFingerprint' in data and hasattr(trial, 'repair_subscription'):
+                        trial.repair_subscription(data.get('subscription'), data['replaceFingerprint'])
+                    else:
+                        trial.subscribe(data.get('subscription'))
                 elif route == 'start':
                     trial.start()
                 elif route == 'resend':
                     return self.reply(200, trial.resend(compact=data.get('compact', True) is True, rows=data.get('rows', 4)))
                 elif route == 'stop':
                     trial.stop()
+                elif route == 'receipt-batch':
+                    records = data.get('records')
+                    if not isinstance(records, list) or not 1 <= len(records) <= 20 or any(not isinstance(r, dict) for r in records):
+                        raise ValueError('Invalid receipt batch')
+                    for record in records:
+                        trial.receipt(record)
                 elif route == 'receipt':
                     trial.receipt(data)
                 elif route == 'observation' and data.get('result') in ('one-four', 'one-six', 'duplicates', 'missing-or-truncated'):

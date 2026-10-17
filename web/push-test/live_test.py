@@ -25,7 +25,7 @@ class LiveTests(unittest.TestCase):
         self.config.write_text(json.dumps(dict(pairCode='12345678',expiresAt=0,publicKey='public')))
         self.sent=[]
         self.app=Live(self.root/'state',self.config,lambda sub,p:self.sent.append(p) or 201)
-        self.app.state['subscription']={'test':True}
+        self.app.state['subscription']={'endpoint':'https://test.push.apple.com/test','keys':{'auth':'test','p256dh':'test'}}
         self.app.state['seq']=14
 
     def tick(self, rows, now=None, connected=True):

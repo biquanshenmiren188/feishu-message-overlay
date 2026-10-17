@@ -1,7 +1,7 @@
 # Radar phone notifications
 
 Production ordinary Web Push, configured from **BOT → 推送设置**. The existing
-`/radar/push-test/` PWA URL, manifest identity, worker v2, subscription, VAPID key,
+`/radar/push-test/` PWA URL, manifest identity, worker storage, subscription, VAPID key,
 pair token and increasing sequence are intentionally retained so the accepted
 iPhone installation continues working without reinstalling.
 
@@ -30,12 +30,16 @@ Only unseen messages no more than 120 seconds old initiate an alert. Up to
 30 minutes of eligible context may appear in the four-row window. A newly
 enabled relay can include messages from the preceding 120 seconds. IDs survive
 restarts; identical content from different groups within 120 seconds is deduped.
-Settings changes clear pending alerts; muted/filtered messages are not replayed.
+Saving settings preserves eligible pending alerts. Disabling or filtering them
+removes those alerts; muted/filtered messages are not replayed.
 
 Send intent is persisted before the network request. Unknown outcomes are not
 blindly retried. Explicit 429/5xx responses use bounded backoff and stale pending
 signals expire. HTTP 404/410 invalidates the subscription and settings prompts
-for reconnection. The production API rejects synthetic start/resend endpoints.
+for reconnection. The production API rejects the old synthetic start/resend
+campaign endpoints. Its authenticated `verify` route sends one explicitly marked
+four-row diagnostic, at most once per five minutes, after phone subscription
+identity has been checked.
 
 ## Settings and ownership
 
@@ -47,7 +51,7 @@ private keys, bearer tokens or the pairing code. The installed phone's local
 storage and worker IDB remain compatible. Do not commit runtime credentials.
 
 API is under `/radar/push-test/api/`: `pair`, `subscribe`, `status`, `settings`,
-`receipt`, `health`. Only health/pair are public to the site login; remaining
+`receipt`, `receipt-batch`, `device`, `verify`, `health`. Only health/pair are public to the site login; remaining
 routes require the paired bearer token. Cross-origin POSTs are rejected.
 
 ## Deployment
@@ -88,14 +92,14 @@ Never run an old synthetic-only deployment helper against the production relay.
 
 ```
 python -m unittest discover -s web/push-test -p '*_test.py'
-node --test web/push-test/sw.test.mjs
+node --test web/push-test/sw.test.mjs web/push-test/protocol.test.mjs
 node --check web/robot-push/notification-settings.js
 ```
 
-21 Python tests cover parsing, bounds/order, blocking arbitrary ranks, batching,
-disable/re-enable, persisted dedup/settings, stale sources, invalid subscriptions,
-bounded retries, auth and secret redaction. Five worker tests cover replacement,
-show-failure preservation, late delivery and payload validation.
+31 Python tests cover parsing, filtering, batching, persistence, subscription
+recovery, bounded verification, Apple credential reuse and secret redaction.
+12 worker tests cover replacement, failure preservation, bounded storage access,
+offline receipt replay, activation failure and Apple's declarative event shape.
 
 Production acceptance on 2026-10-17: settings opened/saved/reopened in BOT; source
 online and the existing phone subscription preserved. The first real APR SF
@@ -110,6 +114,43 @@ The installed PWA keeps its existing id, start URL and worker scope at
 `/radar/push-test/`. nginx internally serves the current BOT page at that URL
 (no external redirect or reinstall). The shared HTML base points to
 `/radar/robot-push/`, so assets and feed requests remain canonical. Settings
-open only from the BOT toolbar button. Worker v3 changes only the page cache
-version; the subscription, IndexedDB, notification kind and sequence survive.
+open only from the BOT toolbar button. Worker updates preserve the subscription,
+IndexedDB, notification kind and sequence.
 Use `deploy_mobile_entry.py` after the live relay is installed.
+
+## Delivery recovery (2026-10-17)
+
+The phone reported permission `default` and no local subscription while the
+server still held a subscription and Apple returned HTTP 201. The settings UI
+now compares a SHA-256 fingerprint of the phone's endpoint/key tuple to the
+server's fingerprint. It offers a user-initiated repair when absent or mismatched;
+it never requests permission automatically. A known mismatch pauses sends to
+the stale endpoint. The original reason iOS removed the subscription is not
+proven by retained logs.
+
+The worker requests display before persisting the latest sequence. IndexedDB,
+notification enumeration and telemetry are bounded so they cannot indefinitely
+block display. Receipts are queued locally for later foreground upload. A
+`display-requested` receipt proves successful browser API processing and records
+remaining notification count; it does not prove that a human saw the lock screen.
+
+Apple VAPID authorization is reused for at least one hour, including across
+service restarts, in a mode-0600 state file. Push TTL is five minutes and a stable
+Topic coalesces messages queued while offline. Worker v5 supports mutable
+Declarative Web Push: WebKit supplies `event.notification` and null `event.data`.
+Only a phone reporting v5 receives that envelope; older workers receive ordinary
+payloads. The fallback requires the title “雷达”; the normal worker keeps the
+previous empty-title layout. System fallback rendering and grouping remain under
+iOS control.
+
+Recovery acceptance: after the owner granted permission, the phone reported
+`granted`, a present subscription and a matching server fingerprint. Diagnostic
+sequence 82 returned both `push-received` and `display-requested` from phone
+worker v4, with four entries and `after=1`. This verifies the ordinary payload
+path on the phone. The v5 declarative path has protocol tests but has not yet
+been confirmed by a phone receipt. Production remains enabled with the existing
+four-entry, 60-second settings; no source filters were changed.
+
+References: [Apple Web Push transport](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers),
+[WebKit Declarative Web Push](https://webkit.org/blog/16535/meet-declarative-web-push/),
+[WebKit PushEvent implementation](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/push-api/PushEvent.cpp).
