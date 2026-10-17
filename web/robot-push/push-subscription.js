@@ -7,7 +7,7 @@ function receive(message){
   // Diagnostic counters contain no message bodies or credentials.
   document.documentElement.dataset.pushTransport=local?'local':'shared';
   document.documentElement.dataset.pushMetrics=JSON.stringify(message.metrics||pushMetrics());
-  for(const h of handlers.get(message.name)||[])if(message.type==='data')h.data(message.data);else if(message.type==='error')h.error?.();
+  for(const h of handlers.get(message.name)||[])if(message.type==='data')h.data(message.data);else if(message.type==='unchanged')h.unchanged?.();else if(message.type==='error')h.error?.();
 }
 function sync(){
   const channels=hidden||document.hidden?[]:[...handlers.keys()];

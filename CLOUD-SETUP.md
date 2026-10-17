@@ -1,3 +1,11 @@
+## 2026-10-11 桌面流量与刷新优化（v2026.10.11.6）
+
+云端 `state` 保留完整响应兼容旧客户端，并附带协议版本及 groups/messages/pin/opportunities 四部分的内容摘要。新客户端仅在成功校验后回传摘要，云端省略未变化部分；首次连接、丢失缓存或协议错误后重新获取完整内容。空消息列表、取消置顶、离线及卡片不可用均显式传递，采样时间不会因轮询被改成当前时间。数据仍每 3 秒检查一次，失败时退避；只读签名、时间戳、重放保护和每个密钥的限速保留。
+
+客户端支持 gzip，解压后的响应仍受 8 MiB 上限限制。卡片内容不变时不会固定重建控件，显示时长单独更新；状态、移除和充提过期及时刷新。退出会取消正在等待响应头或读取响应体的请求。原有布局、滚轮阅读和手动更新保持不变。
+
+本机与腾讯云已验收：一次真实请求完整 JSON 为 24,188 字节，紧接着无变化响应为 378 字节（不含 HTTP/TLS 头，不能据此推算全天总流量）。卡片测试覆盖同 ID 内容变更、60 秒无变化不重建、断线与移除；云端测试覆盖条件响应、兼容、权限和 gzip。服务端部署须同时带上新增的 `state_delta.py`。
+
 # 最新版安装与云端配置（2026-10-11）
 
 当前使用 **main**。它包含原 `codex/push-page-low-traffic` 的桌面、网页和雷达卡片代码，以及多电脑只读接入支持。旧日期文档是历史记录，当前安装方式以本文为准。
@@ -80,16 +88,17 @@
 
 以下操作适用于现有云端接收服务，不是从空白服务器安装整套雷达网站的脚本。
 
-1. 部署本仓库的 `web/robot-push/publisher/server.py` 和 `desktop_cards.py`。2026-10-10 已上线通用多电脑只读授权及卡片缓存读取。没有公钥文件的电脑仍不能接入。
-2. 在已有服务器暂存新 `server.py` 和 `desktop_cards.py`，语法检查、备份后更新：
+1. 部署本仓库的 `web/robot-push/publisher/server.py`、`desktop_cards.py` 和 `state_delta.py`。2026-10-10 已上线通用多电脑只读授权及卡片缓存读取。没有公钥文件的电脑仍不能接入。
+2. 在已有服务器暂存新 `server.py`、`desktop_cards.py` 和 `state_delta.py`，语法检查、备份后更新：
 
    ```bash
-   # 在包含已审查 server.py 和 desktop_cards.py 的暂存目录执行
+   # 在包含已审查 server.py、desktop_cards.py 和 state_delta.py 的暂存目录执行
    python3 -c "import ast,pathlib; ast.parse(pathlib.Path('server.py').read_text())"
    backup="/opt/robot-push/backups/reader-$(date +%Y%m%d-%H%M%S)"
    sudo install -d -m 0700 "$backup"
    sudo cp -a /opt/robot-push/server.py "$backup/server.py"
    sudo install -o root -g robot-push -m 0644 desktop_cards.py /opt/robot-push/desktop_cards.py
+   sudo install -o root -g robot-push -m 0644 state_delta.py /opt/robot-push/state_delta.py
    sudo install -o root -g robot-push -m 0644 server.py /opt/robot-push/server.py.new
    sudo mv /opt/robot-push/server.py.new /opt/robot-push/server.py
    sudo systemctl restart robot-push

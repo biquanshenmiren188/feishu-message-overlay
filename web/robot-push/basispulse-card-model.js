@@ -19,24 +19,28 @@ export function strategyCopy(data) {
   if(Boolean(buy.spot)!==(data.strategy==='SF') || Boolean(sell.spot)!==(data.strategy==='FS'))return null;
   const symbol=leg=>{
     const raw=String(leg.symbol || '').toUpperCase();
-    const pair=leg.exchange==='okx' && leg.spot===false && /^[A-Z0-9]+-USDT-SWAP$/.test(raw)?raw.slice(0,-5):raw;
+    const pair=leg.exchange==='okx' && leg.spot===false && /^[\p{L}\p{Nd}]+-USDT-SWAP$/u.test(raw)?raw.slice(0,-5):raw;
     const normalized=pair.replace(/[_/\-]/g,'');
-    return leg.exchange==='hyperliquid' && leg.spot===false && /^[A-Z0-9]+$/.test(normalized) && !normalized.endsWith('USDT')?normalized+'USDT':normalized;
+    return leg.exchange==='hyperliquid' && leg.spot===false && /^[\p{L}\p{Nd}]+$/u.test(normalized) && !normalized.endsWith('USDT')?normalized+'USDT':normalized;
   };
   const a=symbol(buy), b=symbol(sell);
-  if(a!==b || !/^[A-Z0-9]+USDT$/.test(a))return null;
+  if(a!==b || !/^[\p{L}\p{Nd}]+USDT$/u.test(a))return null;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify({type:data.strategy,name:a.slice(0,-4),buyEx:buy.exchange==='hyperliquid'?'hl':buy.exchange,sellEx:sell.exchange==='hyperliquid'?'hl':sell.exchange,...(data.strategy==='FS'?{spotMarginType:'cross'}:{})},null,2);
 }
 
 // Confirmed against the source trader GC button and its actual clipboard sample.
-// Unverified exchanges and spot modes deliberately have no GC action.
+// Mixed pairs convert only supported legs; unsupported ordinary venues stay ordinary.
 export function gcStrategyCopy(data) {
   const legs=data.details?.legs;
-  const supported=new Set(['binance','bybit','gate','hyperliquid']);
-  if(data.strategy!=='FF' || legs?.length!==2 || legs.some(l=>l.spot!==false || !supported.has(l.exchange)))return null;
+  const supported=new Set(['binance','bybit','gate','okx','hyperliquid']);
+  if(!['SF','FS','FF'].includes(data.strategy) || legs?.length!==2 || legs.some(l=>typeof l.spot!=='boolean') || data.strategy==='SF'&&legs[0].exchange==='hyperliquid')return null;
+  // FS keeps its borrowing spot leg ordinary; only the futures buy leg can use GC.
+  const buyGc=supported.has(legs[0].exchange),sellGc=data.strategy!=='FS'&&supported.has(legs[1].exchange);
+  if(!buyGc&&!sellGc)return null;
   const normal=strategyCopy(data);if(!normal)return null;
   const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));
-  payload.buyEx='gc-'+payload.buyEx;payload.sellEx='gc-'+payload.sellEx;
+  if(buyGc)payload.buyEx='gc-'+payload.buyEx;
+  if(sellGc)payload.sellEx='gc-'+payload.sellEx;
   return 'ASTRO-QUICK-COPY:\n'+JSON.stringify(payload,null,2);
 }
 
@@ -61,3 +65,5 @@ export function residualTone(level) {
  if(level<10)return 'orange';
  return 'red';
 }
+
+export function gcBothLegs(data){const text=gcStrategyCopy(data);if(!text)return false;const p=JSON.parse(text.slice(text.indexOf('\n')+1));return p.buyEx.startsWith('gc-')&&p.sellEx.startsWith('gc-');}

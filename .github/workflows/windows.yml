@@ -39,6 +39,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic fixture syntax failed' }
           npm test --prefix bridge
           if ($LASTEXITCODE -ne 0) { throw 'Bridge checks failed' }
+      - name: Web push regression checks
+        shell: pwsh
+        run: |
+          $webTests = @(Get-ChildItem web/robot-push/*.test.mjs | ForEach-Object FullName)
+          node --test @webTests
+          if ($LASTEXITCODE -ne 0) { throw 'Web push checks failed' }
       - name: Core checks and portable publish
         shell: pwsh
         run: ./scripts/build.ps1 -SelfContained

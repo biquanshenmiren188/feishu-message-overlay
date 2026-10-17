@@ -53,3 +53,16 @@ test('push-only wallet evidence stays time bounded and never claims an automatic
   const fresh=radarMatrix(legs,()=>null,now,[wallet]);assert.deepEqual(fresh.rows[0].cells,[['open','closed']]);assert.doesNotMatch(fresh.text,/正在查询|自动重试/);
   const expired=radarMatrix(legs,()=>null,now+120001,[wallet]);assert.deepEqual(expired.rows[0].cells,[['unknown','unknown']]);
 });
+
+test('unchanged snapshots send only a heartbeat; a new tab receives the full cached snapshot',async()=>{
+ const data={messages:[{id:'a',body:'synthetic'}]},events=[],joined=[];const f=fixture(async()=>data);
+ f.broker.update('a',['feed'],m=>events.push(m));await f.flush();await f.advance(5000);
+ assert.deepEqual(events.map(m=>m.type),['data','unchanged']);assert.equal('data' in events[1],false);
+ f.broker.update('b',['feed'],m=>joined.push(m));assert.equal(joined[0].data,data);
+ f.broker.close();
+});
+test('304 reuses the parsed snapshot without altering original freshness',async()=>{
+ const {createPushReader}=await import('./push-reader.js');let calls=0;
+ const read=createPushReader(async()=>++calls===1?new Response('{"messages":[],"updatedAt":"original"}',{headers:{'Content-Type':'application/json'}}):{ok:true,headers:new Headers({'X-Radar-Unchanged':'1'}),json(){throw Error('304 should not parse again')}});
+ const a=await read('feed',new AbortController().signal),b=await read('feed',new AbortController().signal);assert.equal(a,b);assert.equal(b.updatedAt,'original');
+});

@@ -1,6 +1,6 @@
 import {copyText} from './clipboard.js?v=20261017-copy2';
 import {percent, money, assetName, safeRadar, number} from './basispulse-model.js?v=20261005fill1';
-import {strategyCopy,gcStrategyCopy,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261010gc1';
+import {strategyCopy,gcStrategyCopy,gcBothLegs,fundingWarnings,residualTone} from './basispulse-card-model.js?v=20261010gc1';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const clock=value=>{const d=new Date(value);return Number.isFinite(+d)?d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';};
 const numeric=v=>money(v).toLowerCase();
@@ -14,7 +14,7 @@ function showDetails(title,text,opener) {
   dialog.addEventListener('close',()=>{dialog.remove();opener?.focus({preventScroll:true});});dialog.showModal();
 }
 export function cardNode(c, matrix) {
-  const d=c.data, detail=d.details || {}, legs=detail.legs || [], card=el('article','bp-card');card.dataset.id=d.id;
+  const d=c.data, detail=d.details || {}, legs=detail.legs || [], card=el('article','bp-card');card.dataset.id=d.id;card.classList.toggle('bp-gc-both',gcBothLegs(d));
   const rank=d.v2Residual?.level;card.dataset.rank=number(rank)?String(rank):'unknown';card.dataset.tone=residualTone(rank);
   const title=el('header','bp-card-head'), name=el('div','bp-name');name.append(el('h2','',assetName(d)),el('span','bp-strategy',d.strategy || '—'));
   const status=el('div','bp-live'),age=el('span','bp-age'), window=el('button','bp-window',`· ${d.trigger==='v2_price_window'?'V2收敛':d.trigger || '窗口'} ⓘ`);

@@ -4,6 +4,7 @@ stage=${1:?staging directory required}
 test "$(id -u)" = 0
 test -f "$stage/server.py"
 test -f "$stage/desktop_cards.py"
+test -f "$stage/state_delta.py"
 test -f "$stage/publisher-public.pem"
 test ! -e /etc/systemd/system/robot-push.service
 test ! -e /etc/nginx/snippets/robot-push.conf
@@ -18,6 +19,7 @@ install -d -o root -g robot-push -m 0750 /opt/robot-push /etc/robot-push
 install -d -o robot-push -g www-data -m 2750 /var/lib/robot-push
 install -o root -g robot-push -m 0640 "$stage/server.py" /opt/robot-push/server.py
 install -o root -g robot-push -m 0640 "$stage/desktop_cards.py" /opt/robot-push/desktop_cards.py
+install -o root -g robot-push -m 0640 "$stage/state_delta.py" /opt/robot-push/state_delta.py
 install -o root -g robot-push -m 0640 "$stage/publisher-public.pem" /etc/robot-push/publisher-public.pem
 install -o root -g root -m 0644 "$stage/robot-push.service" /etc/systemd/system/robot-push.service
 systemctl daemon-reload

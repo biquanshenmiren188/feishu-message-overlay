@@ -8,7 +8,9 @@ internal sealed class CloudMessageSource : IMessageSource
     private readonly Dictionary<string,DateTimeOffset> seen=new(StringComparer.Ordinal);
     private readonly Queue<IncomingMessage> pending=new();
     private readonly Task worker;
-    private readonly Func<object,Task<JsonDocument>> request;
+    private readonly Func<object,CancellationToken,Task<JsonDocument>> request;
+    private Dictionary<string,string>? known;
+    private readonly Dictionary<string,JsonElement> cached=new(StringComparer.Ordinal);
     private readonly TimeSpan pollInterval;
     internal event Action? Activity;
     internal LinkState State{get;private set;}=LinkState.Connecting;
@@ -22,8 +24,8 @@ internal sealed class CloudMessageSource : IMessageSource
     internal DateTimeOffset StartedAt{get;}=DateTimeOffset.UtcNow;
     public bool IsRealConnection=>State==LinkState.Connected;
     public string Mode=>State==LinkState.Connected?"已连接 · 云端唯一接收源":State==LinkState.Connecting?"连接云端中":"云端暂不可用 · 不会启动本地飞书连接";
-    internal CloudMessageSource(Func<object,Task<JsonDocument>>? transport=null,TimeSpan? interval=null)
-    {request=transport??(payload=>PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",payload));pollInterval=interval??TimeSpan.FromSeconds(3);worker=Task.Run(PollAsync);}
+    internal CloudMessageSource(Func<object,Task<JsonDocument>>? transport=null,TimeSpan? interval=null,Func<object,CancellationToken,Task<JsonDocument>>? cancellableTransport=null)
+    {request=cancellableTransport??(transport is null?(payload,token)=>PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",payload,token):(payload,_)=>transport(payload));pollInterval=interval??TimeSpan.FromSeconds(3);worker=Task.Run(PollAsync);}
     internal static string GroupHash(string id)=>id.Length==64 && id.All(Uri.IsHexDigit)?id.ToLowerInvariant():PublicWebPublisher.Digest(id);
     internal static IncomingMessage ParseMessage(JsonElement raw,IReadOnlyDictionary<string,string> mapping)
     {
@@ -44,26 +46,42 @@ internal sealed class CloudMessageSource : IMessageSource
         {
             try
             {
-                using var result=await request(new{action="state"});
+                object payload=known is null?new{action="state"}:(object)new{action="state",known};
+                using var result=await request(payload,stop.Token);
                 var root=result.RootElement;if(!root.GetProperty("cloudMode").GetBoolean())throw new JsonException();
+                var conditional=root.TryGetProperty("protocol",out var protocol)&&protocol.ValueKind==JsonValueKind.Number&&protocol.GetInt32()==1;
+                Dictionary<string,string>? nextKnown=null;
+                if(conditional)
+                {
+                    nextKnown=new(StringComparer.Ordinal);
+                    foreach(var part in new[]{"groups","messages","pin","opportunities"})
+                    {
+                        var revision=root.GetProperty("revisions").GetProperty(part).GetString()??"";
+                        if(revision.Length!=64||!revision.All(Uri.IsHexDigit))throw new JsonException();
+                        nextKnown[part]=revision;
+                        foreach(var field in part=="pin"?new[]{"pinned","pinnedGroupId"}:new[]{part})
+                            if(!root.TryGetProperty(field,out _) && (known?.GetValueOrDefault(part)!=revision||!cached.ContainsKey(field)))throw new JsonException();
+                    }
+                }
+                JsonElement Field(string name)=>root.TryGetProperty(name,out var value)?value:conditional&&cached.TryGetValue(name,out value)?value:throw new JsonException();
                 var groups=new Dictionary<string,string>(StringComparer.Ordinal);var mapping=new Dictionary<string,string>(StringComparer.Ordinal);
-                foreach(var item in root.GetProperty("groups").EnumerateArray().Take(2001))
+                foreach(var item in Field("groups").EnumerateArray().Take(2001))
                 {
                     var id=item.GetProperty("id").GetString()??"";var hash=item.GetProperty("groupId").GetString()??"";var name=item.GetProperty("name").GetString()??"";
                     if(!id.StartsWith("oc_",StringComparison.Ordinal)||id.Length>256||name.Length>256||hash!=GroupHash(id))throw new JsonException();
                     groups[id]=name;mapping[hash]=id;
                 }
                 if(groups.Count>2000)throw new JsonException();
-                var normal=root.GetProperty("messages").EnumerateArray().Take(101).Select(m=>ParseMessage(m,mapping)).ToArray();
+                var normal=Field("messages").EnumerateArray().Take(101).Select(m=>ParseMessage(m,mapping)).ToArray();
                 if(normal.Length>100)throw new JsonException();
-                var pinHash=root.GetProperty("pinnedGroupId").GetString()??"";
-                var pin=root.GetProperty("pinned");var selected=mapping.GetValueOrDefault(pinHash)??"";
+                var pinHash=Field("pinnedGroupId").GetString()??"";
+                var pin=Field("pinned");var selected=mapping.GetValueOrDefault(pinHash)??"";
                 var pinned=pin.ValueKind==JsonValueKind.Null?null:ParseMessage(pin,mapping);
                 if(pinned is not null&&pinned.SourceId!=selected)throw new JsonException();
                 lock(gate)
                 {
                     Groups=groups;Pinned=pinned;PinnedGroupId=selected;StateLoaded=true;
-                    Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():null;
+                    Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():conditional?Opportunities:null;
                     TransportConnected=true;
                     foreach(var key in seen.Where(p=>DateTimeOffset.UtcNow-p.Value>TimeSpan.FromMinutes(30)).Select(p=>p.Key).ToArray())seen.Remove(key);
                     foreach(var message in normal.OrderBy(m=>m.SentAt))
@@ -72,14 +90,23 @@ internal sealed class CloudMessageSource : IMessageSource
                     if(connected && State!=LinkState.Connected)ConnectionRevision++;
                     State=connected?LinkState.Connected:LinkState.Reconnecting;
                 }
+                // Retain only validated components, without re-serializing unchanged data.
+                if(conditional)
+                {
+                    foreach(var field in new[]{"groups","messages","pinned","pinnedGroupId","opportunities"})
+                        if(root.TryGetProperty(field,out var value))cached[field]=value.Clone();
+                }
+                else cached.Clear();
+                known=nextKnown;
                 delay=3;Activity?.Invoke();
             }
-            catch{TransportConnected=false;State=LinkState.Reconnecting;Activity?.Invoke();delay=Math.Min(30,delay*2);}
+            catch(OperationCanceledException) when(stop.IsCancellationRequested){break;}
+            catch{known=null;cached.Clear();TransportConnected=false;State=LinkState.Reconnecting;Activity?.Invoke();delay=Math.Min(30,delay*2);}
             try{await Task.Delay(delay==3?pollInterval:TimeSpan.FromSeconds(delay),stop.Token);}catch(OperationCanceledException){break;}
         }
     }
     internal async Task SelectPinAsync(string id)
-    {using var result=await request(new{action="pin",pinnedGroupId=id.Length==0?"":GroupHash(id)});if(!result.RootElement.GetProperty("saved").GetBoolean())throw new InvalidOperationException();}
+    {using var result=await request(new{action="pin",pinnedGroupId=id.Length==0?"":GroupHash(id)},stop.Token);if(!result.RootElement.GetProperty("saved").GetBoolean())throw new InvalidOperationException();}
     public Task<IReadOnlyList<IncomingMessage>> ReadAsync(CancellationToken cancellationToken)
     {cancellationToken.ThrowIfCancellationRequested();lock(gate){IReadOnlyList<IncomingMessage> result=pending.ToArray();pending.Clear();return Task.FromResult(result);}}
     public async ValueTask DisposeAsync(){stop.Cancel();await worker;stop.Dispose();lock(gate)pending.Clear();}

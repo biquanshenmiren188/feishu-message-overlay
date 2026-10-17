@@ -13,7 +13,7 @@ public interface IMessageSource : IAsyncDisposable
 
 // Delivery adapters must restrict authorized group IDs before reading message bodies.
 // This store contains no disk/network/logging code.
-public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
+public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null, bool expireMessages = true)
 {
     private readonly List<IncomingMessage> messages = [];
     private readonly Dictionary<string, DateTimeOffset> seen = [];
@@ -26,7 +26,8 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
     public void Clear(DateTimeOffset now) { messages.Clear(); seen.Clear(); cutoff = now; Revision++; }
     public void Prune(DateTimeOffset now)
     {
-        if(messages.RemoveAll(m => now - m.SentAt >= ttl)>0)Revision++;
+        // Admission/dedup freshness is separate from the user's retained reading history.
+        if(expireMessages && messages.RemoveAll(m => now - m.SentAt >= ttl)>0)Revision++;
         foreach (var key in seen.Where(p => now - p.Value >= ttl).Select(p => p.Key).ToArray()) seen.Remove(key);
     }
     public void KeepLatest(string groupId)
@@ -40,7 +41,7 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null)
         if (message.SourceId != selectedSource || message.Kind != SenderKind.Bot || string.IsNullOrWhiteSpace(message.Id) ||
             message.SentAt <= cutoff || message.SentAt > now.AddMinutes(1) || now - message.SentAt >= ttl) return false;
         var key = message.SourceId + "\0" + message.Id;
-        if (seen.ContainsKey(key)) return false;
+        if (seen.ContainsKey(key) || messages.Any(m=>m.SourceId==message.SourceId && m.Id==message.Id)) return false;
         // Bound both message history and the deduplication window.
         // Never evict recent IDs: eviction could replay a duplicated delivery.
         // Refuse excess traffic until expiry instead of violating bounded deduplication.

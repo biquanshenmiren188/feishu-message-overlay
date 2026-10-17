@@ -25,9 +25,9 @@ export function createSnapshotFetch(fetcher=(...args)=>globalThis.fetch(...args)
     }
    }catch(error){if(!attempt)continue;throw error;}
    init.signal?.throwIfAborted();
-   const body=JSON.stringify(data),etag=response.headers.get('ETag');
-   if(etag&&body.length<=8000000)snapshots.set(url.href,{etag,data});else snapshots.delete(url.href);
-   const output=new Headers(response.headers);output.set('Content-Type','application/json');output.delete('Content-Encoding');output.delete('Content-Length');
+   const body=response.status===304?previous.body:JSON.stringify(data),etag=response.headers.get('ETag');
+   if(etag&&body.length<=8000000)snapshots.set(url.href,{etag,data,body});else snapshots.delete(url.href);
+   const output=new Headers(response.headers);output.set('Content-Type','application/json');output.delete('Content-Encoding');output.delete('Content-Length');output.delete('X-Radar-Unchanged');if(response.status===304)output.set('X-Radar-Unchanged','1');
    return new Response(body,{status:200,headers:output});
   }
  };

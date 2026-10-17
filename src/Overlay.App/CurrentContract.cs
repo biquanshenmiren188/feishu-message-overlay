@@ -12,6 +12,7 @@ public partial class MainWindow
         ProcessLifecycle.Contract(output);
         LocalStorage.LocationContract();
         await RunManualUpdateContractAsync(output);
+        RunCloudLayoutContract(output);
         void Check(bool ok,string reason){if(!ok)throw new InvalidOperationException(reason);}
         var clock=new MessageTime();
         foreach(var entry in new[]{("2026-10-01T00:00:00Z","2026-10-01 08:00:00 UTC+8"),("2026-10-01T16:00:00Z","2026-10-02 00:00:00 UTC+8"),("2026-10-01T23:59:59Z","2026-10-02 07:59:59 UTC+8"),("2026-10-01T01:00:00-07:00","2026-10-01 16:00:00 UTC+8")})
@@ -67,7 +68,7 @@ public partial class MainWindow
         var preview=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);preview.Render(this);var png=new System.Windows.Media.Imaging.PngBitmapEncoder();png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(preview));using(var image=File.Create(Path.Combine(output,"pinned-timeline-preview.png")))png.Save(image);
         await Task.Delay(1200);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(reader.Current!=beforePin && displayed.Count==3,"regular timer advances alongside pinned card");
         readingTimer.Stop();verifyReadingTimer=false;
-        store.Prune(DateTimeOffset.UtcNow.AddHours(1));Render();Check(readingQueue.Length==0 && PinnedCard.Content is IncomingMessage held && held.Id=="pin-2","ordinary TTL cannot expire pinned latest");
+        store.Prune(DateTimeOffset.UtcNow.AddHours(1));Render();Check(readingQueue.Length==6 && displayed.Count==3 && PinnedCard.Content is IncomingMessage held && held.Id=="pin-2","idle hour retains ordinary history and pinned latest");
         store.Clear(DateTimeOffset.UtcNow);Render();Check(PinnedCard.Content is IncomingMessage cleared && cleared.Id=="pin-2","ordinary clear cannot remove pinned latest");
         now=DateTimeOffset.UtcNow;
         for(var i=0;i<4;i++)store.Add(new IncomingMessage("after-clear-"+i,"demo","hidden","Fresh ordinary synthetic",now.AddMilliseconds(i+1),SenderKind.Bot),"demo",now.AddSeconds(1));Render();
@@ -76,6 +77,7 @@ public partial class MainWindow
         Preferences.ContractPath=path;_=Preferences.Load();PinnedGroup.SelectedValue="oc_pin_a";SavePreferences();Check(Preferences.Load().PinnedChatId=="oc_pin_a","pinned group ID persists in isolated preferences");Preferences.ContractPath=null;
         selectedChats.Remove("oc_pin_a");renderedRevision=-1;Render();Check(PinnedCard.Content is null && !readingQueue.Any(m=>m.SourceId=="oc_pin_a"),"departed group content is not displayed");
         File.WriteAllText(Path.Combine(output,"pinned-contract.txt"),"PASS one pinned latest card plus exactly three regular containers; replace retains one without changing ordinary deadline; real regular timer advances; ordinary TTL/clear preserve pinned memory slot; quiet switch/cancel/membership removal; pinned ID saves and reloads in isolated preferences.");
+        await RunHistoryContractAsync(output);
         await RunLayoutReadingContractAsync(output);
         await RunCardContractAsync(output);
         AutoScroll.IsChecked=false;verifyReadingTimer=false;initialFit=false;
