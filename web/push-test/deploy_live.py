@@ -17,7 +17,7 @@ def run(client,script,timeout):
  output,error=stdout.read().decode('utf-8'),stderr.read().decode('utf-8')
  if stdout.channel.recv_exit_status():raise RuntimeError(error[:3000])
  return output
-files={name:source/'push-test'/name for name in ['server.py','server_test.py','live.py','live_test.py','delivery.py','delivery_test.py','signals.py','preferences.py','radar-webpush-test.service','index.html','app.js','sw.js']}
+files={name:source/'push-test'/name for name in ['server.py','server_test.py','live.py','live_test.py','profiles.py','profiles_test.py','delivery.py','delivery_test.py','signals.py','preferences.py','radar-webpush-test.service','index.html','app.js','sw.js']}
 files.update({name:source/'robot-push'/name for name in ['notification-settings.js','notification-settings.css']})
 s=connect()
 try:

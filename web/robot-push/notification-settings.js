@@ -1,11 +1,12 @@
 const BASE='/radar/push-test/', API=BASE+'api/';
-const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-notify2';document.head.append(css);
+const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-profiles1';document.head.append(css);
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
 const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';mount?.append(button);
 const dialog=document.createElement('dialog');dialog.id='notification-settings';dialog.setAttribute('aria-labelledby','notification-settings-title');
 dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在上。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
 <div class="ns-body"><p id="ns-message" role="status" aria-live="polite"></p>
 <section class="ns-notification" aria-label="通知与绑定"><div id="ns-binding" hidden><span>已绑定推送码</span><output id="ns-bound-code"></output></div><button type="button" id="ns-enable" aria-describedby="ns-notification-help">开启通知</button><p id="ns-notification-help">开启后可在手机锁屏接收提醒。</p></section>
+<section class="ns-plans" aria-label="独立推送方案"><button type="button" id="ns-create-code">新建推送码</button><p>每个推送码的设置与通知独立，修改本码不影响其他码。</p><div id="ns-created" hidden role="status"><span>新推送码</span><output id="ns-created-code"></output><p>已创建独立方案。请在另一台手机输入此码连接；当前绑定与设置不变。</p></div></section>
 <form id="ns-pair" hidden><label for="ns-code">推送码</label><div class="ns-inline"><input id="ns-code" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位推送码"><button>连接</button></div><p>沿用原来的推送码，不需要重新安装。</p></form>
 <form id="ns-form" hidden><fieldset id="ns-fields"><label class="ns-toggle"><span>接收消息</span><input id="ns-enabled" type="checkbox"></label>
 <div class="ns-grid"><label>显示条数<select id="ns-rows"><option value="1">1 条</option><option value="2">2 条</option><option value="3">3 条</option><option value="4">4 条</option></select></label><label>提醒间隔<select id="ns-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="180">3 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option></select></label></div>
@@ -44,26 +45,43 @@ function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.s
  message(!s.subscribed?'手机订阅未连接，请从 iPhone 主屏幕打开雷达并启用通知。':!p.notify_enabled?'手机推送已关闭。':s.source?.connected?'推送已开启，消息源在线。':'推送已开启，等待消息源恢复。');
  if(needsRepair)message(phone.permission==='denied'?'这台手机的通知权限已关闭，请在 iPhone 设置中允许通知。':'手机订阅未连接或与服务器不一致，请点“开启通知”重新连接。',true);
 }
-async function task(fn){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;try{await fn()}catch(e){message(e.message,true)}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=false;$('ns-save').disabled=false;renderNotification()}}
+async function task(fn){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;$('ns-create-code').disabled=true;try{await fn()}catch(e){message(e.message,true)}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=false;$('ns-save').disabled=false;$('ns-create-code').disabled=false;renderNotification()}}
 async function load(){if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}await syncPhone();fill(await api('status'));const binding=await api('binding');$('ns-bound-code').textContent=binding.pushCode;$('ns-binding').hidden=false}
 button.onclick=()=>{dialog.showModal();dialog.querySelector('.ns-body').scrollTop=0;task(load)};$('ns-close').onclick=()=>dialog.close();
 $('ns-pair').onsubmit=e=>{e.preventDefault();task(async()=>{const result=await api('pair',{code:$('ns-code').value.trim()});token=result.token;localStorage.setItem('radar-test-token',token);$('ns-code').value='';await load();if(standalone)await configureWorker()})};
+$('ns-create-code').onclick=()=>task(async()=>{
+ $('ns-create-code').textContent='正在创建…';
+ try{
+  let requestId=sessionStorage.getItem('radar-create-code-request');
+  if(!requestId){requestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');sessionStorage.setItem('radar-create-code-request',requestId)}
+  const result=await api('create-code',{requestId});
+  if(!token){
+   token=result.token;localStorage.setItem('radar-test-token',token);await load();
+   message('推送码已创建并绑定。设置只影响此码；在手机上点击“开启通知”即可连接。');
+  }else{
+   $('ns-created-code').textContent=result.pushCode;$('ns-created').hidden=false;
+   message('新推送码已创建，当前绑定和未保存的设置保持不变。');
+  }
+  sessionStorage.removeItem('radar-create-code-request');
+ }finally{$('ns-create-code').textContent='新建推送码'}
+});
 const list=id=>$(id).value.trim().split(/[\s,，、]+/).filter(Boolean).map(s=>s.toUpperCase());
 const checked=id=>Array.from($(id).querySelectorAll('input:checked'),el=>el.value);
 $('ns-form').onsubmit=e=>{e.preventDefault();task(async()=>{const settings={notify_enabled:$('ns-enabled').checked,rows:Number($('ns-rows').value),notify_interval_seconds:Number($('ns-interval').value),min_percent:$('ns-percent').value===''?null:Number($('ns-percent').value),excluded_ranks:list('ns-ranks'),excluded_coins:list('ns-coins'),excluded_modes:checked('ns-modes'),excluded_exchanges:checked('ns-exchanges')};fill(await api('settings',{revision,settings}));message('已保存，后续新消息按此设置推送。');dialog.querySelector('.ns-body').scrollTop=0})};
 let registration;
-async function configureWorker(){if(!registration?.active||!token)return;await new Promise((resolve,reject)=>{const c=new MessageChannel(),timer=setTimeout(()=>reject(Error('通知组件未就绪，请重新打开页面。')),8000);c.port1.onmessage=e=>{clearTimeout(timer);c.port1.close();if(e.data?.ok){workerVersion=e.data.version||'unknown';resolve()}else reject(Error('通知配置失败'))};registration.active.postMessage({type:'configure',token},[c.port2])})}
+async function configureWorker(){if(!registration?.active||!token)return;await syncPhone();await new Promise((resolve,reject)=>{const c=new MessageChannel(),timer=setTimeout(()=>reject(Error('通知组件未就绪，请重新打开页面。')),8000);c.port1.onmessage=e=>{clearTimeout(timer);c.port1.close();if(e.data?.ok){workerVersion=e.data.version||'unknown';resolve()}else reject(Error('通知配置失败'))};registration.active.postMessage({type:'configure',token},[c.port2])})}
 async function subscriptionFingerprint(sub){if(!sub)return null;const s=sub.toJSON();const bytes=new TextEncoder().encode(JSON.stringify([s.endpoint,s.keys.p256dh,s.keys.auth]));return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('')}
-let syncing=false;
+let syncing=null;
 async function syncPhone(){
- if(syncing||!standalone||!ios||!registration||!token)return;
- syncing=true;
- try{
+ if(syncing)return syncing;
+ if(!standalone||!ios||!registration||!token)return;
+ syncing=(async()=>{
   const sub=await registration.pushManager.getSubscription();
   phone={permission:typeof Notification==='undefined'?'unsupported':Notification.permission,subscriptionFingerprint:await subscriptionFingerprint(sub),version:workerVersion};
   await api('device',phone);
   renderNotification();
- }finally{syncing=false}
+ })();
+ try{return await syncing}finally{syncing=null}
 }
 $('ns-enable').onclick=()=>task(async()=>{
  if(!token){$('ns-code').focus();throw Error('请先输入推送码连接。')}
@@ -76,7 +94,7 @@ $('ns-enable').onclick=()=>task(async()=>{
  if(p!=='granted'){await syncPhone();throw Error(p==='denied'?'请在 iPhone 设置中允许雷达通知，再返回此处。':'尚未允许通知，可以再次点击“开启通知”。')}
  let sub=await registration.pushManager.getSubscription();
  if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-publicKey.length%4)%4));sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))})}
- await configureWorker();await api('subscribe',{subscription:sub.toJSON(),replaceFingerprint:serverFingerprint});
+ await api('subscribe',{subscription:sub.toJSON(),replaceFingerprint:serverFingerprint});await configureWorker();
  serverFingerprint=await subscriptionFingerprint(sub);await syncPhone();
  message('本机通知已开启；按“接收消息”和已保存的筛选设置接收提醒。');
 });

@@ -171,7 +171,7 @@ class Live(Trial):
                     continue
                 s['history'] = sorted(s['history']+[row], key=lambda r:(r['at'], r['id']))[-100:]
                 if (s['settings']['notify_enabled'] and matches(row, s['settings'])
-                        and row['at'] >= s['activated']-120 and -30 <= now-row['at'] <= 120):
+                        and row['at'] >= s.get('acceptAfter', s['activated']-120) and -30 <= now-row['at'] <= 120):
                     s['pending'] = (s['pending']+[row['id']])[-100:]
             if len(s['seen']) > 10000:
                 s['seen'] = dict(sorted(s['seen'].items(), key=lambda kv:kv[1])[-10000:])

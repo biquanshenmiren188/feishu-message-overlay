@@ -3,7 +3,10 @@ import pathlib, json, hashlib, uuid, paramiko, argparse, subprocess
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--with-binding-api',action='store_true',help='Deploy the authenticated binding endpoint with its tests')
+parser.add_argument('--with-profiles',action='store_true',help='Deploy independent push plans and user code creation')
 args=parser.parse_args()
+# The former binding API now lives in the profile-aware server bundle.
+if args.with_binding_api:args.with_profiles=True
 
 web=pathlib.Path(__file__).resolve().parents[1]
 config=json.loads((pathlib.Path.home()/'.ssh/tencent-radar-initial.json').read_text())
@@ -15,15 +18,21 @@ try:
  stage='/tmp/radar-settings-'+uuid.uuid4().hex
  ftp=client.open_sftp();ftp.mkdir(stage,mode=0o700);hashes={}
  files={name:web/'robot-push'/name for name in ['notification-settings.js','notification-settings.css']}
- if args.with_binding_api:files.update({name:web/'push-test'/name for name in ['server.py','server_test.py','live_test.py','delivery_test.py']})
- baseline=subprocess.check_output(['git','show','HEAD:web/push-test/server.py'],cwd=web.parent).replace(b'\r\n',b'\n')
- baseline=hashlib.sha256(baseline).hexdigest()
+ if args.with_binding_api or args.with_profiles:files.update({name:web/'push-test'/name for name in ['server.py','server_test.py','live_test.py','delivery_test.py']})
+ if args.with_profiles:files.update({name:web/'push-test'/name for name in ['live.py','profiles.py','profiles_test.py']})
+ baselines={}
+ for name in (['server.py','live.py'] if args.with_profiles else ['server.py']):
+  baseline=subprocess.check_output(['git','show','HEAD:web/push-test/'+name],cwd=web.parent).replace(b'\r\n',b'\n')
+  baselines[name]=hashlib.sha256(baseline).hexdigest()
+ if args.with_profiles:
+  old_profile=subprocess.run(['git','show','HEAD:web/push-test/profiles.py'],cwd=web.parent,capture_output=True)
+  baselines['profiles.py']=hashlib.sha256(old_profile.stdout.replace(b'\r\n',b'\n')).hexdigest() if old_profile.returncode==0 else None
  for name,path in files.items():
   raw=path.read_bytes();hashes[name]=hashlib.sha256(raw).hexdigest()
   with ftp.file(stage+'/'+name,'wb') as f:f.write(raw)
  ftp.close()
  script=r'''
-import pathlib,hashlib,json,subprocess,shutil,fcntl,os,re,time,urllib.request
+import pathlib,hashlib,json,subprocess,shutil,fcntl,os,re,time,urllib.request,sys,tempfile
 p=pathlib.Path(STAGE)
 assert all(hashlib.sha256((p/k).read_bytes()).hexdigest()==v for k,v in HASHES.items())
 def pid(name):return subprocess.check_output(['systemctl','show',name,'--property=MainPID','--value'],text=True).strip()
@@ -37,21 +46,55 @@ def request(route,token=None):
  with urllib.request.urlopen(req,timeout=5) as response:return json.loads(response.read())
 def read_state():return json.loads(pathlib.Path('/var/lib/radar-webpush-test/state.json').read_text())
 state=read_state()
+registry_path=pathlib.Path('/var/lib/radar-webpush-test/profiles.json')
+registry=json.loads(registry_path.read_text()) if registry_path.exists() else None
+profile_states={}
+for item in registry['profiles'] if registry else []:
+ assert re.fullmatch('[a-f0-9]{32}',item['id'])
+ profile_states[item['id']]=json.loads((registry_path.parent/'profiles'/item['id']/'state.json').read_text())
 if backend:
- assert hashlib.sha256((root/'server.py').read_bytes().replace(b'\r\n',b'\n')).hexdigest()==BASELINE,'Server changed; review before deploying'
+ for name,expected in BASELINES.items():
+  if expected is None:assert not (root/name).exists(),'New backend module already exists; review before deploying'
+  else:assert hashlib.sha256((root/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()==expected,'Backend changed; review before deploying'
  candidate=p/'candidate';candidate.mkdir()
  for f in root.glob('*.py'):shutil.copyfile(f,candidate/f.name)
  for name in backend_files:shutil.copyfile(p/name,candidate/name)
  tests=subprocess.run([str(root/'venv/bin/python'),'-m','unittest','discover','-s',str(candidate),'-p','*_test.py'],capture_output=True,text=True)
  if tests.returncode:raise RuntimeError(tests.stderr[-3000:])
+ if 'profiles.py' in HASHES:
+  # Rehearse migration against a private copy, never a second live feed reader.
+  sys.path.insert(0,str(candidate))
+  from profiles import Profiles
+  with tempfile.TemporaryDirectory(dir=p) as rehearsal:
+   sandbox=pathlib.Path(rehearsal)
+   (sandbox/'state.json').write_text(json.dumps(state))
+   if registry:
+    (sandbox/'profiles.json').write_text(json.dumps(registry))
+    for key,value in profile_states.items():
+     directory=sandbox/'profiles'/key;directory.mkdir(parents=True)
+     (directory/'state.json').write_text(json.dumps(value))
+   def no_send(*args):raise RuntimeError('Migration must not send')
+   app=Profiles(sandbox,'/etc/radar-webpush-test/config.json',no_send)
+   assert app.resolve(state['token']).state==state,'Migration changed existing state'
+   again=Profiles(sandbox,'/etc/radar-webpush-test/config.json',no_send)
+   assert again.resolve(state['token']).state==state,'Migration was not idempotent'
+   for key,value in profile_states.items():assert again.accounts[key].state==value,'Existing profile changed'
 with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  fcntl.flock(lock,fcntl.LOCK_EX)
- old=current.resolve();new=old.parent/('20261017-notification-controls-'+str(int(time.time())))
+ old=current.resolve();new=old.parent/('20261017-push-profiles-'+str(int(time.time())))
  fallback=pathlib.Path('/opt/radar-webpush-test/public/index.html');previous=fallback.read_bytes()
  backup=root/('backup-'+new.name);backup.mkdir(mode=0o700)
  (backup/'index.html').write_bytes(previous)
  if backend:
-  for name in backend_files:shutil.copyfile(root/name,backup/name)
+  for name in backend_files:
+   if (root/name).exists():shutil.copyfile(root/name,backup/name)
+  # State backup is for recovery only; rollback never rewinds notification seq.
+  (backup/'state.json').write_text(json.dumps(state));(backup/'state.json').chmod(0o600)
+  if registry:
+   (backup/'profiles.json').write_text(json.dumps(registry));(backup/'profiles.json').chmod(0o600)
+   for key,value in profile_states.items():
+    directory=backup/'profiles'/key;directory.mkdir(parents=True,mode=0o700)
+    (directory/'state.json').write_text(json.dumps(value));(directory/'state.json').chmod(0o600)
  try:
   shutil.copytree(old,new,symlinks=True)
   bot=new/'robot-push'
@@ -59,7 +102,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    shutil.copyfile(p/name,bot/name);(bot/name).chmod(0o644)
   index=bot/'index.html';html=index.read_text()
   assert 'notification-settings.js?v=' in html
-  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-notify2',html)
+  html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-profiles1',html)
   index.write_text(html)
   if backend:
    for name in backend_files:
@@ -82,6 +125,12 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   after=read_state()
   assert state.get('subscription')==after.get('subscription') and state['token']==after['token']
   assert state['live']['settings']==after['live']['settings'] and state['live']['revision']==after['live']['revision']
+  assert after['seq']>=state['seq']
+  for key,before in profile_states.items():
+   after_profile=json.loads((registry_path.parent/'profiles'/key/'state.json').read_text())
+   assert before.get('subscription')==after_profile.get('subscription') and before['token']==after_profile['token']
+   assert before['live']['settings']==after_profile['live']['settings'] and before['live']['revision']==after_profile['live']['revision']
+   assert after_profile['seq']>=before['seq']
   assert all(hashlib.sha256(((root if k.endswith('.py') else current/'robot-push')/k).read_bytes()).hexdigest()==v for k,v in HASHES.items())
   preserved=0
   for before in old.rglob('*'):
@@ -95,10 +144,13 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   if current.resolve()==new:
    link=current.with_name('current.settings-rollback');link.symlink_to(old);os.replace(link,current)
   if backend:
-   for name in backend_files:shutil.copyfile(backup/name,root/name)
+   subprocess.run(['systemctl','stop','radar-webpush-test'],check=True)
+   for name in backend_files:
+    if (backup/name).exists():shutil.copyfile(backup/name,root/name)
+    else:(root/name).unlink(missing_ok=True)
    subprocess.run(['systemctl','restart','radar-webpush-test'],check=True)
   raise
-'''.replace('STAGE',repr(stage)).replace('HASHES',repr(hashes)).replace('BASELINE',repr(baseline))
+'''.replace('STAGE',repr(stage)).replace('HASHES',repr(hashes)).replace('BASELINES',repr(baselines))
  stdin,stdout,stderr=client.exec_command('sudo -n python3 -',timeout=90)
  stdin.write(script.encode());stdin.channel.shutdown_write()
  output,error=stdout.read().decode(),stderr.read().decode()

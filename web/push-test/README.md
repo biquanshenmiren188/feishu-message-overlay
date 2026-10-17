@@ -119,6 +119,53 @@ confirmed one remaining notification and the four-entry time-first layout.
 
 ## Mobile entry
 
+### Independent push plans and user-created codes (2026-10-17)
+
+Production now starts `Profiles` from `profiles.py`. Bearer tokens resolve to one
+`Profile` before **every** status, binding, settings, subscription, repair, device,
+receipt, verification and stop operation. A caller cannot choose another plan by
+adding a code/id to a request body. Same-code clients share that plan; different
+codes have separate settings, revision, subscription, history, pending queue,
+sequence, rate/backoff state and receipts. The source feed and VAPID credential
+cache are shared; bounded worker tasks prevent one slow/failing sender from
+serially blocking the next plan. A device endpoint can belong to only one code;
+cross-code subscription/repair is rejected without altering either plan.
+
+The legacy owner remains in `/var/lib/radar-webpush-test/state.json`, keeping its
+exact token, subscription, sequence and settings. `profiles.json` is a versioned,
+private registry; new accounts live in `profiles/<opaque-id>/state.json`. Do not
+print these files, check them into Git, or restore an old sequence during rollback.
+New codes use fresh defaults and do not inherit another plan's history or queue.
+
+“新建推送码” is available to users behind the existing website access policy,
+including those without a push code. POST `api/create-code` uses a random 128-bit
+request ID for idempotent retries, produces an independent random eight-digit
+code/token, and saves the plan before returning. Creation is capped at 20/hour
+and 100 total plans; failures/retries cannot reset or modify existing plans.
+Pair attempts are limited per visitor (trusted Cloudflare client IP at the
+loopback proxy boundary), so one visitor's invalid guesses do not lock out other
+visitors. Website access rules and the loopback-only listener remain unchanged.
+
+On an unpaired client, creating a code also binds the new plan. On an already
+paired client it displays the new code for another phone, preserving the current
+token, worker, saved settings and any form draft. Creating a code does not subscribe
+a phone or send a notification. The “开启通知” action is still user initiated.
+
+Use `python web/push-test/deploy_settings.py --with-profiles` for this bundle.
+It tests candidate modules, rehearses migration on private copies, verifies the
+running-code baseline, backs up affected files and state, clones the current web
+release, restarts only the push service, and verifies preserved bindings/settings.
+Rollback restores code/static files without rewinding live state. The old
+`--with-binding-api` flag is now an alias for this complete backend bundle.
+
+Release `20261017-push-profiles-1792205891`: 44 Python and 12 worker/protocol tests
+passed. Local browser acceptance used the real isolated backend with no sender:
+two codes kept distinct settings, disabling one did not change the other, and
+creation kept the current binding/draft. Production checks verified the original
+token/subscription/settings/revision/device state, active source, anonymous 401,
+the new button and 393/320px layout. No test push or extra production code was
+created. Physical iPhone notification permission/display was not re-tested.
+
 ### Notification controls (2026-10-17)
 
 BOT settings now always show an “开启通知” control and display the existing
