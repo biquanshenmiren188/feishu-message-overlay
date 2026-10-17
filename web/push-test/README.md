@@ -52,6 +52,25 @@ identity has been checked.
 
 ## Settings and ownership
 
+2026-10-17: **推送设置 → 通知与推送码 → 切换推送码** accepts another
+eight-digit code and loads that profile's saved settings and revision. Saving
+affects only the selected profile. Both status and binding must load before the
+selection changes; failed switches preserve the previous selection and draft.
+Successful switches replace unsaved inputs, as explained beside the input.
+The selected management token persists as `radar-settings-token`; the original
+`radar-test-token`, worker configuration, device telemetry and subscription stay
+with the phone's original profile. Switching does not migrate notifications.
+Return to the original code to manage this phone's notification permission.
+
+Static release `20261017-switch-code-1792206410` preserves the concurrent compact
+settings overlay from `20261017-compact-settings-1792206185`, all 2,634 unrelated
+files and all production profile settings/subscriptions. No services restarted.
+Backup: `/opt/radar-webpush-test/backup-20261017-switch-code-1792206410`.
+All 16 Node settings/worker/protocol tests passed. Isolated real-backend browser
+checks covered two-code editing, switching back, refresh persistence and failed
+switch draft retention; live 393/320px layout checks passed. No production test
+codes or extra pushes were created; physical iPhone behavior was not tested.
+
 The BOT modal saves all settings to the server with a revision check. Pairing
 uses the existing owner code behind the site's existing access login, rate
 limited to ten attempts in five minutes. Production paired tokens no longer

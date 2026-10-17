@@ -35,6 +35,11 @@
 #notification-settings button:active:not(:disabled){filter:brightness(.94)}
 #notification-settings .ns-plans{margin:0 0 20px;padding-bottom:4px;border-bottom:1px solid #e1eae5}
 #notification-settings #ns-create-code{width:100%;min-height:48px}
+#notification-settings .ns-plan-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#notification-settings .ns-plan-buttons button{min-width:0;min-height:48px;padding:8px}
+#notification-settings #ns-switch{padding:14px;margin-bottom:16px;border:1px solid #c4d5cd;border-radius:12px;background:#f7faf8}
+#notification-settings #ns-switch label{margin-bottom:0}
+#notification-settings #ns-switch-error:empty{display:none}
 #notification-settings .ns-plans p{font-size:13px;margin:10px 0 14px}
 #notification-settings #ns-created{padding:12px;margin-bottom:16px;border:1px solid #c4d5cd;border-radius:10px;background:#f1f7f4}
 #notification-settings #ns-created-code{display:block;font:600 22px/1.6 ui-monospace,monospace;letter-spacing:2px;user-select:all;overflow-wrap:anywhere}
