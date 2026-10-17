@@ -11,3 +11,7 @@
 生产当前采用 performance-20261017 合并资源，不能发布旧源文件或完整旧构建。`scripts/prepare-mobile-scroll.py` 必须验证原 bundle 的固定 SHA，只在 fit、消息列表 render 和卡片 render 三个函数中执行 10 处限定替换，并导入独立模块。其他采集、交易所模型、普通/GC 纯文本复制、通知设置和已确认 Logo 都保留。脚本遇到线上 bundle 变化应停止重新检查。
 
 `scripts/deploy-mobile-scroll.py` 在现有维护锁内验证 release、BOT HTML 和实际 bundle/CSS 的 hash，克隆现场版本，只新增三个资源并改 BOT/PWA HTML 引用，校验其他文件全部相同，保留消息源与推送服务 PID。回滚时在同锁内切回报告 previous，并恢复 backup/pwa-index.html；有后续发布时先核对差异。
+
+部署源码 `32345c1d7829ad01b9ae379606b1624598eb242e`，release `/opt/funding-radar-web/releases/20261017-mobile-scroll-1792229554`，previous `20261017-chart-loading-1792229169`；同名 backup 保存部署报告与 PWA fallback。保留其他 2,718 个文件，消息源/推送 PID 未变。AST 对照确认只改 qe（fitCards）、q（消息render）、Nt（卡片render）三个顶层函数，其余 68 个函数逐字相同。
+
+补充回归：原生触摸模拟 scrollY 单调从 0 到 384.85，消息框始终 345px。持续手势期间收到完整空快照，仍保留同一个卡片节点但变为 expired、计数为 0 ACTIVE。正式域名加载了新 bundle/CSS，393px 无横向溢出并保留新 Logo；正式站当时没有活跃卡片，因此多卡片手势证据来自隔离合成场景。PR #28 未合并。
