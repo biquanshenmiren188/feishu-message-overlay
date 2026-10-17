@@ -8,6 +8,7 @@ export function mobileSummary(message) {
   const shortExchanges=text=>text.replace(/\b(?:gate\.io|gate|binance|bitget|bybit|okx|aster|hyperliquid|hl|hy)\b/giu,abbreviation);
   let title=String(message.title??'').replace(/V2\s*收敛/iu,match=>route?abbreviation(route[1])+'→'+abbreviation(route[2]):match);
   const signals=[];
+  let dexSpread='';
   // DEX monitor messages put their instruments in numbered body entries, not
   // the message title. Parse those entries only; config blacklists are not coins.
   const dex=[];
@@ -19,9 +20,14 @@ export function mobileSummary(message) {
     title=dex.length===1?`${dex[0].coin}｜${dex[0].mode}｜${dex[0].route}｜${dex[0].rank}`:`DEX套利｜${[...new Set(dex.map(x=>x.coin))].join('、')}｜${dex.length}组`;
     dex.forEach((entry,i)=>{
       const block=lines.slice(entry.index+1,dex[i+1]?.index??lines.length);
-      const fee=block.map(s=>s.match(/^净费率\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%\s*\/\s*(?:h|小时))\s*$/iu)?.[1]).find(Boolean);
+      // The first take percentage is the observed opening order-book spread;
+      // the second is the reverse quote. Do not use funding or the 30m mean.
+      const take=block.map(s=>s.match(/^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*\/\s*[+−-]?\d+(?:\.\d+)?\s*%/iu)?.[1]).find(Boolean);
+      const observed=take??block.map(s=>s.match(/(?:^|[｜|])\s*盘口差\s*[:：]?\s*([+−-]?\d+(?:\.\d+)?\s*%)/u)?.[1]).find(Boolean);
+      const spread=observed?'盘口差 '+(/^[+−-]/u.test(observed)?'':'+')+observed.replace(/\s/gu,''):'';
+      if(dex.length===1)dexSpread=spread;
       const quality=block.map(s=>s.match(/^质量\s*[:：]\s*(.+)$/u)?.[1]).find(Boolean);
-      const details=[dex.length>1?`${entry.coin}｜${entry.mode}｜${entry.route}｜${entry.rank}`:'',fee?'净费率 '+fee:'',quality?'质量：'+quality:''].filter(Boolean);
+      const details=[dex.length>1?`${entry.coin}｜${entry.mode}｜${entry.route}｜${entry.rank}`:'',dex.length>1?spread:'',quality?'质量：'+quality:''].filter(Boolean);
       if(details.length)signals.push(details.join(' · '));
     });
   }else if(!title.trim()||/^机器人消息$/u.test(title.trim())){
@@ -75,7 +81,7 @@ export function mobileSummary(message) {
   // Incomplete transfer data must not become a misleading all-open summary.
   const incomplete=transfer.some(s=>/未知|暂无|没有|无数据|未提供|无现货|未核验|待核验|不确定/u.test(s));
   const risk=warnings.length?(hasWarningLabel?'警告：':'注意：')+warnings.join('；'):states.length&&!incomplete?'充提：'+states.join(' / '):'';
-  const spread=(fields.find(s=>s.startsWith('盘口差'))??'').replace(/^盘口差\s*[:：]?\s*/u,'盘口差 ');
+  const spread=dex.length?dexSpread:(fields.find(s=>s.startsWith('盘口差'))??'').replace(/^盘口差\s*[:：]?\s*/u,'盘口差 ');
   return {title,signals:signals.join('\n'),spread,direction,metrics:fields.slice(0,2).join(' · '),fees:fees.length?'资费 '+fees.join(' · '):'',risk,warning:warnings.length>0,
     preview:direction||fields.length?'':lines.slice(0,3).join(' / ')};
 }
