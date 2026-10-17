@@ -103,3 +103,13 @@ BG→OK R0 +0.37% message was accepted by Apple (seq 15). The phone's v2 worker
 reported rows=1, before=1, closeCalls=1, after=1. This is device processing evidence,
 not a claim to have remotely viewed the phone's lock screen. Earlier owner tests
 confirmed one remaining notification and the four-entry time-first layout.
+
+## Mobile entry
+
+The installed PWA keeps its existing id, start URL and worker scope at
+`/radar/push-test/`. nginx internally serves the current BOT page at that URL
+(no external redirect or reinstall). The shared HTML base points to
+`/radar/robot-push/`, so assets and feed requests remain canonical. Settings
+open only from the BOT toolbar button. Worker v3 changes only the page cache
+version; the subscription, IndexedDB, notification kind and sequence survive.
+Use `deploy_mobile_entry.py` after the live relay is installed.
