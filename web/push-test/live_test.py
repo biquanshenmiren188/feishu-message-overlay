@@ -44,15 +44,29 @@ class LiveTests(unittest.TestCase):
         m['title']='COIN1 | FS | R0 +0.1% R1 +0.2%'
         self.assertIsNone(parse_message(m,self.now))
 
-    def test_four_rows_sorted_actual_clock_sequence_preserved(self):
+    def test_four_latest_rows_newest_first_sequence_preserved(self):
         rows=[message(n,self.now-6+n) for n in range(1,7)]
         self.tick(list(reversed(rows)))
         p=self.sent[0];self.assertEqual(p['seq'],15);self.assertEqual(p['title'],'')
         self.assertEqual(len(p['rows']),4)
-        self.assertTrue(p['rows'][0].endswith('COIN3'));self.assertTrue(p['rows'][-1].endswith('COIN6'))
+        self.assertEqual([r.split()[-1] for r in p['rows']], ['COIN6','COIN5','COIN4','COIN3'])
         from server import compact_rows
         self.assertIn('+0.39% R0 FS OK→BG',p['rows'][0])
         self.assertEqual(p['rows'],self.app.render(self.app.selected(self.now)))
+
+    def test_display_order_preserves_history_and_declarative_fallback(self):
+        self.app.state['device'] = dict(version='radar-delivery-v5', permission='granted', matches=True)
+        self.settings(rows=2)
+        self.tick([message(3,self.now),message(1,self.now-90),message(2,self.now-60)])
+        p=self.sent[0]
+        self.assertEqual([r.split()[-1] for r in p['rows']], ['COIN3','COIN2'])
+        self.assertEqual(p['notification']['body'], '\n'.join(p['rows']))
+        self.assertEqual([r['coin'] for r in self.app.state['live']['history']], ['COIN1','COIN2','COIN3'])
+        for row, at in zip(p['rows'], [self.now,self.now-60]):
+            from datetime import timedelta
+            self.assertTrue(row.startswith(datetime.fromtimestamp(at,timezone(timedelta(hours=8))).strftime('%H:%M')))
+        self.tick([],self.now+70)
+        self.assertEqual(len(self.sent),1)
 
     def test_dedup_and_restart(self):
         rows=[message(1,self.now)]

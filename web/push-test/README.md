@@ -5,9 +5,51 @@ Production ordinary Web Push, configured from **BOT → 推送设置**. The exis
 pair token and increasing sequence are intentionally retained so the accepted
 iPhone installation continues working without reinstalling.
 
+## Android Web Push (2026-10-17)
+
+Android Chrome and Firefox can enable notifications directly in a normal browser
+tab or installed app. Open BOT → 推送设置 → 通知与推送码 → 开启通知 and allow
+notifications. Android code switching moves this browser's subscription and loads
+the destination settings; desktop switching still only manages settings. The
+existing one-phone-per-code constraint remains. iPhone still requires the
+installed Home Screen app.
+
+The API accepts HTTPS Apple endpoints plus exact production hosts
+`fcm.googleapis.com` (`/wp/`, `/fcm/send/`) and
+`updates.push.services.mozilla.com` (`/wpush/`, `/push/`, `/v1/`). Endpoint/key
+validation, subscription fingerprint CAS, profile isolation and worker v6 remain.
+Unsupported/insecure browsers, denied permissions and provider connectivity
+failures have actionable messages. Browser/system notification permission and
+access to the provider are required; not every Android browser is supported.
+
+Release `20261017-android-push-1792226291` preserves the actual prior release
+`20261017-bot-clipboard-1792226158`, including its compact settings, branding
+and clipboard modules. Backup:
+`/opt/radar-webpush-test/backup-20261017-android-push-1792226291`.
+Deployment used `deploy_settings.py --with-profiles`; only the push service
+restarted, 2,639 other files and existing subscriptions/settings were preserved.
+49 Python and 26 Node tests passed. An isolated real backend with simulated
+Android browser APIs verified enable, transfer, destination settings and binding;
+393px layout and live desktop settings/source status were checked. No production
+test code or diagnostic push was created. Physical Android lock-screen delivery
+has not been verified.
+
+References: [Web Push subscription](https://web.dev/articles/push-notifications-subscribing-a-user),
+[Chromium FCM endpoint change](https://chromium.googlesource.com/chromium/src/%2B/40644b8cf2b03be542976e7d1192c653e389c14e),
+[Mozilla Autopush](https://mozilla-services.github.io/autopush-rs/).
+
 ## Defaults and behavior
 
-- Real BOT messages, enabled, at most four entries per notification, oldest first.
+2026-10-17: 合并通知改为最新消息在最上面。只在 render 层按原始时间倒序，
+history/pending 保持原顺序；普通 worker 与声明式 fallback 共用 rows。
+已定点发布 `20261017-newest-first-1792204285`，保留此前全站UI。
+备份 `/opt/radar-webpush-test/backup-20261017-newest-first-1792204285` 包含旧 live.py、
+PWA fallback 和发布摘要。只重启推送服务，接收服务不变；原订阅和设置保持。
+回滚在维护锁内恢复上述两文件、切回 `20261017-ui-polish-1792203765` 并重启推送服务。
+32 Python / 12 Node 测试通过；线上健康、源连接、订阅与排序函数已核验，
+未额外发送测试通知，未声称亲眼验证 iPhone 锁屏。
+
+- Real BOT messages, enabled, at most four entries per notification, newest first (updated 2026-10-17).
 - A 60-second minimum interval between alerts; messages arriving during it are
   batched. No new eligible message means no periodic notification.
 - All R levels received by default, including R5+ and R1000+. Settings allow
@@ -42,6 +84,58 @@ four-row diagnostic, at most once per five minutes, after phone subscription
 identity has been checked.
 
 ## Settings and ownership
+
+2026-10-17 update: switching inside Android Chrome/Firefox or the installed
+iPhone PWA also transfers that phone's subscription. Desktop switching selects only
+the settings being managed and never remotely switches the phone. Each code's
+settings and sequence stay intact. An occupied destination is rejected rather
+than replacing another phone. A phone without a local subscription is prompted
+to enable notifications after selecting the code.
+
+`switch-subscription` authenticates the source bearer and destination token,
+validates the exact source subscription, and uses ordered account locks plus a
+private durable `subscription-transfer.json` journal. Recovery changes only
+subscription/device fields. Requests are idempotent, and the destination is
+paused until the configured phone reports a matching subscription. The browser
+retains `radar-phone-switch` until server, worker and device synchronization
+finish; uncertain responses can resume on reopening settings.
+
+Worker v6 persists profile/token together, separates latest-message and receipt
+storage by profile, and drops queued old-profile pushes. Old pages cannot
+silently reconfigure it to their stale token. v6 uses ordinary Web Push so an
+old-profile declarative OS fallback cannot bypass the worker's profile check;
+existing v5 devices retain their previous delivery format until upgrading.
+
+Released `20261017-phone-switch-1792207231` from
+`20261017-switch-code-1792206410` with `deploy_settings.py --with-worker`.
+Backups are in `/opt/radar-webpush-test/backup-20261017-phone-switch-1792207231`.
+Only the push service restarted; existing subscriptions/settings and 2,634
+other static files were preserved. 47 Python and 22 Node tests passed,
+including transfer recovery, occupied destinations, cross-profile sequence and
+receipt isolation. Browser acceptance used a real isolated backend with
+simulated phone APIs: switch, reload and switch-back passed. Live 393/320px UI
+passed; no extra production push or code creation and no physical iPhone
+lock-screen validation were performed. The previous management-only phone
+behavior described below is superseded by this update.
+
+2026-10-17: **推送设置 → 通知与推送码 → 切换推送码** accepts another
+eight-digit code and loads that profile's saved settings and revision. Saving
+affects only the selected profile. Both status and binding must load before the
+selection changes; failed switches preserve the previous selection and draft.
+Successful switches replace unsaved inputs, as explained beside the input.
+The selected management token persists as `radar-settings-token`; the original
+`radar-test-token`, worker configuration, device telemetry and subscription stay
+with the phone's original profile. Switching does not migrate notifications.
+Return to the original code to manage this phone's notification permission.
+
+Static release `20261017-switch-code-1792206410` preserves the concurrent compact
+settings overlay from `20261017-compact-settings-1792206185`, all 2,634 unrelated
+files and all production profile settings/subscriptions. No services restarted.
+Backup: `/opt/radar-webpush-test/backup-20261017-switch-code-1792206410`.
+All 16 Node settings/worker/protocol tests passed. Isolated real-backend browser
+checks covered two-code editing, switching back, refresh persistence and failed
+switch draft retention; live 393/320px layout checks passed. No production test
+codes or extra pushes were created; physical iPhone behavior was not tested.
 
 The BOT modal saves all settings to the server with a revision check. Pairing
 uses the existing owner code behind the site's existing access login, rate
@@ -109,6 +203,75 @@ not a claim to have remotely viewed the phone's lock screen. Earlier owner tests
 confirmed one remaining notification and the four-entry time-first layout.
 
 ## Mobile entry
+
+### Independent push plans and user-created codes (2026-10-17)
+
+Production now starts `Profiles` from `profiles.py`. Bearer tokens resolve to one
+`Profile` before **every** status, binding, settings, subscription, repair, device,
+receipt, verification and stop operation. A caller cannot choose another plan by
+adding a code/id to a request body. Same-code clients share that plan; different
+codes have separate settings, revision, subscription, history, pending queue,
+sequence, rate/backoff state and receipts. The source feed and VAPID credential
+cache are shared; bounded worker tasks prevent one slow/failing sender from
+serially blocking the next plan. A device endpoint can belong to only one code;
+cross-code subscription/repair is rejected without altering either plan.
+
+The legacy owner remains in `/var/lib/radar-webpush-test/state.json`, keeping its
+exact token, subscription, sequence and settings. `profiles.json` is a versioned,
+private registry; new accounts live in `profiles/<opaque-id>/state.json`. Do not
+print these files, check them into Git, or restore an old sequence during rollback.
+New codes use fresh defaults and do not inherit another plan's history or queue.
+
+“新建推送码” is available to users behind the existing website access policy,
+including those without a push code. POST `api/create-code` uses a random 128-bit
+request ID for idempotent retries, produces an independent random eight-digit
+code/token, and saves the plan before returning. Creation is capped at 20/hour
+and 100 total plans; failures/retries cannot reset or modify existing plans.
+Pair attempts are limited per visitor (trusted Cloudflare client IP at the
+loopback proxy boundary), so one visitor's invalid guesses do not lock out other
+visitors. Website access rules and the loopback-only listener remain unchanged.
+
+On an unpaired client, creating a code also binds the new plan. On an already
+paired client it displays the new code for another phone, preserving the current
+token, worker, saved settings and any form draft. Creating a code does not subscribe
+a phone or send a notification. The “开启通知” action is still user initiated.
+
+Use `python web/push-test/deploy_settings.py --with-profiles` for this bundle.
+It tests candidate modules, rehearses migration on private copies, verifies the
+running-code baseline, backs up affected files and state, clones the current web
+release, restarts only the push service, and verifies preserved bindings/settings.
+Rollback restores code/static files without rewinding live state. The old
+`--with-binding-api` flag is now an alias for this complete backend bundle.
+
+Release `20261017-push-profiles-1792205891`: 44 Python and 12 worker/protocol tests
+passed. Local browser acceptance used the real isolated backend with no sender:
+two codes kept distinct settings, disabling one did not change the other, and
+creation kept the current binding/draft. Production checks verified the original
+token/subscription/settings/revision/device state, active source, anonymous 401,
+the new button and 393/320px layout. No test push or extra production code was
+created. Physical iPhone notification permission/display was not re-tested.
+
+### Notification controls (2026-10-17)
+
+BOT settings now always show an “开启通知” control and display the existing
+owner's push code after pairing. The code is loaded only by the authenticated,
+`Cache-Control: no-store` GET `api/binding` endpoint, not routine status responses
+or static files. Existing paired devices do not need to enter the code again.
+On an installed iPhone PWA, the button requests permission in the click gesture
+and reuses or repairs the subscription through the existing fingerprint CAS.
+Healthy devices show “通知已开启”; Safari and other browsers show installation
+guidance. Enabling notifications preserves unsaved filter edits and does not
+change the separate “接收消息” preference.
+
+`python web/push-test/deploy_settings.py --with-binding-api` deploys this endpoint
+and settings assets with backup/rollback, restarts only the push service, and
+preserves subscription, settings, worker identity and the current website overlays.
+Without that flag the script remains a static settings update.
+Release `20261017-notification-controls-1792205078` passed 33 Python tests and
+12 worker/protocol tests; browser checks covered permission/default/denied,
+paired/unpaired and installed/browser states using synthetic fixtures, plus the
+live authenticated code display and 393/320px layouts. No diagnostic push was
+sent and no physical iPhone permission interaction was performed.
 
 The installed PWA keeps its existing id, start URL and worker scope at
 `/radar/push-test/`. nginx internally serves the current BOT page at that URL

@@ -1,47 +1,63 @@
 'use strict';
-const VERSION='radar-delivery-v5', KIND='radar-six-test', BASE='/radar/push-test/';
+const VERSION='radar-delivery-v6', KIND='radar-six-test', BASE='/radar/push-test/';
 const ASSETS=['','index.html','style.css','app.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 // Rendering must not depend on storage, notification enumeration or telemetry.
 function bounded(promise,ms,fallback){return new Promise(resolve=>{const timer=setTimeout(()=>resolve(fallback),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value)},()=>{clearTimeout(timer);resolve(fallback)})})}
 self.addEventListener('install',event=>event.waitUntil((async()=>{await bounded(caches.open(VERSION).then(cache=>cache.addAll(ASSETS.map(x=>BASE+x))),3000,null);await self.skipWaiting()})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.clients.claim();await report({stage:'worker-ready',version:VERSION})})()));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(BASE)||u.pathname.includes('/api/'))return;event.respondWith((async()=>{try{const r=await fetch(event.request);if(r.ok&&!r.redirected)return r;throw Error('offline')}catch{return (await (await caches.open(VERSION)).match(event.request,{ignoreSearch:true}))||Response.error()}})())});
-function db(){return new Promise((resolve,reject)=>{const r=indexedDB.open(KIND,1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function db(){return new Promise((resolve,reject)=>{let expired=false;const timer=setTimeout(()=>{expired=true;reject(Error('database_timeout'))},2500),r=indexedDB.open(KIND,1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>{clearTimeout(timer);if(expired)r.result.close();else resolve(r.result)};r.onerror=()=>{clearTimeout(timer);reject(r.error)}})}
 async function get(key){const d=await db();try{return await new Promise((resolve,reject)=>{const r=d.transaction('state').objectStore('state').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}finally{d.close()}}
-async function put(key,value){const d=await db();try{await new Promise((resolve,reject)=>{const t=d.transaction('state','readwrite');t.objectStore('state').put(value,key);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})}finally{d.close()}}
-let memoryToken='', memoryLatest=null, reportQueue=Promise.resolve();
+async function put(key,value){const d=await db();try{await new Promise((resolve,reject)=>{const t=d.transaction('state','readwrite'),timer=setTimeout(()=>{try{t.abort()}catch{}reject(Error('database_timeout'))},2500);t.objectStore('state').put(value,key);t.oncomplete=()=>{clearTimeout(timer);resolve()};t.onerror=t.onabort=()=>{clearTimeout(timer);reject(t.error||Error('database_aborted'))}})}finally{d.close()}}
+let memoryToken='', memoryProfile='', memoryLatest=null, reportQueue=Promise.resolve();
+const scoped=(key,profile)=>!profile||profile==='legacy'?key:key+':'+profile;
+async function identity(){const saved=await bounded(get('identity'),150,null);return {token:memoryToken||saved?.token||await bounded(get('token'),150,''),profile:memoryProfile||saved?.profile||''}}
 async function flush(){
- const token=memoryToken||await bounded(get('token'),200,'');if(!token)return;
- const records=await bounded(get('outbox'),200,[]);if(!records?.length)return;
- try{const response=await fetch(BASE+'api/receipt-batch',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({records}),redirect:'error',signal:AbortSignal.timeout(3000)});if(response.ok)await bounded(put('outbox',[]),200,null)}catch{/* Retain records for the next foreground synchronization. */}
+ const {token,profile}=await identity();if(!token)return;
+ const key=scoped('outbox',profile),records=await bounded(get(key),200,[]);if(!records?.length)return;
+ try{const response=await fetch(BASE+'api/receipt-batch',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({records}),redirect:'error',signal:AbortSignal.timeout(3000)});if(response.ok)await bounded(put(key,[]),200,null)}catch{/* Retain records for the next foreground synchronization. */}
 }
 function report(record,send=true){
  record={...record,eventAt:Math.floor(Date.now()/1000)};
  reportQueue=reportQueue.catch(()=>{}).then(async()=>{
-  const records=await bounded(get('outbox'),200,[])||[];
-  await bounded(put('lastReceipt',record),200,null);
-  await bounded(put('outbox',[...records,record].slice(-20)),200,null);
+  const {profile}=await identity(),key=scoped('outbox',profile);
+  const records=await bounded(get(key),200,[])||[];
+  await bounded(put(scoped('lastReceipt',profile),record),200,null);
+  await bounded(put(key,[...records,record].slice(-20)),200,null);
   if(send)await flush();
  });return reportQueue;
 }
 self.addEventListener('message',event=>{
- if(event.data?.type==='configure'&&/^[A-Za-z0-9_-]{32,100}$/.test(event.data.token||''))event.waitUntil((async()=>{
-  memoryToken=event.data.token;await bounded(put('token',memoryToken),200,null);
-  event.ports[0]?.postMessage({ok:true,version:VERSION});await report({stage:'foreground-sync',version:VERSION});
- })().catch(()=>event.ports[0]?.postMessage({ok:false})));
+ if(event.data?.type==='configure'&&/^[A-Za-z0-9_-]{32,100}$/.test(event.data.token||'')){
+  queue=queue.catch(()=>{}).then(async()=>{
+   await reportQueue.catch(()=>{});
+   const previous=await identity(),profile=event.data.profile||previous.profile||'legacy';
+   if(!/^(legacy|[a-f0-9]{32})$/.test(profile))throw Error('invalid_profile');
+   // An old page must never move a v6 worker back to a previously bound code.
+   if(!event.data.profile&&previous.token&&previous.token!==event.data.token)throw Error('stale_page');
+   await put('identity',{token:event.data.token,profile});
+   if(memoryProfile!==profile)memoryLatest=null;
+   memoryToken=event.data.token;memoryProfile=profile;
+   event.ports[0]?.postMessage({ok:true,version:VERSION});await report({stage:'foreground-sync',version:VERSION});
+  });event.waitUntil(queue.catch(()=>event.ports[0]?.postMessage({ok:false})));
+ }
 });
 async function display(payload){
  if(payload?.kind!==KIND||!Number.isSafeInteger(payload.seq)||!Array.isArray(payload.rows)||payload.rows.length<1||payload.rows.length>6||payload.rows.some(x=>typeof x!=='string'||x.length>130))throw Error('invalid_test_payload');
+ const {profile}=await identity();
+ // Discard old-code pushes still in the transport queue after a switch.
+ if(profile&&(payload.profile||'legacy')!==profile)return;
  const received=report({seq:payload.seq,run:payload.run,stage:'push-received',version:VERSION},false);
- const persisted=await bounded(get('latest'),150,null);
+ const latestKey=scoped('latest',profile||payload.profile);
+ const persisted=await bounded(get(latestKey),150,null);
  const last=memoryLatest&&(!persisted||memoryLatest.seq>persisted.seq)?memoryLatest:persisted;
  const current=last&&last.seq>payload.seq?last:payload;
  const found=await bounded(self.registration.getNotifications(),150,null);
- const before=(found||[]).filter(n=>n.data?.kind===KIND&&n.data?.seq!==current.seq);
- await self.registration.showNotification(current.title===''?'':'雷达 · 测试',{body:current.rows.join('\n'),tag:KIND+'-'+current.seq,icon:BASE+'icon-192.png',badge:BASE+'icon-192.png',silent:false,data:{kind:KIND,seq:current.seq,run:current.run,url:BASE}});
+ const before=(found||[]).filter(n=>n.data?.kind===KIND&&(n.data?.seq!==current.seq||n.data?.profile!==current.profile));
+ await self.registration.showNotification(current.title===''?'':'雷达 · 测试',{body:current.rows.join('\n'),tag:KIND+'-'+(current.profile||'legacy')+'-'+current.seq,icon:BASE+'icon-192.png',badge:BASE+'icon-192.png',silent:false,data:{kind:KIND,profile:current.profile,seq:current.seq,run:current.run,url:BASE}});
  memoryLatest=current;
  // Persist only after display succeeds; failed display must not supersede the last visible data.
- await bounded(put('latest',current),150,null);
+ await bounded(put(latestKey,current),150,null);
  let closeCalls=0;for(const notification of before){try{notification.close();closeCalls++}catch{}}
  const afterList=await bounded(self.registration.getNotifications(),150,null);
  await received;

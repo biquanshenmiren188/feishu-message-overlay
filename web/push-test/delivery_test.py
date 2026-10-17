@@ -50,7 +50,7 @@ class RecoveryTests(unittest.TestCase):
   self.settings()
   self.tick([],self.now+60)
   self.assertEqual(len(self.sent),2)
-  self.assertTrue(self.sent[-1]['rows'][-1].endswith('COIN2'))
+  self.assertTrue(self.sent[-1]['rows'][0].endswith('COIN2'))
  def test_phone_actual_subscription_mismatch_is_reported(self):
   self.app.device_status({'permission':'granted','subscriptionFingerprint':'a'*64,'version':'radar-delivery-v4'})
   self.assertFalse(self.app.public_status()['device']['matches'])
