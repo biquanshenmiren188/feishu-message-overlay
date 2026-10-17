@@ -57,3 +57,9 @@ test('never invents a route for announcements or a missing buy/sell direction',(
  assert.equal(mobileSummary({title:'公告风险',body:'BITGET 暂停提现'}).title,'公告风险');
  assert.equal(mobileSummary({title:'EPIC｜V2收敛',body:''}).title,'EPIC｜V2收敛');
 });
+test('spread row reads the observed spread without confusing yield, index or P75',()=>{
+ assert.equal(mobileSummary({body:'均值：净收益0.120%｜盘口差+0.316%｜指数差-0.054%\n盘口差P75：+0.378%'}).spread,'盘口差 +0.316%');
+ assert.equal(mobileSummary({body:'盘口差：-0.025%'}).spread,'盘口差 -0.025%');
+ assert.equal(mobileSummary({body:'盘口差0.000%'}).spread,'盘口差 0.000%');
+ for(const body of ['盘口差未知','盘口差P75：+0.378%','净收益+0.28%',''])assert.equal(mobileSummary({body}).spread,'');
+});

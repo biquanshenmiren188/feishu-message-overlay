@@ -26,7 +26,9 @@ const patches=[];
 function replace(before,after){if(js.split(after).length===2)return;if(js.split(before).length!==2)throw Error('Inspect changed bundle: '+before);js=js.replace(before,after);patches.push(before);}
 replace('if(i.append(c),!n&&P.matches){','if(i.append(c),!n){');
 replace('f.className="mobile-summary";','r.textContent=l.title||r.textContent,f.className="mobile-summary";');
-replace('{direction:l.direction,metrics:l.metrics,fees:l.fees,preview:l.preview,risk:l.risk}','{signals:l.signals,risk:l.warning?l.risk:""}');
+const summaryRows='{signals:l.signals,spread:l.spread,risk:l.warning?l.risk:""}';
+if(js.includes('{direction:l.direction,metrics:l.metrics,fees:l.fees,preview:l.preview,risk:l.risk}'))replace('{direction:l.direction,metrics:l.metrics,fees:l.fees,preview:l.preview,risk:l.risk}',summaryRows);
+else replace('{signals:l.signals,risk:l.warning?l.risk:""}',summaryRows);
 replace('function an(e,t){if(!P.matches||z)return;','function an(e,t){if(z)return;');
 // Retain the concurrently released scroll stability module and its identity.
 if(js.includes('from "./mobile-scroll.js"'))replace('from "./mobile-scroll.js"','from "/radar/scroll-stability-20261017/mobile-scroll.js"');

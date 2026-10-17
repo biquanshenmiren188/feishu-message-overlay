@@ -54,6 +54,7 @@ export function mobileSummary(message) {
   // Incomplete transfer data must not become a misleading all-open summary.
   const incomplete=transfer.some(s=>/未知|暂无|没有|无数据|未提供|无现货|未核验|待核验|不确定/u.test(s));
   const risk=warnings.length?(hasWarningLabel?'警告：':'注意：')+warnings.join('；'):states.length&&!incomplete?'充提：'+states.join(' / '):'';
-  return {title,signals:signals.join('\n'),direction,metrics:fields.slice(0,2).join(' · '),fees:fees.length?'资费 '+fees.join(' · '):'',risk,warning:warnings.length>0,
+  const spread=(fields.find(s=>s.startsWith('盘口差'))??'').replace(/^盘口差\s*[:：]?\s*/u,'盘口差 ');
+  return {title,signals:signals.join('\n'),spread,direction,metrics:fields.slice(0,2).join(' · '),fees:fees.length?'资费 '+fees.join(' · '):'',risk,warning:warnings.length>0,
     preview:direction||fields.length?'':lines.slice(0,3).join(' / ')};
 }
