@@ -54,6 +54,7 @@ await fs.mkdir(path.join(fixtureDir,'radar'),{recursive:true});
 await fs.cp(baselineDir,path.join(fixtureDir,'radar'),{recursive:true});
 for(const [name,text] of Object.entries(files)){const p=path.join(fixtureDir,'radar',name);await fs.mkdir(path.dirname(p),{recursive:true});await fs.writeFile(p,text);}
 const messages=[
+ {title:'',body:'🟣 Bitget 溢价指数突变提醒\n触发条件：达到涨跌档位线并持续 5 分钟\n1. 🟢 TOKENUSDT / USDT-FUTURES | 5分钟 close持续突降 | -0.3029 个百分点 | 档位 跌幅>=0.10 个百分点 | close -0.1884% -> -0.4913%\n2. 🔴 OTHERUSDT / USDT-FUTURES | 1分钟 close持续突升 | +0.4000 个百分点 | close -0.1000% -> 0.3000%'},
  {title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h\n质量: 样本少'},
  {title:'',body:'[Dex 套利监控命中][最高P3]\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\n净费率: -0.01%/h\n2. [P2][期现] SECOND | 多 OKX / 空 Binance\n净费率: +0.02%/h'},
  {title:'🚨🚨 强信号聚集｜EPIC｜3 组同时 ACTIVE',body:'涉及 4 所 · 已持续 0s\n最近180秒净收益均值最高 +0.28%\nR1｜SF｜买 GATE → 卖 BITGET\n净均 +0.28% · ACTIVE 1s\nR0｜FF｜买 BYBIT → 卖 BITGET\n净均 +0.17% · ACTIVE 59s\nR0｜FF｜买 BYBIT → 卖 BINANCE\n净均 +0.24% · ACTIVE 22s\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8\n官方原文：https://www.bitget.com/en/support/articles/12560603897724\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8\n⚠ 警告：Bybit 4h 成本：资金费计算方式不同'},
