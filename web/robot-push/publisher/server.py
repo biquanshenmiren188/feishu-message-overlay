@@ -62,13 +62,14 @@ class Publisher:
         path=self.directory/'feed.json'
         if path.exists():
             old=json.loads(path.read_text(encoding="utf-8"))
-            self.normal={m['id']:m for m in old.get('messages',[])[:100]}
+            self.normal={m['id']:m for m in old.get('messages',[])[:30]}
             self.pin=old.get('pinned');self.pin_group=old.get('pinnedGroupId','')
         self.write(False,time.time())
 
     def write(self,connected,now):
-        self.normal={k:m for k,m in self.normal.items() if now-utc(m['sentAt'])<1800}
-        ordered=sorted(self.normal.values(),key=lambda m:utc(m['sentAt']),reverse=True)[:100]
+        # Retain the last 30 accepted rows across idle periods and page reloads.
+        # Incoming-message freshness checks remain in the receiver/accept path.
+        ordered=sorted(self.normal.values(),key=lambda m:utc(m['sentAt']),reverse=True)[:30]
         data={'sourceConnected':connected,'updatedAt':iso(now),'messages':ordered,'pinned':self.pin,'pinnedGroupId':self.pin_group}
         encoded=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode()
         while len(encoded)>2*1024*1024 and ordered:
