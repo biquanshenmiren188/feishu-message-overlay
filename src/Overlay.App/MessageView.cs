@@ -51,6 +51,12 @@ public sealed class MessageView : Grid
     }
     private static Color Tone(string name)=>name switch
     {"blue"=>Color.FromRgb(62,105,184),"green"=>Color.FromRgb(54,132,91),"red"=>Color.FromRgb(184,73,75),"orange"=>Color.FromRgb(179,112,39),"purple"=>Color.FromRgb(130,86,165),"indigo"=>Color.FromRgb(91,94,174),"turquoise"=>Color.FromRgb(43,129,132),"yellow"=>Color.FromRgb(153,125,44),_=>Color.FromRgb(135,141,151)};
+    internal static string RankFirstTitle(string title)
+    {
+        var parts=title.Split(new[]{'｜','|'}).Select(part=>part.Trim()).ToArray();
+        var index=Array.FindIndex(parts,part=>System.Text.RegularExpressions.Regex.IsMatch(part,@"^R\d+\+?\s+[+−-]?\d+(?:\.\d+)?\s*%$",System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+        return index<=0?title:string.Join("｜",new[]{parts[index]}.Concat(parts.Where((_,i)=>i!=index)));
+    }
     private void Rebuild()
     {
         FullBody=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
@@ -65,7 +71,7 @@ public sealed class MessageView : Grid
             var body=Block(message.Text,2);body.Margin=new Thickness(0,0,3,0);row.Children.Add(body);var clock=Clock(message);SetColumn(clock,1);row.Children.Add(clock);outer.Child=row;return;
         }
         var stack=new StackPanel();outer.Child=stack;
-        var displayTitle=compact?summary.Title:card.Title;
+        var displayTitle=RankFirstTitle(compact?summary.Title:card.Title);
         if(displayTitle.Length>0)
         {
             var color=Tone(MessageCard.SafeTone(card.HeaderTone));var light=Color.FromRgb((byte)(255-(255-color.R)*.12),(byte)(255-(255-color.G)*.12),(byte)(255-(255-color.B)*.12));
@@ -77,15 +83,7 @@ public sealed class MessageView : Grid
         else {var clock=Clock(message);clock.HorizontalAlignment=HorizontalAlignment.Right;stack.Children.Add(clock);}
         if(compact)
         {
-            if(summary.Spread.Length>0)
-            {
-                var spread=new Grid{VerticalAlignment=VerticalAlignment.Center};
-                spread.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});spread.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-                var text=Block(summary.Spread);text.VerticalAlignment=VerticalAlignment.Center;text.Margin=new Thickness(0,0,8,0);spread.Children.Add(text);
-                var inlineActions=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center};SetColumn(inlineActions,1);spread.Children.Add(inlineActions);
-                foreach(var action in card.Buttons.Where(a=>a.Label=="查看雷达")){var button=ActionButton(action);button.Margin=new Thickness(4,0,0,0);inlineActions.Children.Add(button);}
-                stack.Children.Add(spread);
-            }
+            if(summary.Spread.Length>0)stack.Children.Add(Block(summary.Spread));
             if(summary.Signals.Length>0)stack.Children.Add(Block(summary.Signals));
             if(summary.Warning){var warning=Block(summary.Risk);warning.Foreground=new SolidColorBrush(Color.FromRgb(163,62,37));stack.Children.Add(warning);}
             if(card.Body.Length>0)
@@ -100,10 +98,10 @@ public sealed class MessageView : Grid
         else if(card.Body.Length>0)stack.Children.Add(Block(card.Body,markdown:card.IsMarkdown));
         if(card.Buttons.Count>0)
         {
-            var buttons=new WrapPanel{Margin=new Thickness(0,3,0,0)};
-            foreach(var action in card.Buttons.Where(a=>!(compact && summary.Spread.Length>0 && a.Label=="查看雷达")))
+            var buttons=new WrapPanel{Margin=new Thickness(0,3,0,0),HorizontalAlignment=HorizontalAlignment.Right};
+            foreach(var action in card.Buttons)
             {
-                buttons.Children.Add(ActionButton(action));
+                var button=ActionButton(action);button.Margin=new Thickness(4,0,0,0);buttons.Children.Add(button);
             }
             if(buttons.Children.Count>0)stack.Children.Add(buttons);
         }

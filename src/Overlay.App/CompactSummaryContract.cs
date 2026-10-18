@@ -45,14 +45,12 @@ internal static class CompactSummaryContract
                 window.UpdateLayout();Check(view.IsExpanded && view.FullBody!.IsVisible,"click message expands original text");
                 surface.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,System.Windows.Input.Key.Enter){RoutedEvent=UIElement.KeyDownEvent});
                 Check(!view.IsExpanded,"keyboard collapses original text");
-                var summary=CompactMessage.From(view.Message.Card.Title,view.Message.Card.Body);
-                var radarButton=buttons.Single(b=>(string)b.Content=="查看雷达");
-                if(summary.Spread.Length>0)
-                {
-                    Check(radarButton.Parent is WrapPanel actionsRow && actionsRow.Parent is Grid line && Grid.GetColumn(actionsRow)==1 && line.Children[0] is TextBlock spread && MessageText.GetContent(spread)==summary.Spread,"radar action sits in right column of spread row");
-                    var row=(Grid)((FrameworkElement)radarButton.Parent).Parent;
-                    Check(Math.Abs(radarButton.TranslatePoint(new Point(radarButton.ActualWidth,0),row).X-row.ActualWidth)<2,"radar action aligns to far right of spread row");
-                }
+                window.UpdateLayout();
+                var row=(WrapPanel)buttons[0].Parent;
+                var stack=(StackPanel)row.Parent;
+                Check(buttons.All(b=>b.Parent==row) && stack.Children[stack.Children.Count-1]==row,"all original actions share the final message row");
+                Check(row.HorizontalAlignment==HorizontalAlignment.Right && Math.Abs(row.TranslatePoint(new Point(row.ActualWidth,0),stack).X-stack.ActualWidth)<2,"actions align to bottom-right");
+                Check(Children<TextBlock>(view).Any(t=>t.Text==MessageView.RankFirstTitle(CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body).Title)),"rank and value lead rendered title");
             }
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);

@@ -16,3 +16,6 @@
 .message-head .message-title{font-weight:800;}
 .message .message-head[data-tone=grey] .message-title,
 .message .message-head:not([data-tone]) .message-title{color:#111;}
+
+/* Keep every original action together at the bottom-right of its message. */
+.message>.actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px;margin:3px 0 0;}
