@@ -10,4 +10,8 @@
 
 验证：31项网页摘要测试、95组网页/桌面共享样例、570项核心检查；WPF专项覆盖纯文本/卡片、借卖、未知格式、无数值多组、点击展开收起以及14次原始动作URL。隔离WPF截图使用虚构数据。当前31条接收记录（30条普通和1条置顶）格式审计中含3条DEX、1条借卖，修复后未出现未识别DEX路线或预期摘要外的全文回退。真实数据仅在任务私有工作目录检查，不提交仓库。
 
-部署记录待发布后补充；不自动合并PR。
+功能源码 `d95b3189fe728752235de8c0174c0ed50efb3700`。网页 release `20261017-summary-risk-1792335946`，bundle `bot-summary-874b3c8416fa.js`；增量发布保留2936个其他静态文件及服务PID，PWA fallback同步。回滚资料 `/opt/funding-radar-web/backups/20261017-summary-risk-1792335946`。
+
+桌面通过现有更新器安装 v2026.10.18.11，健康回执与运行诊断确认 Connected、字号13；全部appearance偏好字段、storage指针及私有配置哈希保持一致。11项全高专项通过。
+
+正式Chrome页面已核对用户截图对应的借卖消息：列表只显示等级、币种、FS方向、盘口差和质量；点击可打开完整原文及原链接，返回恢复摘要。未做实体手机验收。证据保存在本任务 outputs/borrow-summary-live.png、desktop-installation.json、web-deployment.json。不自动合并PR。
