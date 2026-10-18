@@ -18,16 +18,17 @@ public sealed class OpportunityColumnsPanel : Panel
         var board=ancestor as OpportunityBoard;
         var height=Math.Max(120,board?.ActualHeight??600);
         var maxColumns=board?.MaximumColumns??1;
-        positions.Clear();double y=0,maxHeight=0;var column=0;
+        positions.Clear();double y=0,maxHeight=0,totalHeight=0;var column=0;
         foreach(UIElement child in InternalChildren)
         {
             child.Measure(new Size(CardWidth,double.PositiveInfinity));
             var itemHeight=Math.Ceiling(child.DesiredSize.Height);
+            totalHeight+=itemHeight;
             if(y>0 && y+itemHeight>height && column+1<maxColumns){column++;y=0;}
             positions.Add(new Rect(column*CardWidth,y,CardWidth,itemHeight));
             y+=itemHeight;maxHeight=Math.Max(maxHeight,y);
         }
-        columns=column+1;board?.ReportColumns(columns);
+        columns=column+1;board?.ReportSingleColumnHeight(totalHeight);board?.ReportColumns(columns);
         return new Size(columns*CardWidth,maxHeight);
     }
     protected override Size ArrangeOverride(Size finalSize)

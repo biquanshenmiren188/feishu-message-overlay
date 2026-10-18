@@ -58,7 +58,10 @@ public partial class MainWindow
         var limit=initialFit?work.Height:Math.Max(MinHeight,ActualHeight);
         if(App.SmokeMode && contractFitHeight is {} contractHeight)limit=Math.Min(limit,contractHeight);
         var preferred=FontScale.Value;fitPasses=0;
-        var key=string.Join("|",displayed.Select(m=>m.Id))+"|"+pinnedLatest?.Id+"|"+width.ToString("F2")+"|"+pinWidth.ToString("F2")+"|"+preferred+"|"+MessageList.FontFamily.Source+"|"+limit+"|"+initialFit;
+        // Compact text must not shorten the card column's available height.
+        // Grow down to the monitor limit before distributing cards to the left.
+        var cardsHeight=OpportunityArea.Visibility==Visibility.Visible?opportunityBoard.SingleColumnHeight+2:0;
+        var key=string.Join("|",displayed.Select(m=>m.Id))+"|"+pinnedLatest?.Id+"|"+width.ToString("F2")+"|"+pinWidth.ToString("F2")+"|"+preferred+"|"+MessageList.FontFamily.Source+"|"+limit+"|"+initialFit+"|"+cardsHeight;
         if(key==lastFitKey)return;
         lastFitKey=key;
         (double regular,double pinned,double total) Measure(double size)
@@ -90,7 +93,7 @@ public partial class MainWindow
         if(initialFit)
         {
             fittingWindow=true;
-            try{Height=Math.Clamp(measured.total,MinHeight,Math.Max(MinHeight,work.Height));}
+            try{Height=Math.Clamp(Math.Max(measured.total,cardsHeight),MinHeight,Math.Max(MinHeight,work.Height));}
             finally{fittingWindow=false;}
         }
         FontScale.ToolTip=$"设定字号 {preferred:0.#}，当前显示 {MessageList.FontSize:0.##}；最低 {MinimumFitFontSize}"+(fitStatus=="manual_overflow_at_minimum"?"。内容超出屏幕，请手动查看；不会自动分段翻页。":"。按当前内容自动缩小显示，设定字号保留。");

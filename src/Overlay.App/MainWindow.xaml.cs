@@ -70,6 +70,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         OpportunityArea.Child=opportunityBoard;
         opportunityBoard.ColumnsChanged+=ResizeOpportunityColumns;
+        opportunityBoard.ContentHeightChanged+=()=>RequestContentLayout();
         opportunityTimer.Tick+=(_,_)=>{if(source is CloudMessageSource cloud)opportunityBoard.Update(cloud.Opportunities,cloud.TransportConnected,DateTimeOffset.UtcNow,IsVisible);};
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
