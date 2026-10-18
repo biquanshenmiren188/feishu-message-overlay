@@ -1,0 +1,863 @@
+[
+  {
+    "name": "premium alert shows instrument, observed decline and endpoints instead of trigger thresholds",
+    "input": {
+      "title": "",
+      "body": "🟣 Bitget 溢价指数突变提醒\n本轮触发：1 条\n触发条件：达到涨跌档位线并持续 5 分钟\n二次确认：上涨需 premium>0.2000%；下跌需 premium<-0.2000%\n1. 🟢 TOKENUSDT / USDT-FUTURES | 5分钟 close持续突降 | -0.3029 个百分点 | 档位 跌幅>=0.10 个百分点 | close -0.1884% -> -0.4913% | high/low -0.1884% / -0.4913% | 二次确认 盘口确认 0.3810%"
+    },
+    "expected": {
+      "title": "🟣 BG 溢价指数突变提醒",
+      "signals": "TOKENUSDT · 5分钟下跌 0.3029 个百分点\n溢价指数 -0.1884% → -0.4913%",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "premium batches preserve each instruments own signed change and source precision",
+    "input": {
+      "title": "Bitget 溢价指数突变提醒",
+      "body": "1. 🔴 FIRSTUSDT / USDT-FUTURES | 1分钟 close持续突升 | +0.4000 个百分点 | close -0.1000% → 0.3000%\n2. 🟢 SECONDUSDT / USDT-FUTURES | 5分钟 close持续突降 | −0.2500 个百分点 | close 0.1000% -> -0.1500%\n3. ZEROUSDT / USDT-FUTURES | 1分钟 close | 0.0000 个百分点 | close 0.0000% -> 0.0000%"
+    },
+    "expected": {
+      "title": "BG 溢价指数突变提醒",
+      "signals": "FIRSTUSDT · 1分钟上涨 0.4000 个百分点\n溢价指数 -0.1000% → 0.3000%\nSECONDUSDT · 5分钟下跌 0.2500 个百分点\n溢价指数 0.1000% → -0.1500%\nZEROUSDT · 1分钟持平 0.0000 个百分点\n溢价指数 0.0000% → 0.0000%",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "premium missing values never borrow thresholds, high-low values or another instruments data",
+    "input": {
+      "title": "BG 溢价指数突变提醒",
+      "body": "检查窗口：1分钟, 5分钟\n1. FIRSTUSDT / USDT-FUTURES | 5分钟 close持续突降 | 未知 | 档位 跌幅>=0.10 个百分点 | high/low 0.4% / -0.4%\n2. SECONDUSDT / USDT-FUTURES | 1分钟 close持续突升 | +0.2000 个百分点"
+    },
+    "expected": {
+      "title": "BG 溢价指数突变提醒",
+      "signals": "FIRSTUSDT · 5分钟 close持续突降\nSECONDUSDT · 1分钟上涨 0.2000 个百分点",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "premium missing values never borrow thresholds, high-low values or another instruments data",
+    "input": {
+      "title": "普通消息",
+      "body": "1. TOKEN / USDT-FUTURES | 5分钟 close | -0.3 个百分点"
+    },
+    "expected": {
+      "title": "普通消息",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "untitled DEX opportunities use the instrument, direction and original P rank",
+    "input": {
+      "title": "",
+      "body": "[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%\n净费率: 0.0228%/h\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "盘口差 +0.3759% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX batches retain each coin, route and own spread without taking config blacklist coins",
+    "input": {
+      "body": "[Dex 套利监控命中][最高P9]\nsymbol黑名单: BLACKLIST\n1. [P3][现期] FIRST | 多 Gate / 空 Bitget\ntake: -0.015% / +0.022%，30m +0.9%\n净费率: -0.01%/h\n质量: 样本少\n2. [P9][期现] SECOND | 多 OKX / 空 Binance\ntake: 0.32% / 0.45%\n净费率: +0.02%/h\n3. [P2][FF] THIRD | 多 Aster / 空 Bybit"
+    },
+    "expected": {
+      "title": "DEX套利｜FIRST、SECOND、THIRD｜3组",
+      "signals": "FIRST｜SF｜GT→BG｜P3 · 盘口差 -0.015% · 质量：样本少\nSECOND｜FS｜OK→BN｜P9 · 盘口差 +0.32%\nTHIRD｜FF｜AS→BY｜P2",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "configuration maximum age is hidden but actual delay warnings remain",
+    "input": {
+      "body": "价格最大延迟: 45s"
+    },
+    "expected": {
+      "title": "",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "configuration maximum age is hidden but actual delay warnings remain",
+    "input": {
+      "body": "价格最大延迟: 45s\n警告：TOKEN 价格已延迟90秒"
+    },
+    "expected": {
+      "title": "警告：TOKEN 价格已延迟90秒",
+      "signals": "",
+      "spread": "",
+      "risk": "警告：TOKEN 价格已延迟90秒",
+      "warning": true
+    }
+  },
+  {
+    "name": "configuration maximum age is hidden but actual delay warnings remain",
+    "input": {
+      "body": "TOKEN 价格延迟，暂不可用"
+    },
+    "expected": {
+      "title": "TOKEN 价格延迟，暂不可用",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：TOKEN 价格延迟，暂不可用",
+      "warning": true
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: +0.3759% / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "盘口差 +0.3759%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.0000% / 0.1%"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "盘口差 +0.0000%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: −0.2% / 0.5%"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "盘口差 −0.2%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\n盘口差: -0.15%\n净费率: 0.0228%/h"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "盘口差 -0.15%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 未知 / 0.4298%，30m 0.2989% (7)\n净费率: 0.0228%/h"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX summaries show opening spread only and never substitute a fee, reverse quote or average",
+    "input": {
+      "body": "1. [P3][期期] TOKEN | 多 Binance / 空 Aster\n净费率: 0.0228%/h\n盘口差P75: +0.6%"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "unknown untitled messages use meaningful original context instead of a generic heading",
+    "input": {
+      "body": "系统自定义提醒\n检查原文"
+    },
+    "expected": {
+      "title": "系统自定义提醒",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "unknown untitled messages use meaningful original context instead of a generic heading",
+    "input": {
+      "title": "机器人消息",
+      "body": "TOKEN 合约即将下架\n其他细节"
+    },
+    "expected": {
+      "title": "TOKEN 合约即将下架",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：TOKEN 合约即将下架",
+      "warning": true
+    }
+  },
+  {
+    "name": "unknown untitled messages use meaningful original context instead of a generic heading",
+    "input": {
+      "body": "symbol黑名单: BLACKLIST\n价格最大延迟: 45s"
+    },
+    "expected": {
+      "title": "",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "unknown untitled messages use meaningful original context instead of a generic heading",
+    "input": {
+      "title": "正常标题",
+      "body": "普通正文"
+    },
+    "expected": {
+      "title": "正常标题",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "extracts only observed fields, with direction and exchange fee context",
+    "input": {
+      "body": "买 OKX 永续 → 卖 Bybit 永续\n均值：净收益+0.29% | 盘口差+0.505% | 资金费差+0.015%\nOKX: 资费+0.338%/4h | 市值\nBybit: 资费+0.001%/1h\nOKX：充开提开\nBybit：充开提开"
+    },
+    "expected": {
+      "title": "买 OK 永续 → 卖 BY 永续",
+      "signals": "",
+      "spread": "盘口差 +0.505%",
+      "risk": "充提：充开提开",
+      "warning": false
+    }
+  },
+  {
+    "name": "concrete warnings override any open state",
+    "input": {
+      "body": "充开提开\n充值关闭"
+    },
+    "expected": {
+      "title": "充开提开",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：充值关闭",
+      "warning": true
+    }
+  },
+  {
+    "name": "concrete warnings override any open state",
+    "input": {
+      "body": "充开提开\n不支持该网络"
+    },
+    "expected": {
+      "title": "充开提开",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：不支持该网络",
+      "warning": true
+    }
+  },
+  {
+    "name": "concrete warnings override any open state",
+    "input": {
+      "body": "充开提开\n暂停提现"
+    },
+    "expected": {
+      "title": "充开提开",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：暂停提现",
+      "warning": true
+    }
+  },
+  {
+    "name": "concrete warnings override any open state",
+    "input": {
+      "body": "充开提开\n警告：资金费计算方式不同"
+    },
+    "expected": {
+      "title": "充开提开",
+      "signals": "",
+      "spread": "",
+      "risk": "警告：资金费计算方式不同",
+      "warning": true
+    }
+  },
+  {
+    "name": "unknown types expose original prefix without invented yield or status",
+    "input": {
+      "body": "系统自定义提醒\n不要自动交易\n检查原文\nmore"
+    },
+    "expected": {
+      "title": "系统自定义提醒",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty and malformed fields never manufacture numbers",
+    "input": {
+      "body": "净收益未知\n资金费率不可用"
+    },
+    "expected": {
+      "title": "净收益未知",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：资金费率不可用",
+      "warning": true
+    }
+  },
+  {
+    "name": "EPIC delisting preserves instrument, event, date and timezone",
+    "input": {
+      "body": "买 Gate 现货 → 卖 Bitget 永续\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8\n官方原文：https://www.bitget.com/en/support/articles/12560603897724\n180秒：有效179/180｜最长未知1秒\nBitget：该平台无现货，暂无充提数据"
+    },
+    "expected": {
+      "title": "买 GT 现货 → 卖 BG 永续",
+      "signals": "",
+      "spread": "",
+      "risk": "警告：BG EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8",
+      "warning": true
+    }
+  },
+  {
+    "name": "SPACE sampling gaps and missing transfer data do not produce an alert or all-open claim",
+    "input": {
+      "body": "买 OKX 永续 → 卖 Binance 永续\n最长未知4秒\nOKX：充开提开\nBinance：该平台无现货，暂无充提数据"
+    },
+    "expected": {
+      "title": "买 OK 永续 → 卖 BN 永续",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": ""
+    },
+    "expected": {
+      "title": "",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "没有"
+    },
+    "expected": {
+      "title": "没有",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "暂无"
+    },
+    "expected": {
+      "title": "暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "暂无数据"
+    },
+    "expected": {
+      "title": "暂无数据",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "暂无风险"
+    },
+    "expected": {
+      "title": "暂无风险",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "无"
+    },
+    "expected": {
+      "title": "无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "未知 / 暂无"
+    },
+    "expected": {
+      "title": "未知 / 暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "没有.暂无"
+    },
+    "expected": {
+      "title": "没有.暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "⚠"
+    },
+    "expected": {
+      "title": "⚠",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "警告：暂无"
+    },
+    "expected": {
+      "title": "警告：暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "empty warning labels and placeholder combinations are omitted",
+    "input": {
+      "body": "注意：没有"
+    },
+    "expected": {
+      "title": "注意：没有",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "marked placeholders are omitted",
+    "input": {
+      "body": "⚠️ 警告：没有"
+    },
+    "expected": {
+      "title": "⚠️ 警告：没有",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "marked placeholders are omitted",
+    "input": {
+      "body": "⚠️ 警告：暂无"
+    },
+    "expected": {
+      "title": "⚠️ 警告：暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "marked placeholders are omitted",
+    "input": {
+      "body": "⚠️ 警告：未知 / 暂无"
+    },
+    "expected": {
+      "title": "⚠️ 警告：未知 / 暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "marked placeholders are omitted",
+    "input": {
+      "body": "⚠️ 警告：没有.暂无"
+    },
+    "expected": {
+      "title": "⚠️ 警告：没有.暂无",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "marked placeholders are omitted",
+    "input": {
+      "body": "⚠️ 警告：无风险"
+    },
+    "expected": {
+      "title": "⚠️ 警告：无风险",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "unmarked delisting and transfer suspension retain full context",
+    "input": {
+      "body": "BITGET EPICUSDT 将下架合约 · 10/20 15:00 UTC+8"
+    },
+    "expected": {
+      "title": "BG EPICUSDT 将下架合约 · 10/20 15:00 UTC+8",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：BG EPICUSDT 将下架合约 · 10/20 15:00 UTC+8",
+      "warning": true
+    }
+  },
+  {
+    "name": "unmarked delisting and transfer suspension retain full context",
+    "input": {
+      "body": "BITGET ILY 在 BASE 网络将暂停充值 · 10/17 16:55 UTC+8"
+    },
+    "expected": {
+      "title": "BG ILY 在 BASE 网络将暂停充值 · 10/17 16:55 UTC+8",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：BG ILY 在 BASE 网络将暂停充值 · 10/17 16:55 UTC+8",
+      "warning": true
+    }
+  },
+  {
+    "name": "deduplicates warnings while retaining independent warnings",
+    "input": {
+      "body": "警告：Bitget 将下架 EPIC\n⚠ 警告：Bitget 将下架 EPIC\n警告：Bybit 4h 成本计算不同\n注意：暂无"
+    },
+    "expected": {
+      "title": "警告：BG 将下架 EPIC",
+      "signals": "",
+      "spread": "",
+      "risk": "警告：BG 将下架 EPIC；BY 4h 成本计算不同",
+      "warning": true
+    }
+  },
+  {
+    "name": "warning lookup metadata is omitted but exchange and status remain",
+    "input": {
+      "body": "Gate【官方｜16:53:39｜有现货】：充关/提关 ETH"
+    },
+    "expected": {
+      "title": "GT【官方｜16:53:39｜有现货】：充关/提关 ETH",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：GT：充关/提关 ETH",
+      "warning": true
+    }
+  },
+  {
+    "name": "keeps a following timestamp line when the source wraps its warning",
+    "input": {
+      "body": "⚠ 警告：BITGET EPICUSDT 将下架合约 · 10/20\n15:00 UTC+8"
+    },
+    "expected": {
+      "title": "⚠ 警告：BG EPICUSDT 将下架合约 · 10/20",
+      "signals": "",
+      "spread": "",
+      "risk": "警告：BG EPICUSDT 将下架合约 · 10/20 15:00 UTC+8",
+      "warning": true
+    }
+  },
+  {
+    "name": "replaces V2 convergence with the observed buy-to-sell exchange route",
+    "input": {
+      "title": "EPIC｜SF｜V2收敛｜R0 +0.37%",
+      "body": "买 Gate 现货 → 卖 Bitget 永续"
+    },
+    "expected": {
+      "title": "EPIC｜SF｜GT→BG｜R0 +0.37%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "replaces V2 convergence with the observed buy-to-sell exchange route",
+    "input": {
+      "title": "SPACE｜FF｜V2收敛｜R5+ +0.44%",
+      "body": "买 OKX 永续 → 卖 Binance 永续"
+    },
+    "expected": {
+      "title": "SPACE｜FF｜OK→BN｜R5+ +0.44%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "replaces V2 convergence with the observed buy-to-sell exchange route",
+    "input": {
+      "title": "SPACE｜FF｜V2收敛｜R5+ +0.44%",
+      "body": "买 Bybit 永续 → 卖 Aster 永续"
+    },
+    "expected": {
+      "title": "SPACE｜FF｜BY→AS｜R5+ +0.44%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "replaces V2 convergence with the observed buy-to-sell exchange route",
+    "input": {
+      "title": "SPACE｜FF｜V2收敛｜R5+ +0.44%",
+      "body": "买 Gate.io 永续 → 卖 Hyperliquid 永续"
+    },
+    "expected": {
+      "title": "SPACE｜FF｜GT→HY｜R5+ +0.44%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "replaces V2 convergence with the observed buy-to-sell exchange route",
+    "input": {
+      "title": "SPACE｜FF｜V2收敛｜R5+ +0.44%",
+      "body": "买 HL 永续 → 卖 Bitget 永续"
+    },
+    "expected": {
+      "title": "SPACE｜FF｜HY→BG｜R5+ +0.44%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "strong signals retain each route and its own yield, without activity statistics",
+    "input": {
+      "title": "🚨🚨 强信号聚集｜EPIC｜3 组同时 ACTIVE",
+      "body": "涉及4所 · 已持续0s\n最近180秒净收益均值最高 +0.28%\nR1｜SF｜买 GATE → 卖 BITGET\n净均 +0.28% · ACTIVE 1s\nR0｜FF｜买 BYBIT → 卖 BITGET\n净均 +0.17% · ACTIVE 59s\nR0｜FF｜买 BYBIT → 卖 BINANCE\n净均 +0.24% · ACTIVE 22s\n⚠ 警告：BITGET EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8"
+    },
+    "expected": {
+      "title": "强信号｜EPIC｜3组",
+      "signals": "R1｜SF｜GT→BG｜+0.28%\nR0｜FF｜BY→BG｜+0.17%\nR0｜FF｜BY→BN｜+0.24%",
+      "spread": "",
+      "risk": "警告：BG EPICUSDT 将下架合约及相关服务 · 10/20 15:00 UTC+8",
+      "warning": true
+    }
+  },
+  {
+    "name": "strong signals accept inline yields and do not borrow another route yield",
+    "input": {
+      "title": "强信号｜TOKEN",
+      "body": "R6+｜FF｜买 OKX → 卖 BINANCE 净均 -0.12% · ACTIVE 7s\nR1｜SF｜买 GATE → 卖 BITGET\nR0｜FF｜买 BYBIT → 卖 BINANCE 净均 +0.24%"
+    },
+    "expected": {
+      "title": "强信号｜TOKEN｜3组",
+      "signals": "R6+｜FF｜OK→BN｜-0.12%\nR1｜SF｜GT→BG\nR0｜FF｜BY→BN｜+0.24%",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "never invents a route for announcements or a missing buy/sell direction",
+    "input": {
+      "title": "公告风险",
+      "body": "BITGET 暂停提现"
+    },
+    "expected": {
+      "title": "公告风险",
+      "signals": "",
+      "spread": "",
+      "risk": "注意：BG 暂停提现",
+      "warning": true
+    }
+  },
+  {
+    "name": "never invents a route for announcements or a missing buy/sell direction",
+    "input": {
+      "title": "EPIC｜V2收敛",
+      "body": ""
+    },
+    "expected": {
+      "title": "EPIC｜V2收敛",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "均值：净收益0.120%｜盘口差+0.316%｜指数差-0.054%\n盘口差P75：+0.378%"
+    },
+    "expected": {
+      "title": "均值：净收益0.120%｜盘口差+0.316%｜指数差-0.054%",
+      "signals": "",
+      "spread": "盘口差 +0.316%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "盘口差：-0.025%"
+    },
+    "expected": {
+      "title": "盘口差：-0.025%",
+      "signals": "",
+      "spread": "盘口差 -0.025%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "盘口差0.000%"
+    },
+    "expected": {
+      "title": "盘口差0.000%",
+      "signals": "",
+      "spread": "盘口差 0.000%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "盘口差未知"
+    },
+    "expected": {
+      "title": "盘口差未知",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "盘口差P75：+0.378%"
+    },
+    "expected": {
+      "title": "盘口差P75：+0.378%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": "净收益+0.28%"
+    },
+    "expected": {
+      "title": "净收益+0.28%",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "spread row reads the observed spread without confusing yield, index or P75",
+    "input": {
+      "body": ""
+    },
+    "expected": {
+      "title": "",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  }
+]
