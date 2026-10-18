@@ -7,8 +7,12 @@
 .compact-card .message-head{margin-bottom:0;}
 .compact-card .detail-hint{font-size:10px;color:#007552;white-space:nowrap;}
 .compact-card .summary-signals{margin:2px 0;white-space:pre-line;line-height:1.3;font-size:12px;overflow-wrap:anywhere;}
-.compact-card .summary-spread{margin:2px 0;font-size:12px;line-height:1.3;font-weight:600;}
+.compact-card .summary-spread{margin:2px 0;font-size:12px;line-height:1.3;font-weight:400;}
 .compact-card .summary-risk[data-warning=true]{
  margin:2px 0;white-space:normal;overflow:visible;text-overflow:clip;
  overflow-wrap:anywhere;line-height:1.3;color:#a33e25;font-size:12px;font-weight:600;
 }
+/* Match desktop headings; retain the colors of explicit alert categories. */
+.message-head .message-title{font-weight:800;}
+.message .message-head[data-tone=grey] .message-title,
+.message .message-head:not([data-tone]) .message-title{color:#111;}

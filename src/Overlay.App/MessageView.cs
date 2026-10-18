@@ -71,7 +71,7 @@ public sealed class MessageView : Grid
             var color=Tone(MessageCard.SafeTone(card.HeaderTone));var light=Color.FromRgb((byte)(255-(255-color.R)*.12),(byte)(255-(255-color.G)*.12),(byte)(255-(255-color.B)*.12));
             var header=new Border{Background=new SolidColorBrush(light),CornerRadius=new CornerRadius(2),Padding=new Thickness(5,3,4,3),Margin=new Thickness(0,0,0,3)};
             var row=new Grid();row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-            var titleColor=MessageCard.SafeTone(card.HeaderTone)=="grey"?Color.FromRgb(65,72,82):color;
+            var titleColor=MessageCard.SafeTone(card.HeaderTone)=="grey"?Color.FromRgb(17,17,17):color;
             var title=new TextBlock{Text=displayTitle,Foreground=new SolidColorBrush(titleColor),FontWeight=FontWeights.ExtraBold,TextWrapping=TextWrapping.Wrap};row.Children.Add(title);var clock=Clock(message);clock.Foreground=new SolidColorBrush(Color.FromRgb(112,112,112));SetColumn(clock,1);row.Children.Add(clock);header.Child=row;stack.Children.Add(header);
         }
         else {var clock=Clock(message);clock.HorizontalAlignment=HorizontalAlignment.Right;stack.Children.Add(clock);}
