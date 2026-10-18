@@ -17,3 +17,5 @@ manifest 只改变 icons 的版本化 URL，保留 id、start_url、scope、名�
 ## 紧凑透明页头
 
 品牌 CSS 引用升级为 `20261018-treasure2`，由主站共享透明底元宝与字标，手机 138×42px，去除深色方框。此次 header-only 发布保留已选定的网站及手机图标，不改 manifest、worker 或订阅；仅增量更新现有线上 HTML 的品牌引用。
+
+紧凑版已发布至 `20261018-treasure-compact-1792294515`，源码主站 `34ae109`、PWA `103f1c8`。保留其余 2,869 个静态文件、服务 PID 与安装身份。线上 CSS/SVG 返回 200 且 SHA-256 匹配；市场 320/393/1440px、BOT 393px 无横向溢出。
