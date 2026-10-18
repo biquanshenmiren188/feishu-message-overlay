@@ -113,7 +113,7 @@ function status(){
  board.dataset.queueCount=String(reader.ids.length);board.dataset.queueIndex=String(reader.ids.indexOf(reader.current));
  board.dataset.dwell=String(reader.seconds);board.dataset.deadline=String(reader.deadline??'');
  board.dataset.idleUntil=String(reader.idleUntil??'');board.dataset.atTail=String(reader.pendingCount===0);board.dataset.pendingCount=String(reader.pendingCount);board.dataset.paused=String(reader.paused);
- board.dataset.version='native-history-20261017';board.dataset.capacity=String(reader.capacity);
+ board.dataset.version='full-history-20261018';board.dataset.capacity=String(reader.capacity);
 }
 let detailOpen=null;
 const mobile=matchMedia('(max-width:640px)');reader.setCapacity(mobile.matches?5:3);
@@ -131,31 +131,21 @@ function fitCards(force=false){
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
  if(key===fitKey)return;fitKey=key;guardScroll();
- if(mobile.matches){
-  board.style.setProperty('--fit-font','13px');pin.style.position='relative';
-  const cards=[...pin.children,...feed.children];for(const el of cards){el.style.height='';el.style.minHeight='0';}
-  const natural=cards.map(el=>el.getBoundingClientRect().height),required=natural.reduce((a,b)=>a+b,0),available=board.clientHeight;
-  if(cards.length&&required<=available){let used=0;for(let i=0;i<cards.length;i++){const size=i===cards.length-1?available-used:Math.floor((natural[i]+(available-required)/cards.length)*64)/64;cards[i].style.height=size+'px';used+=size;}}
-  board.dataset.fitFont='13';board.dataset.fitPasses='1';board.dataset.fitRequired=String(required);board.dataset.fitAvailable=String(available);
-  board.dataset.fitStatus=required<=available?'fully-fitted':'native-history';board.title='';updateProgress();return;
- }
- let passes=0;const measure=size=>{board.style.setProperty('--fit-font',size+'px');passes++;return feed.offsetHeight+pin.offsetHeight;};
- let size=13,required=measure(size);
- if(required>board.clientHeight){let low=10.5,high=13;size=low;required=measure(low);
-  if(required<=board.clientHeight){for(let i=0;i<6;i++){const mid=(low+high)/2;if(measure(mid)<=board.clientHeight)low=mid;else high=mid;}size=low;required=measure(size);}}
- board.dataset.fitFont=String(size);board.dataset.fitPasses=String(passes);board.dataset.fitRequired=String(required);board.dataset.fitAvailable=String(board.clientHeight);
- board.dataset.fitStatus=required<=board.clientHeight?'fully-fitted':'overflow-at-readable-minimum';
- board.title=required<=board.clientHeight?'':'内容较长：已到最小字号，请全局滚动查看完整正文';
- pin.style.position=required<=board.clientHeight||pin.offsetHeight<board.clientHeight*.5?'sticky':'relative';
- if(required<=board.clientHeight)board.scrollTop=0;
+ board.style.setProperty('--fit-font','13px');
+ pin.style.position=mobile.matches?'relative':'sticky';
+ for(const el of [...pin.children,...feed.children]){el.style.height='';el.style.minHeight='0';}
+ const required=feed.offsetHeight+pin.offsetHeight;
+ if(pin.offsetHeight>=board.clientHeight*.5)pin.style.position='relative';
+ board.dataset.fitFont='13';board.dataset.fitPasses='1';board.dataset.fitRequired=String(required);board.dataset.fitAvailable=String(board.clientHeight);
+ board.dataset.fitStatus=required<=board.clientHeight?'fully-fitted':'native-history';board.title='';updateProgress();
 }
+
 function render(anchor=null){
  if(mobileScrollGate.defer(render,()=>render(anchor)))return;
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
- // Phones keep the bounded history in one native scroll surface. A five-item
- // carousel has no scroll range at its edges and depends on fragile touch-end paging.
- if(mobile.matches&&!anchor&&lastWindowKey){const item=[...feed.children].find(el=>el.dataset.id===firstVisible());if(item)anchor={id:item.dataset.id,top:item.getBoundingClientRect().top,scroll:board.scrollTop,delta:0};}
- let layoutChanged=false;const ids=mobile.matches?reader.ids:reader.window(),key=String(mobile.matches)+'|'+ids.join('|');
+ // Both layouts mount the bounded history so natural-height rows fill the pane.
+ if(!anchor&&lastWindowKey){const item=[...feed.children].find(el=>el.dataset.id===firstVisible());if(item)anchor={id:item.dataset.id,top:item.getBoundingClientRect().top,scroll:board.scrollTop,delta:0};}
+ let layoutChanged=false;const ids=reader.ids,key=String(mobile.matches)+'|'+ids.join('|');
  const pinKey=store.pinned?JSON.stringify(store.pinned):'';
  if(pinKey!==lastPinKey){layoutChanged=true;guardScroll();pin.replaceChildren(...(store.pinned?[card(store.pinned,true)]:[]));lastPinKey=pinKey;}
  if(key!==lastWindowKey){
@@ -172,7 +162,7 @@ function render(anchor=null){
 function schedule(){
  clearTimeout(timer);timer=null;status();if(document.hidden||manualHeld||touchActive||touchSettling||detailOpen||railDrag)return;
  const delay=reader.nextDelay(Date.now());if(delay===null)return;
- timer=setTimeout(()=>{const admitted=reader.tick(Date.now(),!document.hidden);render();if(mobile.matches&&admitted){const item=[...feed.children].find(el=>el.dataset.id===admitted);if(item){guardScroll();board.scrollTop+=item.getBoundingClientRect().top-board.getBoundingClientRect().top;}}updateLatest();updateProgress();schedule();},Math.max(1,delay));
+ timer=setTimeout(()=>{const admitted=reader.tick(Date.now(),!document.hidden);render();if(admitted){const item=[...feed.children].find(el=>el.dataset.id===admitted);if(item){guardScroll();board.scrollTop+=item.getBoundingClientRect().top-board.getBoundingClientRect().top;}}updateLatest();updateProgress();schedule();},Math.max(1,delay));
 }
 let initialPositionPending=true,initialScrollToken=0;
 function accept(batch){
@@ -180,12 +170,12 @@ function accept(batch){
  const initialJump=initialPositionPending&&reader.ids.length>0;
  if(initialJump){initialPositionPending=false;reader.show(reader.ids.at(-1));reader.focus(reader.window()[0],Date.now());}
  newCount+=added.length;render();
- if(initialJump){const token=++initialScrollToken;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token!==initialScrollToken||reader.paused||touchActive||touchSettling)return;fitCards();guardScroll();board.scrollTop=mobile.matches?board.scrollHeight:0;updateLatest();updateProgress();}));}
+ if(initialJump){const token=++initialScrollToken;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token!==initialScrollToken||reader.paused||touchActive||touchSettling)return;fitCards();guardScroll();board.scrollTop=board.scrollHeight;updateLatest();updateProgress();}));}
  const remaining=Math.max(0,reader.ids.length-1-reader.ids.indexOf(reader.current));
  $('new-messages').hidden=false;$('new-messages').textContent='到最新';
  schedule();
 }
-function manual(id=firstVisible()) {initialPositionPending=false;initialScrollToken++;if(mobile.matches)reader.show(id);reader.manual(id,Date.now());status();updateProgress(true);schedule();}
+function manual(id=firstVisible()) {initialPositionPending=false;initialScrollToken++;reader.show(id);reader.manual(id,Date.now());status();updateProgress(true);schedule();}
 let programmaticScroll=false,scrollGuardToken=0,lastTop=0,touchY=null;
 function guardScroll(){
  programmaticScroll=true;const token=++scrollGuardToken;
@@ -199,7 +189,7 @@ function moveWindow(delta,pixels=0){
  guardScroll();reader.show(reader.ids[next]);render(anchor);reader.focus(firstVisible(),Date.now());manual(firstVisible());
  lastTop=board.scrollTop;return true;
 }
-function edgeMove(delta){if(mobile.matches)return false;return delta<0&&board.scrollTop<=1?moveWindow(-1,delta):delta>0&&board.scrollTop+board.clientHeight>=board.scrollHeight-1?moveWindow(1,delta):false;}
+function edgeMove(){return false;}
 function scrollByUser(delta){
  if(edgeMove(delta))return true;
  const before=board.scrollTop;board.scrollTop+=delta;
@@ -234,13 +224,13 @@ function touchRest(){
  touchQuiet=setTimeout(()=>{
   touchSettling=false;const step=pendingTouchStep;pendingTouchStep=0;
   if(deferredRefresh){deferredRefresh=false;reader.synchronize(store.messages.map(m=>m.id),Date.now());}
-  if(step&&!mobile.matches)moveWindow(step,0);else render();
+  render();
   lastTop=board.scrollTop;schedule();
  },200);
 }
 board.addEventListener('scroll',()=>{
  const delta=board.scrollTop-lastTop;
- if(!programmaticScroll&&Math.abs(delta)>.5&&(mobile.matches||touchActive||touchSettling||manualHeld)){
+ if(!programmaticScroll&&Math.abs(delta)>.5&&(true)){
   manual(firstVisible());if(touchActive||touchSettling)touchRest();
  }
  lastTop=board.scrollTop;
@@ -251,7 +241,7 @@ board.addEventListener('touchstart',e=>{
  schedule();
 },{passive:true});
 board.addEventListener('touchmove',e=>{
- if(mobile.matches)return; // Native scrolling, no synthetic edge paging.
+ return; // Both layouts use native scrolling, never synthetic edge paging.
  const y=e.touches[0]?.clientY;if(!touchActive||y===undefined||touchY===null)return;
  const delta=touchY-y;touchY=y;
  const atEdge=delta<0&&board.scrollTop<=1||delta>0&&board.scrollTop+board.clientHeight>=board.scrollHeight-1;
@@ -271,7 +261,7 @@ function updateLatest(){
  const button=$('new-messages'),latest=reader.ids.at(-1),item=[...feed.children].find(e=>e.dataset.id===latest);
  let reached=!latest;
  if(item){const br=board.getBoundingClientRect(),ir=item.getBoundingClientRect(),top=br.top+(getComputedStyle(pin).position==='sticky'?pin.offsetHeight:0),height=br.bottom-top;
-  reached=(mobile.matches||reader.window().at(-1)===latest)&&ir.bottom<=br.bottom+1&&(ir.top>=top-1||ir.height>height);}
+  reached=ir.bottom<=br.bottom+1&&(ir.top>=top-1||ir.height>height);}
  button.hidden=false;button.textContent='到最新';button.disabled=reached;button.setAttribute('aria-label',reached?'已到最新':'到最新');button.title=reached?'已到最新':'查看最新消息';
 }
 $('new-messages').addEventListener('click',()=>{const id=reader.ids.at(-1);if(id){guardScroll();reader.configure(reader.enabled,reader.seconds,Date.now());reader.focus(id,Date.now());reader.show(id);render();if(board.dataset.fitStatus!=='fully-fitted')board.scrollTop=board.scrollHeight;}newCount=0;updateLatest();schedule();});
@@ -279,30 +269,27 @@ board.addEventListener('scroll',updateLatest,{passive:true});
 
 const historyRail=$('history-scroll'),historyThumb=$('history-thumb');let railQuiet=null,railDrag=null;
 function progressGeometry(){
- if(mobile.matches){const overflow=Math.max(0,board.scrollHeight-board.clientHeight);return {overflow,maxStart:0,domain:overflow>1?1:0,ratio:overflow>1?Math.min(1,Math.max(0,board.scrollTop/overflow)):0};}
- const overflow=Math.max(0,board.scrollHeight-board.clientHeight),maxStart=Math.max(0,reader.ids.length-reader.capacity);
- const domain=maxStart+(overflow>1?1:0),position=Math.max(0,reader.rangeIndex)+(overflow>1?board.scrollTop/overflow:0);
- return {overflow,maxStart,domain,ratio:domain?Math.min(1,Math.max(0,position/domain)):0};
+ const overflow=Math.max(0,board.scrollHeight-board.clientHeight);
+ return {overflow,maxStart:0,domain:overflow>1?1:0,ratio:overflow>1?Math.min(1,Math.max(0,board.scrollTop/overflow)):0};
 }
+
 function updateProgress(active=false){
  const g=progressGeometry(),count=reader.ids.length;historyRail.hidden=(!count&&!store.pinned)||g.domain===0;
  historyRail.style.height=board.clientHeight+'px';historyRail.dataset.mobile=String(mobile.matches);
  historyRail.tabIndex=mobile.matches?-1:0;historyRail.setAttribute('role',mobile.matches?'progressbar':'scrollbar');
  historyRail.setAttribute('aria-valuenow',String(Math.round(g.ratio*100)));historyRail.setAttribute('aria-valuetext',`历史第${Math.max(0,reader.rangeIndex)+1}至${Math.max(0,reader.rangeIndex)+reader.window().length}条，共${count}条；当前范围滚动${Math.round(g.overflow?board.scrollTop/g.overflow*100:0)}%`);
- if(mobile.matches)historyRail.setAttribute('aria-valuetext',`历史共${count}条；已滚动${Math.round(g.ratio*100)}%`);
- const track=board.clientHeight,portion=mobile.matches?Math.min(1,board.clientHeight/Math.max(1,board.scrollHeight)):count?reader.window().length/count*Math.min(1,board.clientHeight/Math.max(1,board.scrollHeight)):Math.min(1,board.clientHeight/Math.max(1,board.scrollHeight));
+ historyRail.setAttribute('aria-valuetext',`历史共${count}条；已滚动${Math.round(g.ratio*100)}%`);
+ const track=board.clientHeight,portion=Math.min(1,board.clientHeight/Math.max(1,board.scrollHeight));
  const thumb=Math.max(20,Math.min(track,track*portion));historyThumb.style.height=thumb+'px';historyThumb.style.transform=`translateY(${g.ratio*Math.max(0,track-thumb)}px)`;
  historyRail.dataset.position=String(g.ratio);historyRail.dataset.range=reader.rangeStart||'';
  if(active){historyRail.dataset.active='true';clearTimeout(railQuiet);railQuiet=setTimeout(()=>{historyRail.dataset.active='false';},1000);}
 }
 function seekProgress(ratio){
- const before=reader.rangeStart,top=board.scrollTop,g=progressGeometry(),p=Math.max(0,Math.min(1,ratio))*g.domain;
- const start=Math.min(g.maxStart,g.overflow>1?Math.floor(p):Math.round(p));
- guardScroll();reader.show(reader.ids[start]);render();const overflow=Math.max(0,board.scrollHeight-board.clientHeight);
- board.scrollTop=overflow*(ratio>=1?1:g.overflow>1?p-start:0);
- if(before!==reader.rangeStart||Math.abs(top-board.scrollTop)>.5){reader.focus(firstVisible(),Date.now());manual(firstVisible());}
+ const top=board.scrollTop;guardScroll();board.scrollTop=Math.max(0,Math.min(1,ratio))*Math.max(0,board.scrollHeight-board.clientHeight);
+ if(Math.abs(top-board.scrollTop)>.5){reader.focus(firstVisible(),Date.now());manual(firstVisible());}
  updateLatest();updateProgress();
 }
+
 historyRail.addEventListener('pointerdown',e=>{
  if(mobile.matches||e.button!==0)return;
  e.preventDefault();const rect=historyRail.getBoundingClientRect(),thumb=historyThumb.getBoundingClientRect();
@@ -311,7 +298,7 @@ historyRail.addEventListener('pointerdown',e=>{
 });
 historyRail.addEventListener('pointermove',e=>{if(!railDrag||e.pointerId!==railDrag.pointer)return;const rect=historyRail.getBoundingClientRect(),height=historyThumb.getBoundingClientRect().height;seekProgress((e.clientY-rect.top-railDrag.grab)/Math.max(1,rect.height-height));});
 function endRail(){railDrag=null;schedule();}historyRail.addEventListener('pointerup',endRail);historyRail.addEventListener('pointercancel',endRail);historyRail.addEventListener('lostpointercapture',endRail);
-historyRail.addEventListener('keydown',e=>{if(mobile.matches)return;const g=progressGeometry();let ratio=g.ratio;if(e.key==='Home')ratio=0;else if(e.key==='End')ratio=1;else if(['ArrowUp','ArrowDown','PageUp','PageDown'].includes(e.key))ratio+=((e.key.endsWith('Up')?-1:1)*(e.key.startsWith('Page')?reader.capacity:1))/Math.max(1,g.domain);else return;e.preventDefault();seekProgress(ratio);});
+historyRail.addEventListener('keydown',e=>{if(mobile.matches)return;const g=progressGeometry();let ratio=g.ratio;if(e.key==='Home')ratio=0;else if(e.key==='End')ratio=1;else if(['ArrowUp','ArrowDown','PageUp','PageDown'].includes(e.key))ratio+=((e.key.endsWith('Up')?-1:1)*(e.key.startsWith('Page')?board.clientHeight*.8:60))/Math.max(1,g.overflow);else return;e.preventDefault();seekProgress(ratio);});
 board.addEventListener('scroll',()=>updateProgress(true),{passive:true});
 
 let latestFeed=null;

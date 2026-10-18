@@ -1,5 +1,5 @@
 // Presentation only. Never contains application credentials or changes source text.
-export const MAX_MESSAGES=100;
+export const MAX_MESSAGES=30;
 export const RETENTION_MS=30*60*1000;
 export function safeUrl(value){
   if(typeof value!=='string'||/[\u0000-\u0020]/.test(value))return null;
@@ -18,7 +18,7 @@ export class FeedStore{
   messages=[];pinned=null;seen=new Map();revision=0;
   ingest(batch,now=Date.now()){
     const added=[],previousIds=this.messages.map(m=>m.id).join("|"),previousPin=JSON.stringify(this.pinned),retained=new Set(this.messages.map(m=>m.id));
-    for(const raw of batch.messages??[]){const message=clean(raw);if(!message)continue;const stamp=Date.parse(message.sentAt);if(stamp>now+30000||now-stamp>RETENTION_MS||this.seen.has(message.id)||retained.has(message.id))continue;this.seen.set(message.id,stamp);this.messages.push(message);added.push(message.id);}
+    for(const raw of batch.messages??[]){const message=clean(raw);if(!message)continue;const stamp=Date.parse(message.sentAt);if(stamp>now+30000||this.seen.has(message.id)||retained.has(message.id))continue;this.seen.set(message.id,stamp);this.messages.push(message);added.push(message.id);}
     if(batch.pinned!==undefined)this.pinned=batch.pinned===null?null:clean(batch.pinned);
     this.messages=this.messages.filter(m=>!this.pinned||m.groupId!==this.pinned.groupId).sort((a,b)=>Date.parse(a.sentAt)-Date.parse(b.sentAt)).slice(-MAX_MESSAGES);
     for(const [id,stamp] of this.seen)if(now-stamp>RETENTION_MS)this.seen.delete(id);
