@@ -81,7 +81,7 @@ public sealed class MessageView : Grid
             {
                 var spread=new Grid{VerticalAlignment=VerticalAlignment.Center};
                 spread.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});spread.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-                var text=Block(summary.Spread,1);text.VerticalAlignment=VerticalAlignment.Center;text.Margin=new Thickness(0,0,8,0);spread.Children.Add(text);
+                var text=Block(summary.Spread);text.VerticalAlignment=VerticalAlignment.Center;text.Margin=new Thickness(0,0,8,0);spread.Children.Add(text);
                 var inlineActions=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center};SetColumn(inlineActions,1);spread.Children.Add(inlineActions);
                 foreach(var action in card.Buttons.Where(a=>a.Label=="查看雷达")){var button=ActionButton(action);button.Margin=new Thickness(4,0,0,0);inlineActions.Children.Add(button);}
                 stack.Children.Add(spread);
