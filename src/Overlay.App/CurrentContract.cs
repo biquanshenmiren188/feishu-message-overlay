@@ -36,28 +36,28 @@ public partial class MainWindow
         for(var cycle=0;cycle<3;cycle++)
         {
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
-            Check(displayed.Count<=3 && displayed[0].Id==reader.Current,"actual three-container range starts at current item");
+            Check(displayed.Count==readingQueue.Length && displayed.Any(m=>m.Id==reader.Current),"bounded continuous history includes current item");
             evidence.Add(new{cycle,at=DateTimeOffset.UtcNow,current=reader.Current,visible=displayed.Select(m=>m.Id).ToArray(),containers=MessageList.Items.Count,offset=MessageScroll.VerticalOffset});
-            if(cycle<2){var before=reader.Current;await Task.Delay(5250);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(reader.Current!=before && displayed[0].Id==reader.Current,"real five-second timer changes visible range");}
+            if(cycle<2){var before=reader.Current;await Task.Delay(5250);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(reader.Current!=before && displayed.Any(m=>m.Id==reader.Current),"real five-second timer advances current message");}
         }
-        var current=reader.Current;store.Add(new IncomingMessage("synthetic-arrival","demo","hidden","New arrival",DateTimeOffset.UtcNow,SenderKind.Bot),"demo",DateTimeOffset.UtcNow);Render();Check(reader.Current==current && displayed[0].Id==current,"new arrival does not interrupt reading");
-        Width=800;Height=800;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(MessageList.Items.Count<=3,"resize cannot reveal more than three containers");
+        var current=reader.Current;store.Add(new IncomingMessage("synthetic-arrival","demo","hidden","New arrival",DateTimeOffset.UtcNow,SenderKind.Bot),"demo",DateTimeOffset.UtcNow);Render();Check(reader.Current==current && displayed.Any(m=>m.Id==current),"new arrival does not interrupt reading");
+        Width=800;Height=800;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(MessageList.Items.Count==readingQueue.Length,"resize retains continuous message history");
         MessageWheel(this,new(System.Windows.Input.Mouse.PrimaryDevice,0,-120){RoutedEvent=System.Windows.Input.Mouse.MouseWheelEvent});Check(followingPaused && readingIdleTimer.IsEnabled,"manual wheel pauses with idle recovery");
         AutoScroll.IsChecked=false;AutoScrollClick(this,new());Check(!readingTimer.IsEnabled && !readingIdleTimer.IsEnabled,"off cancels both timers");
-        reader.Focus(readingQueue.Last().Id,DateTimeOffset.UtcNow);ShowReadingMessage(reader.Current!);AutoScroll.IsChecked=true;followingPaused=false;ScheduleReading();Check(!readingTimer.IsEnabled && displayed.Count==3,"tail stops and retains last three messages without blank filler");
-        File.WriteAllText(Path.Combine(output,"current-runtime-contract.json"),JsonSerializer.Serialize(new{passed=true,evidence,strictMaximum=3,actualTimerSeconds=5,invalidConfigProtected=true,lockedConfigProtected=true,immediateExitFlush=true,resizeBounded=true,arrivalDoesNotInterrupt=true,tailTimerStopped=true}));
+        reader.Focus(readingQueue.Last().Id,DateTimeOffset.UtcNow);ShowReadingMessage(reader.Current!);AutoScroll.IsChecked=true;followingPaused=false;ScheduleReading();Check(!readingTimer.IsEnabled && displayed.Count==readingQueue.Length,"tail stops while retaining history without blank filler");
+        File.WriteAllText(Path.Combine(output,"current-runtime-contract.json"),JsonSerializer.Serialize(new{passed=true,evidence,historyCapacity=100,actualTimerSeconds=5,invalidConfigProtected=true,lockedConfigProtected=true,immediateExitFlush=true,resizeBounded=true,arrivalDoesNotInterrupt=true,tailTimerStopped=true}));
         verifyReadingTimer=false;readingTimer.Stop();Preferences.ContractPath=null;
         foreach(var total in new[]{0,1,2,3,4,6,100})
         {
             readingQueue=Enumerable.Range(0,total).Select(i=>new IncomingMessage("range-"+i,"demo","hidden","Short synthetic body",DateTimeOffset.UtcNow,SenderKind.Bot)).ToArray();
             for(var index=0;index<Math.Max(1,total);index++)
-            {DisplayRange(readingQueue.ElementAtOrDefault(index)?.Id,true);Check(displayed.Count==Math.Min(3,total) && displayed.Select(m=>m.Id).Distinct().Count()==displayed.Count,"every reading index keeps exactly min(3,total) unique containers");}
+            {DisplayRange(readingQueue.ElementAtOrDefault(index)?.Id,true);Check(displayed.Count==total && displayed.Select(m=>m.Id).Distinct().Count()==displayed.Count,"every reading index keeps all retained unique containers");}
         }
         store.Start(DateTimeOffset.UtcNow);selectedChats=new(["demo","oc_pin_a","oc_pin_b"],StringComparer.Ordinal);pinnedChatId="oc_pin_a";renderedRevision=-1;
         now=DateTimeOffset.UtcNow;
         for(var i=0;i<6;i++)store.Add(new IncomingMessage("ordinary-"+i,"demo","hidden","Ordinary synthetic "+i,now.AddMilliseconds(i+1),SenderKind.Bot),"demo",now.AddSeconds(1));
         store.Add(new IncomingMessage("pin-1","oc_pin_a","hidden","Pinned synthetic one",now.AddMilliseconds(10),SenderKind.Bot),"oc_pin_a",now.AddSeconds(1),true);Render();
-        Check(displayed.Count==3 && PinnedCard.Content is IncomingMessage pin1 && pin1.Id=="pin-1" && readingQueue.Length==6,"one pinned plus three regular without duplicates");
+        Check(displayed.Count==readingQueue.Length && PinnedCard.Content is IncomingMessage pin1 && pin1.Id=="pin-1" && readingQueue.Length==6,"one pinned plus regular history without duplicates");
         verifyReadingTimer=true;reader.Configure(1,DateTimeOffset.UtcNow);reader.Focus(readingQueue[0].Id,DateTimeOffset.UtcNow);ShowReadingMessage(reader.Current!);ScheduleReading();
         var beforePin=reader.Current;var remaining=reader.DelayUntilNext(DateTimeOffset.UtcNow)!.Value;
         store.Add(new IncomingMessage("pin-2","oc_pin_a","hidden","Pinned synthetic replacement",now.AddMilliseconds(11),SenderKind.Bot),"oc_pin_a",DateTimeOffset.UtcNow,true);Render();
@@ -66,17 +66,17 @@ public partial class MainWindow
         Check(Opacity==1 && Background is System.Windows.Media.LinearGradientBrush fill && fill.GradientStops.All(stop=>stop.Color.A==242) && fill.GradientStops.Any(stop=>stop.Color.R==231 && stop.Color.G==231 && stop.Color.B==232),"single background alpha contains gray pinned band without fading foreground");
         Check(Math.Abs((double)new TimeFontScale().Convert(14,typeof(double),"",System.Globalization.CultureInfo.InvariantCulture)-12.6)<.01,"timestamp ratio follows body font");
         var preview=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);preview.Render(this);var png=new System.Windows.Media.Imaging.PngBitmapEncoder();png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(preview));using(var image=File.Create(Path.Combine(output,"pinned-timeline-preview.png")))png.Save(image);
-        await Task.Delay(1200);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(reader.Current!=beforePin && displayed.Count==3,"regular timer advances alongside pinned card");
+        await Task.Delay(1200);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Check(reader.Current!=beforePin && displayed.Count==readingQueue.Length,"regular timer advances alongside pinned card");
         readingTimer.Stop();verifyReadingTimer=false;
-        store.Prune(DateTimeOffset.UtcNow.AddHours(1));Render();Check(readingQueue.Length==6 && displayed.Count==3 && PinnedCard.Content is IncomingMessage held && held.Id=="pin-2","idle hour retains ordinary history and pinned latest");
+        store.Prune(DateTimeOffset.UtcNow.AddHours(1));Render();Check(readingQueue.Length==6 && displayed.Count==readingQueue.Length && PinnedCard.Content is IncomingMessage held && held.Id=="pin-2","idle hour retains ordinary history and pinned latest");
         store.Clear(DateTimeOffset.UtcNow);Render();Check(PinnedCard.Content is IncomingMessage cleared && cleared.Id=="pin-2","ordinary clear cannot remove pinned latest");
         now=DateTimeOffset.UtcNow;
         for(var i=0;i<4;i++)store.Add(new IncomingMessage("after-clear-"+i,"demo","hidden","Fresh ordinary synthetic",now.AddMilliseconds(i+1),SenderKind.Bot),"demo",now.AddSeconds(1));Render();
-        UpdatePinnedChoices();PinnedGroup.SelectedValue="oc_pin_b";Check(PinnedCard.Content is null && displayed.Count==3,"switch to quiet pinned group shows no fabricated history");
-        PinnedGroup.SelectedValue="";Check(PinnedArea.Visibility==Visibility.Collapsed && displayed.Count==3,"cancel restores only regular three");
+        UpdatePinnedChoices();PinnedGroup.SelectedValue="oc_pin_b";Check(PinnedCard.Content is null && displayed.Count==readingQueue.Length,"switch to quiet pinned group shows no fabricated history");
+        PinnedGroup.SelectedValue="";Check(PinnedArea.Visibility==Visibility.Collapsed && displayed.Count==readingQueue.Length,"cancel restores regular history");
         Preferences.ContractPath=path;_=Preferences.Load();PinnedGroup.SelectedValue="oc_pin_a";SavePreferences();Check(Preferences.Load().PinnedChatId=="oc_pin_a","pinned group ID persists in isolated preferences");Preferences.ContractPath=null;
         selectedChats.Remove("oc_pin_a");renderedRevision=-1;Render();Check(PinnedCard.Content is null && !readingQueue.Any(m=>m.SourceId=="oc_pin_a"),"departed group content is not displayed");
-        File.WriteAllText(Path.Combine(output,"pinned-contract.txt"),"PASS one pinned latest card plus exactly three regular containers; replace retains one without changing ordinary deadline; real regular timer advances; ordinary TTL/clear preserve pinned memory slot; quiet switch/cancel/membership removal; pinned ID saves and reloads in isolated preferences.");
+        File.WriteAllText(Path.Combine(output,"pinned-contract.txt"),"PASS one pinned latest card plus bounded regular history; replace retains one without changing ordinary deadline; real regular timer advances; ordinary TTL/clear preserve pinned memory slot; quiet switch/cancel/membership removal; pinned ID saves and reloads in isolated preferences.");
         await RunHistoryContractAsync(output);
         await RunLayoutReadingContractAsync(output);
         await RunCardContractAsync(output);
