@@ -35,12 +35,24 @@ internal static class CompactSummaryContract
             foreach(var view in views)
             {
                 var buttons=Children<Button>(view).Where(b=>b.Tag is string).ToArray();Check(buttons.Length==2,"two unchanged action buttons");
-                Check(buttons.Select(b=>b.Content).SequenceEqual(actions.Select(a=>(object)a.Label)),"button labels preserved");
+                Check(buttons.Select(b=>b.Content).OrderBy(x=>x).SequenceEqual(actions.Select(a=>(object)a.Label).OrderBy(x=>x)),"button labels preserved");
                 foreach(var button in buttons)button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Check(launched.TakeLast(2).SequenceEqual(new[]{combo,radar}),"exact original action URLs");
-                var expander=Children<Expander>(view).Single();Check(!expander.IsExpanded,"full text initially collapsed");
-                Check(MessageText.GetContent((TextBlock)expander.Content)==view.Message!.Card!.Body,"full original content retained");
-                expander.IsExpanded=true;window.UpdateLayout();Check(((TextBlock)expander.Content).IsVisible,"full text can expand");expander.IsExpanded=false;
+                Check(launched.TakeLast(2).Order().SequenceEqual(new[]{combo,radar}.Order()),"exact original action URLs");
+                Check(!view.IsExpanded && !Children<Expander>(view).Any(),"no full-text row; actions do not expand message");
+                Check(MessageText.GetContent(view.FullBody!)==view.Message!.Card!.Body,"full original content retained");
+                var surface=(Border)view.Children[0];
+                surface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                window.UpdateLayout();Check(view.IsExpanded && view.FullBody!.IsVisible,"click message expands original text");
+                surface.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,System.Windows.Input.Key.Enter){RoutedEvent=UIElement.KeyDownEvent});
+                Check(!view.IsExpanded,"keyboard collapses original text");
+                var summary=CompactMessage.From(view.Message.Card.Title,view.Message.Card.Body);
+                var radarButton=buttons.Single(b=>(string)b.Content=="查看雷达");
+                if(summary.Spread.Length>0)
+                {
+                    Check(radarButton.Parent is WrapPanel actionsRow && actionsRow.Parent is Grid line && Grid.GetColumn(actionsRow)==1 && line.Children[0] is TextBlock spread && MessageText.GetContent(spread)==summary.Spread,"radar action sits in right column of spread row");
+                    var row=(Grid)((FrameworkElement)radarButton.Parent).Parent;
+                    Check(Math.Abs(radarButton.TranslatePoint(new Point(radarButton.ActualWidth,0),row).X-row.ActualWidth)<2,"radar action aligns to far right of spread row");
+                }
             }
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);
