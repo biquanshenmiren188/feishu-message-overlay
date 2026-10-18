@@ -7,3 +7,9 @@ manifest 只改变 icons 的版本化 URL，保留 id、start_url、scope、名�
 部署由 funding-radar 的 `scripts/deploy-treasure-brand.py` 统一协调。对线上完整 HTML 增量修改，禁止使用本仓 HTML 覆盖已有 overlays；不执行完整后端 deploy，不触发测试推送，不更改用户设置或订阅，不重启服务。
 
 已有 iPhone 主屏幕图标可能由系统继续缓存；新安装会读取更新后的 Apple Touch Icon。保留原安装身份，不要求删除应用或重新订阅。实体 iPhone 的桌面图标更新不由 Chrome 视口验收代替。
+
+## 已发布
+
+配套源提交 `823594e85bd6d0ff2d5b0b9180d9539bb5124fd4`，主站 `ed97d60f36889f8a377ee7ec638f19616102938d`；release `20261018-treasure-brand-1792293929`，备份位于 `/opt/funding-radar-web/backups/` 同名目录。PR #37 与主站 #129 发布时未合并。
+
+并发 worker 更新被基线锁定检查发现并保留，包括正文哈希与 display-settled 诊断；实际发布只修改最新在线 worker 的缓存 VERSION，不以本分支 worker 全量覆盖。生产 PWA 安装身份及服务 PID 保持，手机 320–414px 无横向溢出，图标资源返回 200 且哈希匹配。
