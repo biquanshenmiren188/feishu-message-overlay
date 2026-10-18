@@ -29,21 +29,32 @@ public sealed class MessageView : Grid
         Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
         var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(216,216,216)),BorderThickness=new Thickness(0,0,0,.5),Padding=new Thickness(1,1,1,3)};Children.Add(outer);
         var card=message.Card;
+        var summary=CompactMessage.From(card?.Title,card?.Body??message.Text);
+        var compact=summary.Body.Length>0||System.Text.RegularExpressions.Regex.IsMatch(summary.Title,@"[｜|]\s*(FF|SF|FS)\s*[｜|]");
+        if(compact&&card is null)card=new MessageCard("",message.Text,Array.Empty<CardLink>());
         if(card is null)
         {
             var row=new Grid();row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var body=Block(message.Text,2);body.Margin=new Thickness(0,0,3,0);row.Children.Add(body);var clock=Clock(message);SetColumn(clock,1);row.Children.Add(clock);outer.Child=row;return;
         }
         var stack=new StackPanel();outer.Child=stack;
-        if(card.Title.Length>0)
+        var displayTitle=compact?summary.Title:card.Title;
+        if(displayTitle.Length>0)
         {
             var color=Tone(MessageCard.SafeTone(card.HeaderTone));var light=Color.FromRgb((byte)(255-(255-color.R)*.12),(byte)(255-(255-color.G)*.12),(byte)(255-(255-color.B)*.12));
             var header=new Border{Background=new SolidColorBrush(light),CornerRadius=new CornerRadius(2),Padding=new Thickness(5,3,4,3),Margin=new Thickness(0,0,0,3)};
             var row=new Grid();row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-            var title=new TextBlock{Text=card.Title,Foreground=new SolidColorBrush(color),FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap};row.Children.Add(title);var clock=Clock(message);clock.Foreground=new SolidColorBrush(Color.FromRgb(112,112,112));SetColumn(clock,1);row.Children.Add(clock);header.Child=row;stack.Children.Add(header);
+            var title=new TextBlock{Text=displayTitle,Foreground=new SolidColorBrush(color),FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap};row.Children.Add(title);var clock=Clock(message);clock.Foreground=new SolidColorBrush(Color.FromRgb(112,112,112));SetColumn(clock,1);row.Children.Add(clock);header.Child=row;stack.Children.Add(header);
         }
         else {var clock=Clock(message);clock.HorizontalAlignment=HorizontalAlignment.Right;stack.Children.Add(clock);}
-        if(card.Body.Length>0)stack.Children.Add(Block(card.Body,markdown:card.IsMarkdown));
+        if(compact)
+        {
+            if(summary.Spread.Length>0)stack.Children.Add(Block(summary.Spread,1));
+            if(summary.Signals.Length>0)stack.Children.Add(Block(summary.Signals));
+            if(summary.Warning){var warning=Block(summary.Risk);warning.Foreground=new SolidColorBrush(Color.FromRgb(163,62,37));stack.Children.Add(warning);}
+            if(card.Body.Length>0)stack.Children.Add(new Expander{Header="全文",Content=Block(card.Body,markdown:card.IsMarkdown),IsExpanded=false,Margin=new Thickness(0,2,0,0)});
+        }
+        else if(card.Body.Length>0)stack.Children.Add(Block(card.Body,markdown:card.IsMarkdown));
         if(card.Buttons.Count>0)
         {
             var buttons=new WrapPanel{Margin=new Thickness(0,3,0,0)};
