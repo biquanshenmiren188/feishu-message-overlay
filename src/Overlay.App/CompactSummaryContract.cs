@@ -35,13 +35,65 @@ internal static class CompactSummaryContract
             foreach(var view in views)
             {
                 var buttons=Children<Button>(view).Where(b=>b.Tag is string).ToArray();Check(buttons.Length==2,"two unchanged action buttons");
-                Check(buttons.Select(b=>b.Content).SequenceEqual(actions.Select(a=>(object)a.Label)),"button labels preserved");
+                Check(buttons.Select(b=>b.Content).OrderBy(x=>x).SequenceEqual(actions.Select(a=>(object)a.Label).OrderBy(x=>x)),"button labels preserved");
                 foreach(var button in buttons)button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Check(launched.TakeLast(2).SequenceEqual(new[]{combo,radar}),"exact original action URLs");
-                var expander=Children<Expander>(view).Single();Check(!expander.IsExpanded,"full text initially collapsed");
-                Check(MessageText.GetContent((TextBlock)expander.Content)==view.Message!.Card!.Body,"full original content retained");
-                expander.IsExpanded=true;window.UpdateLayout();Check(((TextBlock)expander.Content).IsVisible,"full text can expand");expander.IsExpanded=false;
+                Check(launched.TakeLast(2).Order().SequenceEqual(new[]{combo,radar}.Order()),"exact original action URLs");
+                Check(!view.IsExpanded && !Children<Expander>(view).Any(),"no full-text row; actions do not expand message");
+                Check(MessageText.GetContent(view.FullBody!)==view.Message!.Card!.Body,"full original content retained");
+                var surface=(Border)view.Children[0];
+                surface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                window.UpdateLayout();Check(view.IsExpanded && view.FullBody!.IsVisible,"click message expands original text");
+                surface.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,System.Windows.Input.Key.Enter){RoutedEvent=UIElement.KeyDownEvent});
+                Check(!view.IsExpanded,"keyboard collapses original text");
+                window.UpdateLayout();
+                var summary=CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body);
+                var radarButton=buttons.Single(b=>(string)b.Content=="查看雷达");
+                var comboButton=buttons.Single(b=>(string)b.Content=="查看组合");
+                var footer=(WrapPanel)comboButton.Parent;var stack=(StackPanel)footer.Parent;
+                Check(stack.Children[stack.Children.Count-1]==footer && footer.HorizontalAlignment==HorizontalAlignment.Right,"other actions remain bottom-right");
+                if(summary.Spread.Length>0)
+                {
+                    var actionsRow=(WrapPanel)radarButton.Parent;var row=(Grid)actionsRow.Parent;
+                    Check(Grid.GetColumn(actionsRow)==1 && row.Children[0] is TextBlock text && MessageText.GetContent(text)==summary.Spread,"radar shares spread row");
+                    Check(Math.Abs(radarButton.TranslatePoint(new Point(radarButton.ActualWidth,0),row).X-row.ActualWidth)<2,"radar aligns to row right edge");
+                }
+                else Check(radarButton.Parent==footer,"no spread keeps radar in bottom-right footer");
+                Check(Children<TextBlock>(view).Any(t=>t.Text==MessageView.RankFirstTitle(CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body).Title)),"rank and value lead rendered title");
             }
+            const string raw="[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.9107% / 1.3489%, 30m 0.9107% (1)\n资金费: OKX 0.0825% / 4h\n质量: 瞬时，价差强\n查看详情: https://example.invalid/radar/?tab=SF&mode=SF&q=token";
+            var plain=new MessageView{Message=new IncomingMessage("plain-dex","fixture","",raw,DateTimeOffset.UtcNow,SenderKind.Bot)};
+            content.Children.Add(plain);window.UpdateLayout();
+            Check(plain.FullBody is not null && !plain.IsExpanded,"plain-text DEX starts collapsed");
+            Check(Children<TextBlock>(plain).Any(t=>t.Text=="P3｜TOKEN｜SF｜BG→OK"),"plain-text DEX gets instrument summary title");
+            Check(MessageText.GetContent(plain.FullBody!)==raw,"plain-text DEX original is intact");
+            var plainSurface=(Border)plain.Children[0];
+            plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+            window.UpdateLayout();Check(plain.IsExpanded && plain.FullBody!.IsVisible,"plain-text DEX click expands original");
+            plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+            Check(!plain.IsExpanded,"plain-text DEX click collapses original");
+            var extraCases=new[]{
+                (Body:raw.Replace("[现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约","[期现] TOKEN | 多 Gate 合约 / 借卖 Bitget 现货"),Title:"P3｜TOKEN｜FS｜GT→BG"),
+                (Body:"[Dex 套利监控命中][最高P3]\n1. [P3][期现] TOKEN | 新格式 Gate / Bitget\n原始详情与数值\n查看详情: "+radar,Title:"[Dex 套利监控命中][最高P3]"),
+                (Body:"[Dex 套利监控命中][最高P3]\n1. [P3][期期] FIRST | 多 Binance / 空 Aster\n2. [P3][期现] SECOND | 多 Gate / 借卖 Bitget",Title:"DEX套利｜FIRST、SECOND｜2组")};
+            foreach(var sample in extraCases)
+            {
+                foreach(var asCard in new[]{false,true})
+                {
+                    var msg=new IncomingMessage(Guid.NewGuid().ToString(),"fixture","",sample.Body,DateTimeOffset.UtcNow,SenderKind.Bot);
+                    if(asCard)msg=msg with {Card=new MessageCard("",sample.Body,actions)};
+                    var view=new MessageView{Message=msg};content.Children.Add(view);window.UpdateLayout();
+                    Check(view.FullBody is not null && !view.IsExpanded,"borrow, unknown and quote-free multi-entry DEX start collapsed");
+                    Check(Children<TextBlock>(view).Any(t=>t.Text==sample.Title),"DEX fallback or parsed title is visible");
+                    Check(MessageText.GetContent(view.FullBody!)==sample.Body,"DEX exact original retained");
+                    var surface=(Border)view.Children[0];
+                    surface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                    Check(view.IsExpanded,"DEX original remains accessible");view.ToggleFullBody();Check(!view.IsExpanded,"DEX collapses again");
+                    if(asCard){foreach(var button in Children<Button>(view))button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(!view.IsExpanded,"DEX action does not expand body");Check(launched.TakeLast(2).Order().SequenceEqual(new[]{combo,radar}.Order()),"DEX fallback exact action URLs");}
+                    if(!asCard)content.Children.Remove(view);else views.Add(view);
+                }
+            }
+            var ordinary=new MessageView{Message=new IncomingMessage("ordinary","fixture","","普通自定义正文\n第二行",DateTimeOffset.UtcNow,SenderKind.Bot)};
+            Check(ordinary.FullBody is null,"unrelated ordinary text retains its original rendering");
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);
             await File.WriteAllTextAsync(Path.Combine(directory,"desktop-summary-contract.json"),JsonSerializer.Serialize(new{passed=true,views=views.Count,actionClicks=launched.Count,exactUrls=true,fullText=true,syntheticOnly=true}));

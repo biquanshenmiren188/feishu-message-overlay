@@ -1,5 +1,396 @@
 [
   {
+    "name": "borrow-sell spot leg retains explicit FS mode, opening quote and quality",
+    "input": {
+      "body": "[Dex 套利监控命中][最高P3]\n阈值: 价差 > 0.2000%, 费率净收益 > 0.0200%/小时\n价格最大延迟: 45s\nsymbol黑名单: BLACKLIST\n1. [P3][期现] TOKEN | 多 Gate 合约 / 借卖 Bitget 现货\ntake: 0.2202% / 0.3671%, 30m 0.2202% (1)\n资金费/利息: Gate -0.0991% / 4h, Bitget借币 0.0045% / 24h\n净费率: 0.0246%/h\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜GT→BG｜P3",
+      "signals": "",
+      "spread": "盘口差 +0.2202% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Binance ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BN→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Binance 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BN→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Binance 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BN→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bitget ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BG→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bitget 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BG→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bitget 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BG→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bybit ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bybit 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Bybit 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜BY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 OKX ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜OK→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 OKX 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜OK→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 OKX 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜OK→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Gate.io ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜GT→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Gate.io 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜GT→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Gate.io 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜GT→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Aster ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜AS→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Aster 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜AS→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Aster 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜AS→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Hyperliquid ／ 借卖 Gate\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜HY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Hyperliquid 合约 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜HY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "borrow-sell routes support all mapped exchanges and optional instrument labels",
+    "input": {
+      "body": "1. [P12+][FS] TOKEN | 多 Hyperliquid 永续 ／ 借卖 Gate 现货\ntake: -0.0123% / 0.99%"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜HY→GT｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0123%",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "mixed DEX groups keep missing quotes and qualities within their own entry",
+    "input": {
+      "body": "1. [P3][期期] FIRST | 多 Binance 合约 / 空 Aster 永续\n净费率: 0.02%/h\n2. [P5+][期现] SECOND | 多 Gate 合约 / 借卖 Bitget 现货\ntake: 0.2202% / 0.3671%\n质量: 样本少\n3. [P1][现期] THIRD | 多 Bybit 现货 / 空 OKX 合约\ntake: 0.0000% / 0.5%"
+    },
+    "expected": {
+      "title": "DEX套利｜FIRST、SECOND、THIRD｜3组",
+      "signals": "FIRST｜FF｜BN→AS｜P3\nSECOND｜FS｜GT→BG｜P5+ · 盘口差 +0.2202% · 质量：样本少\nTHIRD｜SF｜BY→OK｜P1 · 盘口差 +0.0000%",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "unsupported numbered routes cannot lend measurements to a preceding entry",
+    "input": {
+      "body": "1. [P3][期期] FIRST | 多 Binance / 空 Aster\n2. [P3][期现] SECOND | 新格式 Gate / Bitget\ntake: 9.999% / 8.888%\n质量: 下一组专属"
+    },
+    "expected": {
+      "title": "FIRST｜FF｜BN→AS｜P3",
+      "signals": "",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX instrument labels on exchange legs still produce a compact summary",
+    "input": {
+      "title": "",
+      "body": "[Dex 套利监控命中][最高P3]\n时间: 2026-10-18 06:28:33 UTC\n本轮发现: 4 个机会, 输出/推送: 1 个\n阈值: 价差 > 0.2000%, 费率净收益 > 0.0200%/小时\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n\n1. [P3][现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.9107% / 1.3489%, 30m 0.9107% (1)\n价格: 左 Bitget 现货买/卖 0.02743/0.02745, 右 OKX 合约买/卖 0.0277/0.0278\n资金费: OKX 0.0825% / 4h\n净费率: 0.0206%/h\n质量: 瞬时，价差强\n查看详情: https://example.invalid/radar/?tab=SF&mode=SF&q=token"
+    },
+    "expected": {
+      "title": "TOKEN｜SF｜BG→OK｜P3",
+      "signals": "",
+      "spread": "盘口差 +0.9107% · 质量：瞬时，价差强",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX labelled and unlabelled legs retain per-entry direction and values",
+    "input": {
+      "body": "1. [P12+][现期] TOKEN | 多 Bitget 现货 ／ 空 OKX 合约\ntake: -0.0120% / 0.4%\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜SF｜BG→OK｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX labelled and unlabelled legs retain per-entry direction and values",
+    "input": {
+      "body": "1. [P12+][期现] TOKEN | 多 Gate 永续 ／ 空 Binance 现货\ntake: -0.0120% / 0.4%\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜FS｜GT→BN｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX labelled and unlabelled legs retain per-entry direction and values",
+    "input": {
+      "body": "1. [P12+][期期] TOKEN | 多 Bybit 合约 ／ 空 Aster 永续\ntake: -0.0120% / 0.4%\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜BY→AS｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX labelled and unlabelled legs retain per-entry direction and values",
+    "input": {
+      "body": "1. [P12+][FF] TOKEN | 多 OKX ／ 空 Bitget 合约\ntake: -0.0120% / 0.4%\n质量: 样本少"
+    },
+    "expected": {
+      "title": "TOKEN｜FF｜OK→BG｜P12+",
+      "signals": "",
+      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
+    "name": "DEX labelled and unlabelled legs retain per-entry direction and values",
+    "input": {
+      "body": "1. [P1][现期] FIRST | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.1% / 0.2%\n2. [P2][期现] SECOND | 多 Gate 永续 / 空 Binance 现货\ntake: -0.3% / 0.4%"
+    },
+    "expected": {
+      "title": "DEX套利｜FIRST、SECOND｜2组",
+      "signals": "FIRST｜SF｜BG→OK｜P1 · 盘口差 +0.1%\nSECOND｜FS｜GT→BN｜P2 · 盘口差 -0.3%",
+      "spread": "",
+      "risk": "",
+      "warning": false
+    }
+  },
+  {
     "name": "premium alert shows instrument, observed decline and endpoints instead of trigger thresholds",
     "input": {
       "title": "",
