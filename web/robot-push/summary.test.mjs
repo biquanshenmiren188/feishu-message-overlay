@@ -2,6 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mobileSummary} from './summary.mjs';
 
+test('borrow-sell spot leg retains explicit FS mode, opening quote and quality',()=>{
+ const body='[Dex 套利监控命中][最高P3]\n阈值: 价差 > 0.2000%, 费率净收益 > 0.0200%/小时\n价格最大延迟: 45s\nsymbol黑名单: BLACKLIST\n1. [P3][期现] TOKEN | 多 Gate 合约 / 借卖 Bitget 现货\ntake: 0.2202% / 0.3671%, 30m 0.2202% (1)\n资金费/利息: Gate -0.0991% / 4h, Bitget借币 0.0045% / 24h\n净费率: 0.0246%/h\n质量: 样本少';
+ const x=mobileSummary({body});
+ assert.equal(x.title,'TOKEN｜FS｜GT→BG｜P3');
+ assert.equal(x.spread,'盘口差 +0.2202% · 质量：样本少');
+ assert.equal(x.warning,false);assert.equal(x.signals,'');
+});
+
+test('borrow-sell routes support all mapped exchanges and optional instrument labels',()=>{
+ for(const [exchange,short] of [['Binance','BN'],['Bitget','BG'],['Bybit','BY'],['OKX','OK'],['Gate.io','GT'],['Aster','AS'],['Hyperliquid','HY']]){
+  for(const [left,right] of [['',''],[' 合约',' 现货'],[' 永续',' 现货']]){
+   const x=mobileSummary({body:`1. [P12+][FS] TOKEN | 多 ${exchange}${left} ／ 借卖 Gate${right}\ntake: -0.0123% / 0.99%`});
+   assert.equal(x.title,`TOKEN｜FS｜${short}→GT｜P12+`);assert.equal(x.spread,'盘口差 -0.0123%');
+  }
+ }
+});
+
+test('mixed DEX groups keep missing quotes and qualities within their own entry',()=>{
+ const x=mobileSummary({body:'1. [P3][期期] FIRST | 多 Binance 合约 / 空 Aster 永续\n净费率: 0.02%/h\n2. [P5+][期现] SECOND | 多 Gate 合约 / 借卖 Bitget 现货\ntake: 0.2202% / 0.3671%\n质量: 样本少\n3. [P1][现期] THIRD | 多 Bybit 现货 / 空 OKX 合约\ntake: 0.0000% / 0.5%'});
+ assert.equal(x.title,'DEX套利｜FIRST、SECOND、THIRD｜3组');
+ assert.equal(x.signals,'FIRST｜FF｜BN→AS｜P3\nSECOND｜FS｜GT→BG｜P5+ · 盘口差 +0.2202% · 质量：样本少\nTHIRD｜SF｜BY→OK｜P1 · 盘口差 +0.0000%');
+});
+
+test('unsupported numbered routes cannot lend measurements to a preceding entry',()=>{
+ const x=mobileSummary({body:'1. [P3][期期] FIRST | 多 Binance / 空 Aster\n2. [P3][期现] SECOND | 新格式 Gate / Bitget\ntake: 9.999% / 8.888%\n质量: 下一组专属'});
+ assert.equal(x.spread,'');assert.equal(x.signals,'');assert.equal(x.title,'FIRST｜FF｜BN→AS｜P3');
+});
+
 test('DEX instrument labels on exchange legs still produce a compact summary',()=>{
  const body='[Dex 套利监控命中][最高P3]\n时间: 2026-10-18 06:28:33 UTC\n本轮发现: 4 个机会, 输出/推送: 1 个\n阈值: 价差 > 0.2000%, 费率净收益 > 0.0200%/小时\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n\n1. [P3][现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.9107% / 1.3489%, 30m 0.9107% (1)\n价格: 左 Bitget 现货买/卖 0.02743/0.02745, 右 OKX 合约买/卖 0.0277/0.0278\n资金费: OKX 0.0825% / 4h\n净费率: 0.0206%/h\n质量: 瞬时，价差强\n查看详情: https://example.invalid/radar/?tab=SF&mode=SF&q=token';
  const message={title:'',body},original=JSON.stringify(message),x=mobileSummary(message);

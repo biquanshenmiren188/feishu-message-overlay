@@ -13,13 +13,15 @@ export function mobileSummary(message) {
   // the message title. Parse those entries only; config blacklists are not coins.
   const dex=[];
   for(const [index,line] of lines.entries()){
-    const entry=line.match(/^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*空\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$/iu);
+    const entry=line.match(/^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*(?:空|借卖)\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$/iu);
     if(entry)dex.push({index,rank:entry[1].toUpperCase(),mode:({期期:'FF',现期:'SF',期现:'FS'})[entry[2]]??entry[2].toUpperCase(),coin:entry[3],route:abbreviation(entry[4])+'→'+abbreviation(entry[5])});
   }
   if(dex.length){
     title=dex.length===1?`${dex[0].coin}｜${dex[0].mode}｜${dex[0].route}｜${dex[0].rank}`:`DEX套利｜${[...new Set(dex.map(x=>x.coin))].join('、')}｜${dex.length}组`;
     dex.forEach((entry,i)=>{
-      const block=lines.slice(entry.index+1,dex[i+1]?.index??lines.length);
+      // Unsupported numbered entries still delimit their own measurements.
+      const next=lines.findIndex((line,index)=>index>entry.index && /^\d+[.、)]/u.test(line));
+      const block=lines.slice(entry.index+1,next<0?lines.length:next);
       // The first take percentage is the observed opening order-book spread;
       // the second is the reverse quote. Do not use funding or the 30m mean.
       const take=block.map(s=>s.match(/^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*\/\s*[+−-]?\d+(?:\.\d+)?\s*%/iu)?.[1]).find(Boolean);

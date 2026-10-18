@@ -28,7 +28,7 @@ public static class CompactMessage
         var signals=new List<string>();var dex=new List<Dex>();var dexSpread="";
         for(var i=0;i<lines.Length;i++)
         {
-            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*空\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$");
+            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*(?:空|借卖)\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$");
             if(m.Success)dex.Add(new(i,m.Groups[1].Value.ToUpperInvariant(),m.Groups[2].Value switch {"期期"=>"FF","现期"=>"SF","期现"=>"FS",var mode=>mode.ToUpperInvariant()},m.Groups[3].Value,Abbreviation(m.Groups[4].Value)+"→"+Abbreviation(m.Groups[5].Value)));
         }
         if(dex.Count>0)
@@ -36,7 +36,8 @@ public static class CompactMessage
             var first=dex[0];title=dex.Count==1?$"{first.Coin}｜{first.Mode}｜{first.Route}｜{first.Rank}":$"DEX套利｜{string.Join("、",dex.Select(x=>x.Coin).Distinct())}｜{dex.Count}组";
             for(var i=0;i<dex.Count;i++)
             {
-                var entry=dex[i];var block=lines.Skip(entry.Index+1).Take((i+1<dex.Count?dex[i+1].Index:lines.Length)-entry.Index-1).ToArray();
+                // Stop at every numbered entry, including unsupported routes.
+                var entry=dex[i];var block=lines.Skip(entry.Index+1).TakeWhile(line=>!Has(line,@"^\d+[.、)]")).ToArray();
                 var observed=Find(block,@"^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*/\s*[+−-]?\d+(?:\.\d+)?\s*%");
                 if(observed.Length==0)observed=Find(block,@"(?:^|[｜|])\s*盘口差\s*[:：]?\s*([+−-]?\d+(?:\.\d+)?\s*%)");
                 var spread=observed.Length>0?"盘口差 "+(Has(observed,@"^[+−-]")?"":"+")+Replace(observed,@"\s",""):"";

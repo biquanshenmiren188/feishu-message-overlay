@@ -71,6 +71,29 @@ internal static class CompactSummaryContract
             window.UpdateLayout();Check(plain.IsExpanded && plain.FullBody!.IsVisible,"plain-text DEX click expands original");
             plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
             Check(!plain.IsExpanded,"plain-text DEX click collapses original");
+            var extraCases=new[]{
+                (Body:raw.Replace("[现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约","[期现] TOKEN | 多 Gate 合约 / 借卖 Bitget 现货"),Title:"P3｜TOKEN｜FS｜GT→BG"),
+                (Body:"[Dex 套利监控命中][最高P3]\n1. [P3][期现] TOKEN | 新格式 Gate / Bitget\n原始详情与数值\n查看详情: "+radar,Title:"[Dex 套利监控命中][最高P3]"),
+                (Body:"[Dex 套利监控命中][最高P3]\n1. [P3][期期] FIRST | 多 Binance / 空 Aster\n2. [P3][期现] SECOND | 多 Gate / 借卖 Bitget",Title:"DEX套利｜FIRST、SECOND｜2组")};
+            foreach(var sample in extraCases)
+            {
+                foreach(var asCard in new[]{false,true})
+                {
+                    var msg=new IncomingMessage(Guid.NewGuid().ToString(),"fixture","",sample.Body,DateTimeOffset.UtcNow,SenderKind.Bot);
+                    if(asCard)msg=msg with {Card=new MessageCard("",sample.Body,actions)};
+                    var view=new MessageView{Message=msg};content.Children.Add(view);window.UpdateLayout();
+                    Check(view.FullBody is not null && !view.IsExpanded,"borrow, unknown and quote-free multi-entry DEX start collapsed");
+                    Check(Children<TextBlock>(view).Any(t=>t.Text==sample.Title),"DEX fallback or parsed title is visible");
+                    Check(MessageText.GetContent(view.FullBody!)==sample.Body,"DEX exact original retained");
+                    var surface=(Border)view.Children[0];
+                    surface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                    Check(view.IsExpanded,"DEX original remains accessible");view.ToggleFullBody();Check(!view.IsExpanded,"DEX collapses again");
+                    if(asCard){foreach(var button in Children<Button>(view))button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(!view.IsExpanded,"DEX action does not expand body");Check(launched.TakeLast(2).Order().SequenceEqual(new[]{combo,radar}.Order()),"DEX fallback exact action URLs");}
+                    if(!asCard)content.Children.Remove(view);else views.Add(view);
+                }
+            }
+            var ordinary=new MessageView{Message=new IncomingMessage("ordinary","fixture","","普通自定义正文\n第二行",DateTimeOffset.UtcNow,SenderKind.Bot)};
+            Check(ordinary.FullBody is null,"unrelated ordinary text retains its original rendering");
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);
             await File.WriteAllTextAsync(Path.Combine(directory,"desktop-summary-contract.json"),JsonSerializer.Serialize(new{passed=true,views=views.Count,actionClicks=launched.Count,exactUrls=true,fullText=true,syntheticOnly=true}));
