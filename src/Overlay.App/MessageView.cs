@@ -54,7 +54,7 @@ public sealed class MessageView : Grid
     internal static string RankFirstTitle(string title)
     {
         var parts=title.Split(new[]{'｜','|'}).Select(part=>part.Trim()).ToArray();
-        var index=Array.FindIndex(parts,part=>System.Text.RegularExpressions.Regex.IsMatch(part,@"^R\d+\+?\s+[+−-]?\d+(?:\.\d+)?\s*%$",System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+        var index=Array.FindIndex(parts,part=>System.Text.RegularExpressions.Regex.IsMatch(part,@"^(?:R\d+\+?\s+[+−-]?\d+(?:\.\d+)?\s*%|P\d+\+?)$",System.Text.RegularExpressions.RegexOptions.IgnoreCase));
         return index<=0?title:string.Join("｜",new[]{parts[index]}.Concat(parts.Where((_,i)=>i!=index)));
     }
     private void Rebuild()

@@ -64,7 +64,7 @@ internal static class CompactSummaryContract
             var plain=new MessageView{Message=new IncomingMessage("plain-dex","fixture","",raw,DateTimeOffset.UtcNow,SenderKind.Bot)};
             content.Children.Add(plain);window.UpdateLayout();
             Check(plain.FullBody is not null && !plain.IsExpanded,"plain-text DEX starts collapsed");
-            Check(Children<TextBlock>(plain).Any(t=>t.Text=="TOKEN｜SF｜BG→OK｜P3"),"plain-text DEX gets instrument summary title");
+            Check(Children<TextBlock>(plain).Any(t=>t.Text=="P3｜TOKEN｜SF｜BG→OK"),"plain-text DEX gets instrument summary title");
             Check(MessageText.GetContent(plain.FullBody!)==raw,"plain-text DEX original is intact");
             var plainSurface=(Border)plain.Children[0];
             plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
