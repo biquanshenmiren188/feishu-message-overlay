@@ -24,8 +24,8 @@ test('premium missing values never borrow thresholds, high-low values or another
 test('untitled DEX opportunities use the instrument, direction and original P rank',()=>{
  const message={title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%\n净费率: 0.0228%/h\n质量: 样本少'};
  const before=JSON.stringify(message),x=mobileSummary(message);
- assert.equal(x.title,'TOKEN｜FF｜BN→AS｜P3');assert.equal(x.signals,'质量：样本少');
- assert.equal(x.warning,false);assert.equal(x.risk,'');assert.equal(x.spread,'盘口差 +0.3759%');assert.equal(JSON.stringify(message),before);
+ assert.equal(x.title,'TOKEN｜FF｜BN→AS｜P3');assert.equal(x.signals,'');
+ assert.equal(x.warning,false);assert.equal(x.risk,'');assert.equal(x.spread,'盘口差 +0.3759% · 质量：样本少');assert.equal(JSON.stringify(message),before);
 });
 
 test('DEX batches retain each coin, route and own spread without taking config blacklist coins',()=>{
