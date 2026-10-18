@@ -2,6 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mobileSummary} from './summary.mjs';
 
+test('premium alert shows instrument, observed decline and endpoints instead of trigger thresholds',()=>{
+ const message={title:'',body:'🟣 Bitget 溢价指数突变提醒\n本轮触发：1 条\n触发条件：达到涨跌档位线并持续 5 分钟\n二次确认：上涨需 premium>0.2000%；下跌需 premium<-0.2000%\n1. 🟢 TOKENUSDT / USDT-FUTURES | 5分钟 close持续突降 | -0.3029 个百分点 | 档位 跌幅>=0.10 个百分点 | close -0.1884% -> -0.4913% | high/low -0.1884% / -0.4913% | 二次确认 盘口确认 0.3810%'};
+ const original=JSON.stringify(message),x=mobileSummary(message);
+ assert.equal(x.title,'🟣 BG 溢价指数突变提醒');
+ assert.equal(x.signals,'TOKENUSDT · 5分钟下跌 0.3029 个百分点\n溢价指数 -0.1884% → -0.4913%');
+ assert.equal(x.spread,'');assert.equal(JSON.stringify(message),original);
+});
+
+test('premium batches preserve each instruments own signed change and source precision',()=>{
+ const x=mobileSummary({title:'Bitget 溢价指数突变提醒',body:'1. 🔴 FIRSTUSDT / USDT-FUTURES | 1分钟 close持续突升 | +0.4000 个百分点 | close -0.1000% → 0.3000%\n2. 🟢 SECONDUSDT / USDT-FUTURES | 5分钟 close持续突降 | −0.2500 个百分点 | close 0.1000% -> -0.1500%\n3. ZEROUSDT / USDT-FUTURES | 1分钟 close | 0.0000 个百分点 | close 0.0000% -> 0.0000%'});
+ assert.equal(x.signals,'FIRSTUSDT · 1分钟上涨 0.4000 个百分点\n溢价指数 -0.1000% → 0.3000%\nSECONDUSDT · 5分钟下跌 0.2500 个百分点\n溢价指数 0.1000% → -0.1500%\nZEROUSDT · 1分钟持平 0.0000 个百分点\n溢价指数 0.0000% → 0.0000%');
+});
+
+test('premium missing values never borrow thresholds, high-low values or another instruments data',()=>{
+ const x=mobileSummary({title:'BG 溢价指数突变提醒',body:'检查窗口：1分钟, 5分钟\n1. FIRSTUSDT / USDT-FUTURES | 5分钟 close持续突降 | 未知 | 档位 跌幅>=0.10 个百分点 | high/low 0.4% / -0.4%\n2. SECONDUSDT / USDT-FUTURES | 1分钟 close持续突升 | +0.2000 个百分点'});
+ assert.equal(x.signals,'FIRSTUSDT · 5分钟 close持续突降\nSECONDUSDT · 1分钟上涨 0.2000 个百分点');
+ assert.equal(mobileSummary({title:'普通消息',body:'1. TOKEN / USDT-FUTURES | 5分钟 close | -0.3 个百分点'}).signals,'');
+});
+
 test('untitled DEX opportunities use the instrument, direction and original P rank',()=>{
  const message={title:'',body:'[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n排除合约交易所: Bybit\n1. [P3][期期] TOKEN | 多 Binance / 空 Aster\ntake: 0.3759% / 0.4298%\n净费率: 0.0228%/h\n质量: 样本少'};
  const before=JSON.stringify(message),x=mobileSummary(message);

@@ -47,6 +47,20 @@ export function mobileSummary(message) {
     }
   }
   title=shortExchanges(title);
+  // Premium alerts carry observations in numbered rows. Header percentages are
+  // trigger thresholds, not changes; never use them as a missing observation.
+  if(/溢价指数突变/u.test(title)){
+    for(const line of lines){
+      const entry=line.match(/^\d+[.、)]\s*(?:[🟢🔴🟣🟡↑↓]\s*)*([A-Z0-9][A-Z0-9._/-]*)\s*\/\s*([^|｜]+)[|｜]\s*(.+)$/iu);
+      if(!entry)continue;
+      const parts=entry[3].split(/[|｜]/u).map(s=>s.trim());
+      const change=parts.map(s=>s.match(/^([+−-]?\d+(?:\.\d+)?)\s*个百分点$/u)?.[1]).find(s=>s!==undefined);
+      const window=parts[0].match(/\d+\s*(?:分钟|小时|秒)/u)?.[0]??'';
+      const values=parts.map(s=>s.match(/^close\s+([+−-]?\d+(?:\.\d+)?%)\s*(?:->|→)\s*([+−-]?\d+(?:\.\d+)?%)$/iu)).find(Boolean);
+      const move=change===undefined?parts[0]:`${window}${Number(change.replace('−','-'))<0?'下跌':Number(change)>0?'上涨':'持平'} ${change.replace(/^[+−-]/u,'')} 个百分点`;
+      signals.push(`${entry[1]} · ${move}${values?'\n溢价指数 '+values[1]+' → '+values[2]:''}`);
+    }
+  }
   const fields=[];
   for(const label of ['净收益','盘口差','资金费差']) {
     const found=lines.flatMap(s=>[...s.matchAll(new RegExp(label+'\\s*[:：]?\\s*[+−-]?\\d+(?:\\.\\d+)?\\s*%','gu'))]).map(m=>m[0]);
