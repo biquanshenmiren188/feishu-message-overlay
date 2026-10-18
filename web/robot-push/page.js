@@ -1,3 +1,4 @@
+import {placeRadarAction} from './place-radar-action.mjs';
 import {rankFirstTitle} from './display-title.mjs';
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,stablePaneBottom} from './mobile-scroll.js';
@@ -80,7 +81,7 @@ function card(message,pinned=false,detail=false){
   article.append(compact);article.classList.add('compact-card');article.tabIndex=0;article.setAttribute('role','button');article.setAttribute('aria-label',(title.textContent||'消息')+'，查看完整原文');
   article.addEventListener('click',e=>{if(e.target.closest('a,button'))return;openDetail(message,pinned);});article.addEventListener('keydown',e=>{if(e.target!==article)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();openDetail(message,pinned);}});
  }
- if(message.actions.length){const actions=document.createElement('div');actions.className='actions';for(const action of message.actions)actions.append(link(action.label,action.url));article.append(actions);}return article;
+ if(message.actions.length){const actions=document.createElement('div');actions.className='actions';for(const action of message.actions)actions.append(link(action.label,action.url));article.append(actions);}placeRadarAction(article);return article;
 }
 function openDetail(message,pinned){
  if(detailOpen)return;

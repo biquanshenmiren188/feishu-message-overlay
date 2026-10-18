@@ -1,5 +1,13 @@
 # Rank-first titles and bottom-right message actions
 
+## Updated placement: v2026.10.18.8
+
+The user subsequently requested View Radar on the spread row. Desktop and web now align the existing radar action at the far right of that row; other actions remain bottom-right. Messages without a spread retain the footer placement. Rank-first titles, near-black bold title styling, regular spread text, original URLs and click-to-expand behavior are preserved.
+
+WPF four-form/eight-URL and all 11 full-height checks passed. Browser fixtures verified equal vertical centers, zero right-edge gap, and no detail opening when clicking the radar link; a 393px candidate was visually checked. Live browser confirmed the same alignment and Connected. Desktop updater receipt and diagnostics confirmed v2026.10.18.8, Connected, font 13, five-second reading, full height and unchanged preference fields.
+
+Web release `20261017-summary-risk-1792304254` preserves 2,876 unrelated files and service PIDs; PWA fallback synchronized. Assets: `bot-summary-3b827d740722.js`, `summary-risk-4d7d06cb0f82.css`. `prepare_inline_radar.py` prepares only this placement patch against an inspected baseline. The earlier all-actions-in-footer behavior below is historical.
+
 2026-10-18; desktop v2026.10.18.7.
 
 Web and desktop ordinary message titles move the existing R rank and adjacent percentage to the front, preserving rank suffixes, signs and precision. Titles without that pair retain their order. This is display-only: original message content, URLs and signal parsing remain unchanged.

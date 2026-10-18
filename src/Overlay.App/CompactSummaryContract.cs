@@ -46,10 +46,18 @@ internal static class CompactSummaryContract
                 surface.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,System.Windows.Input.Key.Enter){RoutedEvent=UIElement.KeyDownEvent});
                 Check(!view.IsExpanded,"keyboard collapses original text");
                 window.UpdateLayout();
-                var row=(WrapPanel)buttons[0].Parent;
-                var stack=(StackPanel)row.Parent;
-                Check(buttons.All(b=>b.Parent==row) && stack.Children[stack.Children.Count-1]==row,"all original actions share the final message row");
-                Check(row.HorizontalAlignment==HorizontalAlignment.Right && Math.Abs(row.TranslatePoint(new Point(row.ActualWidth,0),stack).X-stack.ActualWidth)<2,"actions align to bottom-right");
+                var summary=CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body);
+                var radarButton=buttons.Single(b=>(string)b.Content=="查看雷达");
+                var comboButton=buttons.Single(b=>(string)b.Content=="查看组合");
+                var footer=(WrapPanel)comboButton.Parent;var stack=(StackPanel)footer.Parent;
+                Check(stack.Children[stack.Children.Count-1]==footer && footer.HorizontalAlignment==HorizontalAlignment.Right,"other actions remain bottom-right");
+                if(summary.Spread.Length>0)
+                {
+                    var actionsRow=(WrapPanel)radarButton.Parent;var row=(Grid)actionsRow.Parent;
+                    Check(Grid.GetColumn(actionsRow)==1 && row.Children[0] is TextBlock text && MessageText.GetContent(text)==summary.Spread,"radar shares spread row");
+                    Check(Math.Abs(radarButton.TranslatePoint(new Point(radarButton.ActualWidth,0),row).X-row.ActualWidth)<2,"radar aligns to row right edge");
+                }
+                else Check(radarButton.Parent==footer,"no spread keeps radar in bottom-right footer");
                 Check(Children<TextBlock>(view).Any(t=>t.Text==MessageView.RankFirstTitle(CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body).Title)),"rank and value lead rendered title");
             }
             window.UpdateLayout();
