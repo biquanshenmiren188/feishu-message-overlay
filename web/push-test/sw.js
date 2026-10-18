@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='radar-delivery-v6', KIND='radar-six-test', BASE='/radar/push-test/';
+const VERSION='radar-delivery-v6-20261018-treasure1', KIND='radar-six-test', BASE='/radar/push-test/';
 const ASSETS=['','index.html','style.css','app.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 // Rendering must not depend on storage, notification enumeration or telemetry.
 function bounded(promise,ms,fallback){return new Promise(resolve=>{const timer=setTimeout(()=>resolve(fallback),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value)},()=>{clearTimeout(timer);resolve(fallback)})})}
