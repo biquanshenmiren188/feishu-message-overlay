@@ -13,3 +13,7 @@ manifest 只改变 icons 的版本化 URL，保留 id、start_url、scope、名�
 配套源提交 `823594e85bd6d0ff2d5b0b9180d9539bb5124fd4`，主站 `ed97d60f36889f8a377ee7ec638f19616102938d`；release `20261018-treasure-brand-1792293929`，备份位于 `/opt/funding-radar-web/backups/` 同名目录。PR #37 与主站 #129 发布时未合并。
 
 并发 worker 更新被基线锁定检查发现并保留，包括正文哈希与 display-settled 诊断；实际发布只修改最新在线 worker 的缓存 VERSION，不以本分支 worker 全量覆盖。生产 PWA 安装身份及服务 PID 保持，手机 320–414px 无横向溢出，图标资源返回 200 且哈希匹配。
+
+## 紧凑透明页头
+
+品牌 CSS 引用升级为 `20261018-treasure2`，由主站共享透明底元宝与字标，手机 138×42px，去除深色方框。此次 header-only 发布保留已选定的网站及手机图标，不改 manifest、worker 或订阅；仅增量更新现有线上 HTML 的品牌引用。
