@@ -106,6 +106,14 @@ internal sealed class OpportunityBoard : DockPanel
     internal int VisibleCount{get;private set;}
     internal int MaximumColumns{get;set;}=1;
     internal int ColumnCount{get;private set;}=1;
+    internal double SingleColumnHeight{get;private set;}
+    internal event Action? ContentHeightChanged;
+    internal void ReportSingleColumnHeight(double height)
+    {
+        if(Math.Abs(height-SingleColumnHeight)<.5)return;
+        SingleColumnHeight=height;
+        Dispatcher.BeginInvoke(new Action(()=>ContentHeightChanged?.Invoke()));
+    }
     internal event Action<int>? ColumnsChanged;
     internal void ReportColumns(int count)
     {

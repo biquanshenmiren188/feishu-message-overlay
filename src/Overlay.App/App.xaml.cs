@@ -43,12 +43,12 @@ public partial class App : Application
             try{await fixture.RunYieldContractAsync(output,e.Args.Contains("--input-only"),e.Args.Contains("--drag-only"));await fixture.ExitAsync();}
             catch(Exception error){await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"FAIL "+error);Shutdown(1);}return;
         }
-        if(e.Args.Contains("--opportunity-contract"))
+        if(e.Args.Contains("--opportunity-contract")||e.Args.Contains("--card-column-height-contract"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
             Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"opportunity-ui-"+Guid.NewGuid().ToString("N")+".json");
             var fixture=new MainWindow{ShowActivated=false};MainWindow=fixture;fixture.Loaded+=(_,_)=>{fixture.Left=-12000;fixture.Top=-12000;};fixture.Show();
-            try{await fixture.RunOpportunityContractAsync(e.Args.Last());await fixture.ExitAsync();}
+            try{if(e.Args.Contains("--card-column-height-contract"))await fixture.RunCardColumnHeightContractAsync(e.Args.Last());else await fixture.RunOpportunityContractAsync(e.Args.Last());await fixture.ExitAsync();}
             catch(Exception error){await File.WriteAllTextAsync(e.Args.Last(),System.Text.Json.JsonSerializer.Serialize(new{passed=false,error=error.ToString()}));await fixture.ExitAsync();Shutdown(1);}return;
         }
         SmokeMode = e.Args.Contains("--smoke-test") || e.Args.Contains("--measure-current-window");
