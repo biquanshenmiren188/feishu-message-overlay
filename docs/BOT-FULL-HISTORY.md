@@ -15,4 +15,10 @@
 
 45项 FeedStore/CarouselReader/滚动门控测试通过；接收器历史专项验证30条、跨天、重启、独立置顶和迟到事件拒绝；现有接收器生命周期专项通过。Chrome候选393px手机及电脑：挂载30条、自然高度铺满、无横向溢出，到最新、Home、打开原文返回保持位置。实体iPhone未验证。
 
-实际部署提交、版本和线上验收在发布后追加。
+## 已发布记录
+
+功能源码提交 `9f8db2cc438a9a602429e11d5d5274e5b045c5f5`，PR #38，未合并。线上静态版本 `20261017-summary-risk-1792328081`（发布器沿用历史日期前缀），前版 `20261018-trading-links-1792315937`，保留2934个其他文件。
+
+入口 bundle `performance-20261017/bot-summary-6d71112010fe.js`；HTML与PWA fallback SHA256均为 `890f8a028f2b9feb76b0c60c553bb4737ad234346d932f4e14ab5630cb6ab306`。静态备份 `/opt/funding-radar-web/backups/20261017-summary-risk-1792328081`。后端备份 `/opt/robot-push/backups/history30-1792328072`，server.py SHA256为 `e1bcf98e358efc57fd9c9230d1d78c2d2d41a42dabd5279908788c1032fd8ba5`。
+
+正式Chrome已验证 `full-history-20261018`、最近30条文案和消息源连接；当时服务器实际仅有8条普通消息，全部显示，置顶独立。后续消息逐步累积至30条；不能把合成30条预览称作生产已有30条。
