@@ -25,8 +25,11 @@ export function mobileSummary(message) {
       const take=block.map(s=>s.match(/^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*\/\s*[+−-]?\d+(?:\.\d+)?\s*%/iu)?.[1]).find(Boolean);
       const observed=take??block.map(s=>s.match(/(?:^|[｜|])\s*盘口差\s*[:：]?\s*([+−-]?\d+(?:\.\d+)?\s*%)/u)?.[1]).find(Boolean);
       const spread=observed?'盘口差 '+(/^[+−-]/u.test(observed)?'':'+')+observed.replace(/\s/gu,''):'';
-      if(dex.length===1)dexSpread=spread;
       const quality=block.map(s=>s.match(/^质量\s*[:：]\s*(.+)$/u)?.[1]).find(Boolean);
+      if(dex.length===1&&spread){
+        dexSpread=[spread,quality?'质量：'+quality:''].filter(Boolean).join(' · ');
+        return;
+      }
       const details=[dex.length>1?`${entry.coin}｜${entry.mode}｜${entry.route}｜${entry.rank}`:'',dex.length>1?spread:'',quality?'质量：'+quality:''].filter(Boolean);
       if(details.length)signals.push(details.join(' · '));
     });
