@@ -13,7 +13,7 @@ export function mobileSummary(message) {
   // the message title. Parse those entries only; config blacklists are not coins.
   const dex=[];
   for(const [index,line] of lines.entries()){
-    const entry=line.match(/^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)\s*[/／]\s*空\s+(\S+)\s*$/iu);
+    const entry=line.match(/^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*空\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$/iu);
     if(entry)dex.push({index,rank:entry[1].toUpperCase(),mode:({期期:'FF',现期:'SF',期现:'FS'})[entry[2]]??entry[2].toUpperCase(),coin:entry[3],route:abbreviation(entry[4])+'→'+abbreviation(entry[5])});
   }
   if(dex.length){

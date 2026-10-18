@@ -28,7 +28,7 @@ public static class CompactMessage
         var signals=new List<string>();var dex=new List<Dex>();var dexSpread="";
         for(var i=0;i<lines.Length;i++)
         {
-            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)\s*[/／]\s*空\s+(\S+)\s*$");
+            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*空\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$");
             if(m.Success)dex.Add(new(i,m.Groups[1].Value.ToUpperInvariant(),m.Groups[2].Value switch {"期期"=>"FF","现期"=>"SF","期现"=>"FS",var mode=>mode.ToUpperInvariant()},m.Groups[3].Value,Abbreviation(m.Groups[4].Value)+"→"+Abbreviation(m.Groups[5].Value)));
         }
         if(dex.Count>0)

@@ -60,6 +60,17 @@ internal static class CompactSummaryContract
                 else Check(radarButton.Parent==footer,"no spread keeps radar in bottom-right footer");
                 Check(Children<TextBlock>(view).Any(t=>t.Text==MessageView.RankFirstTitle(CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body).Title)),"rank and value lead rendered title");
             }
+            const string raw="[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.9107% / 1.3489%, 30m 0.9107% (1)\n资金费: OKX 0.0825% / 4h\n质量: 瞬时，价差强\n查看详情: https://example.invalid/radar/?tab=SF&mode=SF&q=token";
+            var plain=new MessageView{Message=new IncomingMessage("plain-dex","fixture","",raw,DateTimeOffset.UtcNow,SenderKind.Bot)};
+            content.Children.Add(plain);window.UpdateLayout();
+            Check(plain.FullBody is not null && !plain.IsExpanded,"plain-text DEX starts collapsed");
+            Check(Children<TextBlock>(plain).Any(t=>t.Text=="TOKEN｜SF｜BG→OK｜P3"),"plain-text DEX gets instrument summary title");
+            Check(MessageText.GetContent(plain.FullBody!)==raw,"plain-text DEX original is intact");
+            var plainSurface=(Border)plain.Children[0];
+            plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+            window.UpdateLayout();Check(plain.IsExpanded && plain.FullBody!.IsVisible,"plain-text DEX click expands original");
+            plainSurface.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+            Check(!plain.IsExpanded,"plain-text DEX click collapses original");
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);
             await File.WriteAllTextAsync(Path.Combine(directory,"desktop-summary-contract.json"),JsonSerializer.Serialize(new{passed=true,views=views.Count,actionClicks=launched.Count,exactUrls=true,fullText=true,syntheticOnly=true}));
