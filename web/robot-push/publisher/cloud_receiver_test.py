@@ -25,7 +25,7 @@ def run():
             r.select_pin(group);assert p.pin['id']==digest('1') and not p.normal
             r.apply({'kind':'message','message':msg(2)},now);assert p.pin['id']==digest('2') and not p.normal
             r.apply({'kind':'message','message':msg(3,other)},now);assert len(p.normal)==1;checks.append('independent_pin_replace')
-            p.write(True,now+1801);assert not p.normal and p.pin['id']==digest('2');checks.append('normal_expiry_preserves_pin')
+            p.write(True,now+1801);assert len(p.normal)==1 and p.pin['id']==digest('2');checks.append('idle_history_preserves_pin')
             r.apply({'kind':'membership','verified':False,'groups':[]},now);assert p.pin is None and not r.state()['sourceConnected'];checks.append('membership_failure_closes_scope')
             r.apply({'kind':'message','message':msg(4)},now);assert p.accepted==3;checks.append('unverified_event_ignored')
             assert r.process is None;checks.append('test_never_starts_sdk')
