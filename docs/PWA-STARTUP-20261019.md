@@ -34,6 +34,10 @@ STARTUP_WORKER=/path/to/candidate/sw.js node --test web/push-test/startup-cache.
 
 ## 发布和回滚
 
+已上线 `20261019-pwa-startup-1792416847`，实际部署源码 `ae22dd5c04bc373fac7faffab1ab9521310ce5cf`，PR #41 待合并。previous 为 `20261019-bitget-uta-1792397258`，backup 为 `/opt/funding-radar-web/backups/20261019-pwa-startup-1792416847`。保留 3006 个非目标文件，订阅/筛选摘要一致，robot-push 与 radar-webpush-test 服务 PID 均未改变，manifest SHA256 未改变。
+
+正式 `/radar/push-test/` 已显示新合并样式，品牌图片相对路径正确，消息源已连接并加载 30 条消息；393px 视口无横向溢出。浏览器错误记录仅见已安装钱包扩展注入冲突，未据此修改网站。线上 worker SHA256 为 `944e8a52d1aff7a32d3616bc47cd7842bb6b0f0f665f3955fb9c22828da8c584`，合并 CSS 为 `bot-shell-9f973c001c00.css`。新 worker 的实体手机激活及实际白屏耗时尚待用户实测。
+
 先准备候选、验证并推送代码，再用完整 source SHA 执行脚本 `--apply`。候选与发布信息写在暂存目录 `candidate.json`/`deployed.json`，公开的 `pwa-startup-release.json` 仅含代码/静态文件哈希与布尔验证结果，无凭据和消息。
 
 回滚需持 `/var/lib/funding-radar-storage/guard.lock`：从本次 backup 恢复 public/sw.js、public/index.html、radar-webpush-test.conf；本次新建的 radar-startup-cache.conf 可移到备份目录；校验 nginx 并切回 previous，再 reload nginx。回滚 worker 会触发正常更新，独立的启动缓存不会删除订阅数据库。
