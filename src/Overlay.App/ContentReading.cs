@@ -35,6 +35,9 @@ public partial class MainWindow
                         synchronizingScroll=true;
                         var top=el.TranslatePoint(new Point(),MessageScroll).Y+MessageScroll.VerticalOffset;
                         MessageScroll.ScrollToVerticalOffset(Math.Min(top,MessageScroll.ScrollableHeight));UpdateLayout();
+                        // Automatic reading always reveals the bottom card in full,
+                        // even when a previous boundary adjustment moved past this top.
+                        bottomScrollDirection=1;
                     }
                 }
                 else if(retainedReadingAnchor is {} anchor)
