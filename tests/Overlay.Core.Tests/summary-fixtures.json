@@ -398,7 +398,7 @@
     },
     "expected": {
       "title": "🟣 BG 溢价指数突变提醒",
-      "signals": "TOKENUSDT · 5分钟下跌 0.3029 个百分点\n溢价指数 -0.1884% → -0.4913%",
+      "signals": "TOKENUSDT 溢价指数 -0.1884% → -0.4913%",
       "spread": "",
       "risk": "",
       "warning": false
@@ -412,7 +412,7 @@
     },
     "expected": {
       "title": "BG 溢价指数突变提醒",
-      "signals": "FIRSTUSDT · 1分钟上涨 0.4000 个百分点\n溢价指数 -0.1000% → 0.3000%\nSECONDUSDT · 5分钟下跌 0.2500 个百分点\n溢价指数 0.1000% → -0.1500%\nZEROUSDT · 1分钟持平 0.0000 个百分点\n溢价指数 0.0000% → 0.0000%",
+      "signals": "FIRSTUSDT 溢价指数 -0.1000% → 0.3000%\nSECONDUSDT 溢价指数 0.1000% → -0.1500%\nZEROUSDT 溢价指数 0% → 0%",
       "spread": "",
       "risk": "",
       "warning": false
