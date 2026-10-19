@@ -59,13 +59,16 @@ public static class CompactMessage
             if(signals.Count>0){var count=Match(title,@"(\d+)\s*组");title=string.Join("｜",Regex.Split(Replace(title,@"^(?:🚨|\s)+","").Replace("强信号聚集","强信号"),@"[｜|]").Take(2).Select(s=>s.Trim()))+"｜"+(count.Success?count.Groups[1].Value:signals.Count.ToString(CultureInfo.InvariantCulture))+"组";}
         }
         title=Short(title);
+        var premiumEntries=new HashSet<string>(StringComparer.Ordinal);
         if(title.Contains("溢价指数突变"))foreach(var line in lines)
         {
             var m=Match(line,@"^\d+[.、)]\s*(?:(?:🟢|🔴|🟣|🟡|↑|↓)\s*)*([A-Z0-9][A-Z0-9._/-]*)\s*/\s*([^|｜]+)[|｜]\s*(.+)$");if(!m.Success)continue;
             var parts=Regex.Split(m.Groups[3].Value,@"[|｜]").Select(s=>s.Trim()).ToArray();var change=Find(parts,@"^([+−-]?\d+(?:\.\d+)?)\s*个百分点$");
             var window=Match(parts[0],@"\d+\s*(?:分钟|小时|秒)").Value;var values=parts.Select(s=>Match(s,@"^close\s+([+−-]?\d+(?:\.\d+)?%)\s*(?:->|→)\s*([+−-]?\d+(?:\.\d+)?%)$")).FirstOrDefault(x=>x.Success);
             var move=parts[0];if(change.Length>0){var number=double.Parse(change.Replace('−','-'),CultureInfo.InvariantCulture);move=window+(number<0?"下跌":number>0?"上涨":"持平")+" "+Replace(change,@"^[+−-]","")+" 个百分点";}
-            signals.Add(m.Groups[1].Value+" · "+move+(values is not null?"\n溢价指数 "+values.Groups[1].Value+" → "+values.Groups[2].Value:""));
+            var summary=m.Groups[1].Value+" · "+move+(values is not null?"\n溢价指数 "+values.Groups[1].Value+" → "+values.Groups[2].Value:"");
+            // Tier repetitions are one observation; keep distinct windows, values and markets.
+            if(premiumEntries.Add(m.Groups[2].Value.Trim()+"\n"+summary))signals.Add(summary);
         }
         const string placeholder=@"^(?:(?:无|没有|暂无)(?:数据|信息|风险|警告|警示|提醒)?|未知|未提供|不适用|无数据|未核验|待核验|不确定|[-—/|·.,，。:：;；\s])+$";
         const string warningLabel=@"^(?:[⚠\uFE0F\s]*(?:警告|警示|注意|风险提示|风险|提醒)\s*[:：]?\s*|[⚠\uFE0F\s]+)";
