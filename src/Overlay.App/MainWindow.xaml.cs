@@ -285,7 +285,7 @@ public partial class MainWindow : Window
     private void MessageScrolled(object sender,ScrollChangedEventArgs e)
     {
         var prior=synchronizingScroll;synchronizingScroll=true;MessageBar.Value=MessageScroll.VerticalOffset;synchronizingScroll=prior;
-
+        QueueBottomAlignment(e.VerticalChange);
     }
     private async void PauseClick(object sender, RoutedEventArgs e) => await StopAsync("已暂停 · 连接已关闭，消息已清空；可重新连接或演示");
     private void ClearClick(object sender, RoutedEventArgs e) { generation++; store.Clear(DateTimeOffset.UtcNow); Render(); }
