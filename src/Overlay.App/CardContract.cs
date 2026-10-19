@@ -26,9 +26,9 @@ public partial class MainWindow
         Width=360;initialFit=true;verifyContentFit=true;AutoScroll.IsChecked=false;FontScale.Value=13;contractFitHeight=720;
         for(var i=0;i<6;i++){var m=Card("card-"+i,"demo",i%2==0?"red":"blue");Check(store.Add(m,"demo",DateTimeOffset.UtcNow.AddSeconds(1)),"card accepted");}
         var pin=Card("card-pin","pin");Check(store.Add(pin,"pin",DateTimeOffset.UtcNow.AddSeconds(1),true),"pin card accepted");Render();await Layout();
-        Check(displayed.Count==3 && PinnedCard.Content is IncomingMessage{Card:not null},"native one pin plus three cards");
+        Check(displayed.Count==readingQueue.Length && PinnedCard.Content is IncomingMessage{Card:not null},"native one pin plus continuous card history");
         File.WriteAllText(Path.Combine(output,"card-fit-check.json"),JsonSerializer.Serialize(new{fitStatus,font=MessageList.FontSize,total=fitRequiredHeight,available=fitAvailableHeight,regularExtent=MessageScroll.ExtentHeight,regularViewport=MessageScroll.ViewportHeight,pinExtent=PinnedArea.ExtentHeight,pinViewport=PinnedArea.ViewportHeight}));
-        Check(fitStatus=="fully_fitted" && MessageScroll.ScrollableHeight<2 && PinnedArea.ScrollableHeight<2,"card title paragraph button and long URL all measured, no clipping");
+        Check(MessageList.FontSize==13 && MessageScroll.ScrollableHeight>0 && PinnedArea.ScrollableHeight<2,"long structured history scrolls at preferred font with accessible pin");
         var first=displayed[0];var container=(FrameworkElement)MessageList.ItemContainerGenerator.ContainerFromItem(first);var view=Descendants<MessageView>(container).FirstOrDefault();
         Check(view is not null,"real card view instantiated");
         var captions=Descendants<TextBlock>(view!).Select(x=>x.Text).ToArray();Check(captions.Contains(first.Card!.Title) && !captions.Any(x=>x.Contains("未读取")),"source title preserved and requested appended warning absent");
@@ -39,7 +39,7 @@ public partial class MainWindow
         var screenshot=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);screenshot.Render(this);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(screenshot));using(var file=File.Create(Path.Combine(output,"card-preview.png")))encoder.Save(file);
         var samples=new List<object>();void Sample()=>samples.Add(new{at=DateTimeOffset.UtcNow,current=reader.Current,range=rangeStart,regular=displayed.Count,pin=PinnedCard.Content is not null,font=MessageList.FontSize,total=fitRequiredHeight,available=fitAvailableHeight,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,offset=MessageScroll.VerticalOffset});
         reader.Configure(5,DateTimeOffset.UtcNow);reader.Focus(readingQueue[0].Id,DateTimeOffset.UtcNow);ShowReadingMessage(reader.Current!);AutoScroll.IsChecked=true;verifyReadingTimer=true;await Layout();ScheduleReading();Sample();
-        for(var step=0;step<2;step++){var before=reader.Current;await Task.Delay(5250);await Layout();Check(reader.Current!=before && displayed[0].Id==reader.Current && displayed.Count==3 && PinnedCard.Content is IncomingMessage,"actual five-second card range advances without losing pinned card");Sample();}
+        for(var step=0;step<2;step++){var before=reader.Current;await Task.Delay(5250);await Layout();Check(reader.Current!=before && displayed.Any(m=>m.Id==reader.Current) && displayed.Count==readingQueue.Length && PinnedCard.Content is IncomingMessage,"actual five-second card range advances without losing pinned card");Sample();}
         AutoScroll.IsChecked=false;readingTimer.Stop();verifyReadingTimer=false;contractFitHeight=null;verifyContentFit=false;initialFit=false;
         File.WriteAllText(Path.Combine(output,"card-runtime.json"),JsonSerializer.Serialize(new{passed=true,buttonQueryPreserved=true,warningRemoved=true,privateContent=false,samples}));
     }

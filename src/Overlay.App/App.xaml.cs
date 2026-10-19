@@ -43,15 +43,24 @@ public partial class App : Application
             try{await fixture.RunYieldContractAsync(output,e.Args.Contains("--input-only"),e.Args.Contains("--drag-only"));await fixture.ExitAsync();}
             catch(Exception error){await File.WriteAllTextAsync(Path.Combine(output,"yield-contract.txt"),"FAIL "+error);Shutdown(1);}return;
         }
-        if(e.Args.Contains("--opportunity-contract")||e.Args.Contains("--card-column-height-contract"))
+        if(e.Args.Contains("--opportunity-contract")||e.Args.Contains("--card-column-height-contract")||e.Args.Contains("--full-height-contract"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
             Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"opportunity-ui-"+Guid.NewGuid().ToString("N")+".json");
             var fixture=new MainWindow{ShowActivated=false};MainWindow=fixture;fixture.Loaded+=(_,_)=>{fixture.Left=-12000;fixture.Top=-12000;};fixture.Show();
-            try{if(e.Args.Contains("--card-column-height-contract"))await fixture.RunCardColumnHeightContractAsync(e.Args.Last());else await fixture.RunOpportunityContractAsync(e.Args.Last());await fixture.ExitAsync();}
+            try{if(e.Args.Contains("--full-height-contract"))await fixture.RunFullHeightContractAsync(e.Args.Last());else if(e.Args.Contains("--card-column-height-contract"))await fixture.RunCardColumnHeightContractAsync(e.Args.Last());else await fixture.RunOpportunityContractAsync(e.Args.Last());await fixture.ExitAsync();}
             catch(Exception error){await File.WriteAllTextAsync(e.Args.Last(),System.Text.Json.JsonSerializer.Serialize(new{passed=false,error=error.ToString()}));await fixture.ExitAsync();Shutdown(1);}return;
         }
         SmokeMode = e.Args.Contains("--smoke-test") || e.Args.Contains("--measure-current-window");
+        if(e.Args.Contains("--bottom-alignment-contract"))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            Preferences.ContractPath=Path.Combine(Path.GetTempPath(),"bottom-fixture-"+Guid.NewGuid().ToString("N")+".json");
+            var fixture=new MainWindow{ShowActivated=false};MainWindow=fixture;
+            fixture.Loaded+=(_,_)=>{fixture.Left=-12000;fixture.Top=-12000;};fixture.Show();
+            try{await fixture.RunBottomAlignmentContractAsync(e.Args.Last());await fixture.ExitAsync();}
+            catch(Exception error){await File.WriteAllTextAsync(e.Args.Last(),error.ToString());await fixture.ExitAsync();Shutdown(1);}return;
+        }
         if(e.Args.Contains("--cloud-window-contract"))
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -259,6 +268,7 @@ public partial class App : Application
         }
         if(e.Args.Contains("--observe-state"))
         {var receipt=e.Args.SkipWhile(a=>a!="--observe-state").Skip(1).FirstOrDefault();if(receipt is not null)window.ObserveConfiguredState(receipt);}
+        if(SmokeMode){window.ShowActivated=false;window.Loaded+=(_,_)=>{window.Left=-12000;window.Top=-12000;};}
         if(!e.Args.Contains("--background"))window.Show();
         if(e.Args.Contains("--authorized-trial"))
         {
@@ -281,7 +291,7 @@ public partial class App : Application
         }
         var smokeOutput = e.Args.SkipWhile(a => a != "--smoke-test").Skip(1).FirstOrDefault();
         if (string.IsNullOrEmpty(smokeOutput)) { Shutdown(2); return; }
-        try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, strict three-container reading range and real timer visual progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
+        try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, bounded continuous history, full-height viewport and real timer progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
         catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.Message+"\n"+ex.StackTrace); Shutdown(1); }
     }
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)

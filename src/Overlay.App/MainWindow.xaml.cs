@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Controls.Primitives;
@@ -88,9 +88,14 @@ public partial class MainWindow : Window
         CreateTray();
         PreviewMouseDown+=(_,_)=>dragYield?.OwnInput();PreviewKeyDown+=(_,_)=>dragYield?.OwnInput();PreviewMouseWheel+=(_,_)=>dragYield?.OwnInput();
         timer.Tick += async (_, _) => await ReadAsync();
-        Loaded += (_, _) => {if(!App.SmokeMode)FitThreeMessages();PlaceTopRight();WindowAlpha.Set(this,OpacityScale.Value/100);};
+        Loaded += (_, _) => {if(!App.SmokeMode)FitMessageViewport();PlaceTopRight();WindowAlpha.Set(this,OpacityScale.Value/100);};
         scrollIdle.Tick+=(_,_)=> {if(MessageBar.IsMouseOver || Mouse.Captured is Thumb)return;scrollIdle.Stop();MessageBar.BeginAnimation(OpacityProperty,new DoubleAnimation(0,TimeSpan.FromMilliseconds(180)));MessageBar.IsHitTestVisible=false;};
-        SizeChanged += (_, e) => { if(ready && !fittingWindow && (e.WidthChanged || e.HeightChanged))RequestContentLayout(); if(ready)WindowAlpha.Set(this,OpacityScale.Value/100);if(ready && !fittingWindow && Mouse.LeftButton==MouseButtonState.Pressed){initialFit=false;SavePreferences();} };
+        SizeChanged += (_, e) => { if(ready && !fittingWindow && (e.WidthChanged || e.HeightChanged))RequestContentLayout(); if(ready)WindowAlpha.Set(this,OpacityScale.Value/100);if(ready && !fittingWindow && Mouse.LeftButton==MouseButtonState.Pressed){if(e.HeightChanged)initialFit=false;SavePreferences();} };
+        MessageArea.PreviewMouseDown+=(_,_)=>PauseReading();
+        PinnedArea.PreviewMouseDown+=(_,_)=>PauseReading();
+        SystemParameters.StaticPropertyChanged+=WorkAreaChanged;
+        Closed+=(_,_)=>SystemParameters.StaticPropertyChanged-=WorkAreaChanged;
+        DpiChanged+=(_,_)=>RefitWorkArea();
         MessageBar.SetBinding(System.Windows.Controls.Primitives.RangeBase.MaximumProperty,new System.Windows.Data.Binding("ScrollableHeight"){Source=MessageScroll});
         MessageBar.SetBinding(System.Windows.Controls.Primitives.ScrollBar.ViewportSizeProperty,new System.Windows.Data.Binding("ViewportHeight"){Source=MessageScroll});
         readingTimer.Tick+=(_,_)=>ReadingTick();
@@ -207,10 +212,8 @@ public partial class MainWindow : Window
         reader.Synchronize(readingQueue.Select(m=>m.Id),DateTimeOffset.UtcNow);
         if(focusCloudLatest && readingQueue.Length>0)
         {
-            rangeStart=readingQueue[Math.Max(0,readingQueue.Length-3)].Id;
-            reader.Focus(rangeStart,DateTimeOffset.UtcNow);
             focusCloudLatest=false;
-            DisplayRange(rangeStart,true);
+            alignLatestAfterLayout=true;
         }
         if(rangeStart is null || !readingQueue.Any(m=>m.Id==rangeStart))rangeStart=reader.Current;
         DisplayRange(rangeStart,false);ScheduleReading();PublishWebState();
@@ -224,17 +227,21 @@ public partial class MainWindow : Window
     }
     private void DisplayRange(string? id,bool resetScroll)
     {
-        var start=Array.FindIndex(readingQueue,m=>m.Id==id);start=Math.Clamp(start,0,Math.Max(0,readingQueue.Length-3));
+        var start=Array.FindIndex(readingQueue,m=>m.Id==id);start=Math.Clamp(start,0,Math.Max(0,readingQueue.Length-1));
         rangeStart=readingQueue.ElementAtOrDefault(start)?.Id;
-        var target=readingQueue.Skip(start).Take(3).ToArray();
-        if(displayed.Select(m=>m.Id).SequenceEqual(target.Select(m=>m.Id)))return;
+        // The store already bounds this history to 100. Let the viewport decide
+        // how many messages are visible instead of reserving three slots.
+        var target=readingQueue;
+        if(displayed.Select(m=>m.Id).SequenceEqual(target.Select(m=>m.Id))){if(resetScroll)RequestContentLayout(id);return;}
+        var anchor=displayed.FirstOrDefault(item=>MessageList.ItemContainerGenerator.ContainerFromItem(item) is FrameworkElement el && el.TranslatePoint(new Point(),MessageScroll).Y+el.ActualHeight>0);
+        if(anchor is not null && MessageList.ItemContainerGenerator.ContainerFromItem(anchor) is FrameworkElement element)
+            retainedReadingAnchor=(anchor.Id,element.TranslatePoint(new Point(),MessageScroll).Y);
         synchronizingScroll=true;
         for(var i=displayed.Count-1;i>=0;i--)if(!target.Any(m=>m.Id==displayed[i].Id))displayed.RemoveAt(i);
         for(var i=0;i<target.Length;i++)if(i>=displayed.Count || displayed[i].Id!=target[i].Id)displayed.Insert(i,target[i]);
-        while(displayed.Count>3)displayed.RemoveAt(displayed.Count-1);
+        while(displayed.Count>target.Length)displayed.RemoveAt(displayed.Count-1);
         EmptyHint.Visibility=displayed.Count==0?Visibility.Visible:Visibility.Collapsed;
-        if(resetScroll)MessageScroll.ScrollToVerticalOffset(0);
-        RequestContentLayout();
+        RequestContentLayout(resetScroll?id:null);
         synchronizingScroll=false;
     }
     private void AutoScrollClick(object sender,RoutedEventArgs e)
@@ -268,11 +275,7 @@ public partial class MainWindow : Window
     private void ShowScrollbar()
     {MessageBar.BeginAnimation(OpacityProperty,null);MessageBar.Opacity=1;MessageBar.IsHitTestVisible=MessageScroll.ScrollableHeight>0;scrollIdle.Stop();scrollIdle.Start();}
     private void MessageWheel(object sender,MouseWheelEventArgs e)
-    {PauseReading();ShowScrollbar();
-        var start=Array.FindIndex(readingQueue,m=>m.Id==rangeStart);
-        var step=e.Delta<0?1:-1;
-        if(start>=0 && ((step>0 && MessageScroll.VerticalOffset>=MessageScroll.ScrollableHeight-.5) || (step<0 && MessageScroll.VerticalOffset<=.5)) && start+step>=0 && start+step<readingQueue.Length){DisplayRange(readingQueue[start+step].Id,true);reader.Focus(rangeStart,DateTimeOffset.UtcNow);e.Handled=true;}
-    }
+    {PauseReading();ShowScrollbar();}
     private void MessageKey(object sender,KeyEventArgs e)
     {if(e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End){PauseReading();ShowScrollbar();}}
     private void MessageMouseMove(object sender,MouseEventArgs e)
@@ -282,7 +285,7 @@ public partial class MainWindow : Window
     private void MessageScrolled(object sender,ScrollChangedEventArgs e)
     {
         var prior=synchronizingScroll;synchronizingScroll=true;MessageBar.Value=MessageScroll.VerticalOffset;synchronizingScroll=prior;
-
+        QueueBottomAlignment(e.VerticalChange);
     }
     private async void PauseClick(object sender, RoutedEventArgs e) => await StopAsync("已暂停 · 连接已关闭，消息已清空；可重新连接或演示");
     private void ClearClick(object sender, RoutedEventArgs e) { generation++; store.Clear(DateTimeOffset.UtcNow); Render(); }
@@ -348,12 +351,19 @@ public partial class MainWindow : Window
         initialFit=true;var work=CurrentWorkArea();fittingWindow=true;
         var cardsWidth=OpportunityArea.Visibility==Visibility.Visible?CardsColumn.ActualWidth:0;
         Width=cardsWidth+Math.Clamp(Width-cardsWidth,300,Math.Max(300,Math.Min(680,work.Width-cardsWidth-16)));fittingWindow=false;
-        Dispatcher.BeginInvoke(()=>{FitThreeMessages();PlaceTopRight();SavePreferences();},DispatcherPriority.Loaded);
+        Dispatcher.BeginInvoke(()=>{FitMessageViewport();PlaceTopRight();SavePreferences();},DispatcherPriority.Loaded);
     }
-    private void FitThreeMessages() => MeasureContentHeight();
+    private void FitMessageViewport() => MeasureContentHeight();
+    private void WorkAreaChanged(object? sender,PropertyChangedEventArgs e)
+    {if(e.PropertyName==nameof(SystemParameters.WorkArea))RefitWorkArea();}
+    private void RefitWorkArea()
+    {
+        if(!ready || exiting || !initialFit)return;
+        Dispatcher.BeginInvoke(()=>{if(exiting || !initialFit)return;lastFitKey=null;PlaceTopRight();RequestContentLayout();},DispatcherPriority.Loaded);
+    }
     private void PlaceTopRight()
     {
-        var work=CurrentWorkArea();fittingWindow=true;Width=Math.Min(Width,Math.Max(MinWidth,work.Width-16));Height=Math.Min(Height,Math.Max(MinHeight,work.Height-16));fittingWindow=false;
+        var work=CurrentWorkArea();fittingWindow=true;Width=Math.Min(Width,Math.Max(MinWidth,work.Width));Height=initialFit?Math.Max(MinHeight,work.Height):Math.Min(Height,Math.Max(MinHeight,work.Height));fittingWindow=false;
         WindowPlacement.TopRight(this);
     }
     private void SavePreferences()
@@ -550,7 +560,7 @@ public partial class MainWindow : Window
         var placement=System.Text.Json.JsonSerializer.SerializeToElement(WindowPlacement.Snapshot(this));
         Assert(placement.GetProperty("rightMargin").GetInt32()==0 && placement.GetProperty("topMargin").GetInt32()==0);
         File.WriteAllText(Path.Combine(output,"zero-gap-placement.json"),placement.GetRawText());
-        reader.Configure(15,DateTimeOffset.UtcNow);DwellLabel.Text="15s";AutoScroll.IsChecked=true;FitThreeMessages();
+        reader.Configure(15,DateTimeOffset.UtcNow);DwellLabel.Text="15s";AutoScroll.IsChecked=true;FitMessageViewport();
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         UpdateLayout();
         var image = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
@@ -678,7 +688,7 @@ public partial class MainWindow : Window
     internal void ObserveConfiguredState(string receipt)
     {trialReceipt=receipt;trialChat=ConnectionSelection.Load()?.ChatIds.FirstOrDefault();WriteTrialReceipt();}
     private void WriteTrialReceipt(){ } // Legacy startup option never writes a periodic receipt.
-    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{updateVersion=DesktopAutoUpdate.CurrentVersion,automaticUpdates=desktopUpdates?.Enabled,updateStatus=desktopUpdates?.Status,opportunityCount=opportunityBoard.Model.Cards.Count,opportunityColumns=opportunityBoard.ColumnCount,opportunityPaneWidth=OpportunityArea.ActualWidth,opportunityPaneHeight=OpportunityArea.ActualHeight,activeOpportunities=opportunityBoard.ActiveCount,opportunityPaneVisible=OpportunityArea.Visibility==Visibility.Visible,opportunitySourceConnected=opportunityBoard.Model.Connected,webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),historyRetention="session_latest_100",messageCount=readingQueue.Length,visibleContainers=displayed.Count,visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
+    internal string DiagnosticSnapshot()=>System.Text.Json.JsonSerializer.Serialize(new{updateVersion=DesktopAutoUpdate.CurrentVersion,automaticUpdates=desktopUpdates?.Enabled,updateStatus=desktopUpdates?.Status,opportunityCount=opportunityBoard.Model.Cards.Count,opportunityColumns=opportunityBoard.ColumnCount,opportunityPaneWidth=OpportunityArea.ActualWidth,opportunityPaneHeight=OpportunityArea.ActualHeight,activeOpportunities=opportunityBoard.ActiveCount,opportunityPaneVisible=OpportunityArea.Visibility==Visibility.Visible,opportunitySourceConnected=opportunityBoard.Model.Connected,webPublisherState=webPublisher.State,webPublisherHttp=webPublisher.LastHttp,webPublisherBatches=webPublisher.SuccessfulBatches,webPublishedMessages=webPublisher.AcknowledgedMessages,webPublisherLastSuccess=webPublisher.LastSuccess,webRemoteNormalCount=webPublisher.RemoteNormalCount,webRemotePinned=webPublisher.RemotePinned,weixinEnabled=false,weixinState="uninstalled",weixinSent=0,weixinFailed=0,state=((source as OfficialBotSource)?.State ?? (source as CloudMessageSource)?.State)?.ToString()??"NotConnected",cloudSource=source is CloudMessageSource,configuredChatIds=selectedChats.Order(StringComparer.Ordinal).ToArray(),lastMessageChatId,lastMessageType=lastAcceptedType,groupStats=reception.Snapshot(),realBotMessages=realMessages,cardMetadata=(source as OfficialBotSource)?.LastCardMetadata,cardDetailFailure=(source as OfficialBotSource)?.LastCardDetailsFailure,soundRequests,soundEnabled=Sound.IsChecked==true,lastWaveAccepted=audio.LastWaveAccepted,opacity=Opacity,backgroundOpacity=OpacityScale.Value/100,followingPaused,isVisible=IsVisible,readingIndex=Array.FindIndex(readingQueue,m=>m.Id==reader.Current),historyRetention="session_latest_100",messageCount=readingQueue.Length,visibleContainers=displayed.Count,viewportMessageCount=ViewportMessageCount(),messageDisplayMode="continuous_full_height",visibleStructuredCards=displayed.Count(m=>m.Card is not null),visibleCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count??0),visibleSafeCardButtons=displayed.Sum(m=>m.Card?.Buttons.Count(b=>MessageCardParser.SafeUrl(b.Url))??0),pinnedStructuredCard=pinnedLatest?.Card is not null,pinnedVisible=PinnedCard.Content is not null,pinnedConfigured=pinnedChatId.Length>0,rangeStartIndex=Array.FindIndex(readingQueue,m=>m.Id==rangeStart),preferenceState=Preferences.LoadState,audioConfigured=audio.PathName.Length>0,autoListenJoined=lastPersisted.AutoListenJoined,membershipState=(source as OfficialBotSource)?.MembershipState,offset=MessageScroll.VerticalOffset,extent=MessageScroll.ExtentHeight,viewport=MessageScroll.ViewportHeight,geometry=WindowPlacement.Snapshot(this),nativeLayered=WindowAlpha.HasNativeLayered(this),dragHook=dragYield?.IsHooked,dragYielding=dragYield?.Yielding,browserWatch=dragYield?.BrowserWatchActive,yieldTimers=dragYield?.ActiveTimerCount,nativeTopmost=dragYield?.NativeTopmost,pinIntent=Pin.IsChecked==true,savedOpacity=lastPersisted.Opacity,font=MessageList.FontFamily.Source,fontSize=MessageList.FontSize,preferredFontSize=FontScale.Value,fitStatus=fitStatus,fitRequiredHeight=fitRequiredHeight,fitAvailableHeight=fitAvailableHeight,fitPasses=fitPasses,minimumFitFontSize=MinimumFitFontSize,autoPaging=false,autoReading=AutoScroll.IsChecked==true,dwellSeconds=reader.Seconds,readingTimerActive=readingTimer.IsEnabled,preferenceWrites=Preferences.WriteCount,newestMessageAt=readingQueue.LastOrDefault()?.SentAt,visibleOldestMessageAt=displayed.FirstOrDefault()?.SentAt,visibleNewestMessageAt=displayed.LastOrDefault()?.SentAt,pinnedMessageAt=pinnedLatest?.SentAt,checkedAt=DateTimeOffset.UtcNow});
     private void CreateTray(bool verify=false)
     {
         if(App.SmokeMode && !verify)return;

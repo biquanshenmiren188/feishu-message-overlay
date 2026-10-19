@@ -53,7 +53,7 @@ if ($opportunity.ExitCode -ne 0 -or !(Test-Path -LiteralPath $opportunityReport)
  if(Test-Path -LiteralPath $opportunityReport){Get-Content -LiteralPath $opportunityReport -Raw | Write-Output}
  throw 'Opportunity card contracts failed'
 }
-foreach($contract in @('cloud-source','cloud-window')){
+foreach($contract in @('cloud-source','cloud-window','bottom-alignment')){
  $report=Join-Path $root "artifacts/verification/$contract-contract.json"
  if(Test-Path -LiteralPath $report){Remove-Item -LiteralPath $report}
  $check=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @("--$contract-contract",('"'+$report+'"')) -WindowStyle Hidden -PassThru -Wait
