@@ -31,14 +31,22 @@ public partial class MainWindow
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("binance","GRIFFAINUSDT","hyperliquid","GRIFFAIN"))=="ASTRO-QUICK-COPY:\n{\n  \"type\": \"FF\",\n  \"name\": \"GRIFFAIN\",\n  \"buyEx\": \"gc-binance\",\n  \"sellEx\": \"gc-hl\"\n}","GC matches user supplied clipboard exactly");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("gate","MAGIC_USDT","bybit","MAGICUSDT"))?.Contains("\"sellEx\": \"gc-bybit\"",StringComparison.Ordinal)==true,"Gate Bybit GC pair");
         Check(OpportunityModel.CopyGcStrategy(CopyFixture("unknown","GRIFFAINUSDT","hyperliquid","GRIFFAIN")) is null,"unknown GC exchange rejected");
-        foreach(var gc in new[]{"binance","bybit","gate","okx","hyperliquid"})foreach(var plain in new[]{"aster","bitget"})foreach(var reverse in new[]{false,true}){
+        foreach(var gc in new[]{"binance","bybit","gate","okx","hyperliquid","aster"})foreach(var plain in new[]{"bitget"})foreach(var reverse in new[]{false,true}){
             var fixture=CopyFixture(reverse?plain:gc,"ZERBROUSDT",reverse?gc:plain,"ZERBROUSDT");var mixedCopy=OpportunityModel.CopyGcStrategy(fixture);Check(mixedCopy is not null,"single GC leg available");
             var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(mixedCopy![(mixedCopy!.IndexOf('\n')+1)..])!;
             Check(payload["buyEx"]==(reverse?plain:"gc-"+(gc=="hyperliquid"?"hl":gc))&&payload["sellEx"]==(reverse?"gc-"+(gc=="hyperliquid"?"hl":gc):plain),"mixed GC preserves direction and ordinary venue");
             Check(!OpportunityModel.GcBothLegs(fixture),"mixed pair has no full GC border");
         }
-        Check(OpportunityModel.CopyGcStrategy(CopyFixture("aster","ZERBROUSDT","bitget","ZERBROUSDT")) is null,"no GC legs rejected");
+        Check(OpportunityModel.CopyGcStrategy(CopyFixture("bitget","ZERBROUSDT","bitget","ZERBROUSDT")) is null,"no GC legs rejected");
         Check(OpportunityModel.GcBothLegs(CopyFixture("bybit","ZERBROUSDT","gate","ZERBROUSDT")),"double GC classified");
+        foreach(var name in new[]{"JCT","1000PEPE","龙虾"})foreach(var mode in new[]{"SF","FS","FF"})
+        {
+            var fixture=JsonSerializer.SerializeToElement(new{strategy=mode,details=new{legs=new[]{new{exchange="aster",symbol=name+"USDT",spot=mode=="SF"},new{exchange="binance",symbol=name+"USDT",spot=mode=="FS"}}}});
+            var text=OpportunityModel.CopyGcStrategy(fixture)!;
+            var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(text[(text.IndexOf('\n')+1)..])!;
+            Check(payload["buyEx"]==(mode=="SF"?"aster":"gc-aster")&&payload["sellEx"]==(mode=="FS"?"binance":"gc-binance")&&payload["name"]==name,"Aster futures-only GC preserves mode, direction and symbol");
+            Check(OpportunityModel.GcBothLegs(fixture)==(mode=="FF"),"Aster spot never gets full-GC border");
+        }
         foreach(var fixture in new[]{("WAL","okx","WAL-USDT-SWAP","binance","WALUSDT","gc-okx","gc-binance"),("BLUR","hyperliquid","BLUR","okx","BLUR-USDT-SWAP","gc-hl","gc-okx")})
         {
             var text=OpportunityModel.CopyGcStrategy(CopyFixture(fixture.Item2,fixture.Item3,fixture.Item4,fixture.Item5));
@@ -51,12 +59,12 @@ public partial class MainWindow
         var bera=FsFixture();
         var beraExpected="ASTRO-QUICK-COPY:\n"+JsonSerializer.Serialize(new{type="FS",name="BERA",buyEx="gc-hl",sellEx="bitget",spotMarginType="cross"},new JsonSerializerOptions{WriteIndented=true}).Replace("\r\n","\n",StringComparison.Ordinal);
         Check(OpportunityModel.CopyGcStrategy(bera)==beraExpected,"BERA FS supports GC HL futures with ordinary Bitget margin spot");
-        foreach(var buy in new[]{"binance","bybit","gate","okx","hyperliquid"})foreach(var sell in new[]{"binance","bybit","gate","okx","bitget"}){
+        foreach(var buy in new[]{"binance","bybit","gate","okx","hyperliquid","aster"})foreach(var sell in new[]{"binance","bybit","gate","okx","bitget"}){
             var fixture=FsFixture(buy,sell);var text=OpportunityModel.CopyGcStrategy(fixture)!;
             var payload=JsonSerializer.Deserialize<Dictionary<string,string>>(text[(text.IndexOf('\n')+1)..])!;
             Check(payload["buyEx"]=="gc-"+(buy=="hyperliquid"?"hl":buy)&&payload["sellEx"]==sell&&payload["spotMarginType"]=="cross"&&!OpportunityModel.GcBothLegs(fixture),"FS converts only futures, preserves cross-margin spot and single-GC style");
         }
-        foreach(var fixture in new[]{FsFixture("aster","binance"),FsFixture("bitget","okx"),FsFixture("hyperliquid","aster"),FsFixture("hyperliquid","hyperliquid"),FsFixture("hyperliquid","bitget","1000BERAUSDT")})Check(OpportunityModel.CopyGcStrategy(fixture) is null,"FS ineligible market or unequal contract rejected");
+        foreach(var fixture in new[]{FsFixture("bitget","okx"),FsFixture("hyperliquid","aster"),FsFixture("hyperliquid","hyperliquid"),FsFixture("hyperliquid","bitget","1000BERAUSDT")})Check(OpportunityModel.CopyGcStrategy(fixture) is null,"FS ineligible market or unequal contract rejected");
         Check(OpportunityModel.Radar(JsonSerializer.SerializeToElement(new{radarUrl="https://evil.example/radar/"})) is null,"foreign radar rejected");
         Check(OpportunityModel.Percent(.0001,.01)=="+0.01%"&&OpportunityModel.Percent(19)=="+0.19%","correct funding and basis units");
         var detail=OpportunityModel.Get(raw,"details");var transfers=OpportunityBoard.Transfers(OpportunityModel.Array(detail,"legs",2),OpportunityModel.Array(detail,"transferWallets",20),now);
@@ -171,9 +179,9 @@ public partial class MainWindow
             var view=opportunityBoard.Build(new OpportunityModel.Entry(card),now);gcExamples.Children.Add(view);
             Check(((SolidColorBrush)view.BorderBrush).Color==(Color)ColorConverter.ConvertFromString("#8B95A5"),"GC never changes card outer border");
             var gcButton=Buttons(view).Single(b=>Equals(b.Content,"复制 GC"));
-            Check(((SolidColorBrush)gcButton.BorderBrush).Color==(Color)ColorConverter.ConvertFromString(fixture.Item1=="ZERBRO"?"#DCE3EA":"#008B6B"),"only both GC legs have green copy button border");
+            Check(((SolidColorBrush)gcButton.BorderBrush).Color==(Color)ColorConverter.ConvertFromString("#008B6B"),"only both GC legs have green copy button border");
             gcButton.ApplyTemplate();
-            if(fixture.Item1!="ZERBRO"){
+            {
                 var outline=gcButton.Template.FindName("GcOutline",gcButton) as System.Windows.Controls.Border;
                 Check(outline is not null&&outline.BorderThickness==new Thickness(3)&&((SolidColorBrush)outline.BorderBrush).Color==(Color)ColorConverter.ConvertFromString("#008B6B"),"actual window button template renders a three DIP green outline");
                 Check(outline!.Child is System.Windows.Controls.TextBlock label&&((SolidColorBrush)label.Foreground).Color==(Color)ColorConverter.ConvertFromString("#007453"),"actual GC button text is green under window styles");
