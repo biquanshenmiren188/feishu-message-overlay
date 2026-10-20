@@ -32,10 +32,11 @@ export function strategyCopy(data) {
 // Mixed pairs convert only supported legs; unsupported ordinary venues stay ordinary.
 export function gcStrategyCopy(data) {
   const legs=data.details?.legs;
-  const supported=new Set(['binance','bybit','gate','okx','hyperliquid']);
+  const supported=new Set(['binance','bybit','gate','okx','hyperliquid','aster']);
   if(!['SF','FS','FF'].includes(data.strategy) || legs?.length!==2 || legs.some(l=>typeof l.spot!=='boolean') || data.strategy==='SF'&&legs[0].exchange==='hyperliquid')return null;
   // FS keeps its borrowing spot leg ordinary; only the futures buy leg can use GC.
-  const buyGc=supported.has(legs[0].exchange),sellGc=data.strategy!=='FS'&&supported.has(legs[1].exchange);
+  // Aster GC supports futures only, never the SF spot buy leg.
+  const buyGc=supported.has(legs[0].exchange)&&!(data.strategy==='SF'&&legs[0].exchange==='aster'),sellGc=data.strategy!=='FS'&&supported.has(legs[1].exchange);
   if(!buyGc&&!sellGc)return null;
   const normal=strategyCopy(data);if(!normal)return null;
   const payload=JSON.parse(normal.slice(normal.indexOf('\n')+1));

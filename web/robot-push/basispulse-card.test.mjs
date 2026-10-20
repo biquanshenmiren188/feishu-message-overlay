@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import {radarMatrix,transferCoin,createRadarTransfers} from './basispulse-transfers.js';
 import {strategyCopy,gcStrategyCopy,gcBothLegs,periodWarning,fundingWarnings,residualTone} from './basispulse-card-model.js';
 const gcFixture=(buy='binance',sell='hyperliquid',symbol='GRIFFAIN')=>({strategy:'FF',details:{legs:[{exchange:buy,symbol:'GRIFFAINUSDT',spot:false},{exchange:sell,symbol,spot:false}]}});
+test('Aster GC applies to futures only and full-GC styling follows the actual payload',()=>{
+ for(const name of ['JCT','1000PEPE','龙虾'])for(const [mode,buy,sell,buyEx,sellEx,both] of [
+  ['FF','bitget','aster','bitget','gc-aster',false],
+  ['FF','aster','binance','gc-aster','gc-binance',true],
+  ['SF','aster','binance','aster','gc-binance',false],
+  ['SF','binance','aster','gc-binance','gc-aster',true],
+  ['FS','aster','bitget','gc-aster','bitget',false],
+ ]){
+  const data={strategy:mode,details:{legs:[{exchange:buy,symbol:name+'USDT',spot:mode==='SF'},{exchange:sell,symbol:name+'USDT',spot:mode==='FS'}]}};
+  assert.deepEqual(JSON.parse(gcStrategyCopy(data).slice('ASTRO-QUICK-COPY:'.length)),{type:mode,name,buyEx,sellEx,...mode==='FS'?{spotMarginType:'cross'}:{}});
+  assert.equal(gcBothLegs(data),both);
+ }
+ const spot=gcFixture('aster','bitget','GRIFFAINUSDT');spot.strategy='SF';spot.details.legs[0].spot=true;
+ assert.equal(gcStrategyCopy(spot),null);
+});
 test('GC matches supplied clipboard exactly and leaves normal Astro copy unchanged',()=>{
  const d=gcFixture();
  assert.equal(gcStrategyCopy(d),'ASTRO-QUICK-COPY:\n{\n  "type": "FF",\n  "name": "GRIFFAIN",\n  "buyEx": "gc-binance",\n  "sellEx": "gc-hl"\n}');
@@ -10,7 +25,7 @@ test('GC matches supplied clipboard exactly and leaves normal Astro copy unchang
  assert.equal(JSON.parse(gcStrategyCopy(gcFixture('gate','bybit','GRIFFAINUSDT')).split('\n').slice(1).join('\n')).sellEx,'gc-bybit');
 });
 test('GC rejects unsupported exchanges, modes, malformed legs and mismatched contracts',()=>{
- for(const d of [gcFixture('bitget','aster','GRIFFAINUSDT'),gcFixture('unknown'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
+ for(const d of [gcFixture('bitget','bitget','GRIFFAINUSDT'),gcFixture('unknown'),gcFixture('binance','hyperliquid','1000GRIFFAIN'),{...gcFixture(),strategy:'SF'},{strategy:'FF',details:{legs:[]}}])assert.equal(gcStrategyCopy(d),null);
  const d=gcFixture();d.details.legs[0].spot=true;assert.equal(gcStrategyCopy(d),null);
 });
 const now=1791162796000;
@@ -122,7 +137,7 @@ test('OKX participates on either GC leg with every supported venue; malformed an
 });
 
 test('single GC leg keeps the other venue ordinary; only double GC gets a green card',()=>{
- for(const gc of ['binance','bybit','gate','okx','hyperliquid'])for(const plain of ['aster','bitget'])for(const reverse of [false,true]){
+ for(const gc of ['binance','bybit','gate','okx','hyperliquid','aster'])for(const plain of ['bitget'])for(const reverse of [false,true]){
   const a=reverse?plain:gc,b=reverse?gc:plain,d=gcFixture(a,b,'GRIFFAINUSDT');const normal=strategyCopy(d);
   const p=JSON.parse(gcStrategyCopy(d).split('\n').slice(1).join('\n'));
   assert.equal(p.buyEx,reverse?plain:'gc-'+(gc==='hyperliquid'?'hl':gc));assert.equal(p.sellEx,reverse?'gc-'+(gc==='hyperliquid'?'hl':gc):plain);assert.equal(gcBothLegs(d),false);assert.equal(strategyCopy(d),normal);
@@ -135,7 +150,7 @@ test('FS GC copies BERA HL/Bitget and never converts the borrowing spot leg',()=
  for(const buy of ['binance','bybit','gate','okx','hyperliquid','aster','bitget'])for(const sell of ['binance','bybit','gate','okx','bitget','aster','hyperliquid']){
   const d={strategy:'FS',details:{legs:[{exchange:buy,symbol:buy==='hyperliquid'?'BERA':'BERAUSDT',spot:false},{exchange:sell,symbol:'BERAUSDT',spot:true}]}};
   const result=gcStrategyCopy(d);
-  if(['aster','bitget'].includes(buy)||['aster','hyperliquid'].includes(sell)){assert.equal(result,null);continue;}
+  if(['bitget'].includes(buy)||['aster','hyperliquid'].includes(sell)){assert.equal(result,null);continue;}
   assert.deepEqual(JSON.parse(result.slice('ASTRO-QUICK-COPY:'.length)),{type:'FS',name:'BERA',buyEx:'gc-'+(buy==='hyperliquid'?'hl':buy),sellEx:sell,spotMarginType:'cross'});
   assert.equal(gcBothLegs(d),false);
   d.details.legs[1].symbol='1000BERAUSDT';assert.equal(gcStrategyCopy(d),null);
