@@ -12,6 +12,25 @@ public partial class App : Application
     internal static string SmokeStage { get; set; } = "ui";
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if(e.Args.Length==2 && e.Args[0]=="--recovery-settings-preview")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            Preferences.ContractPath=Path.Combine(e.Args[1],"synthetic-preferences.json");Directory.CreateDirectory(e.Args[1]);
+            var fixture=new MainWindow();MainWindow=fixture;
+            try{fixture.RenderRecoverySettings(e.Args[1]);await fixture.ExitAsync();}
+            catch(Exception error){File.WriteAllText(Path.Combine(e.Args[1],"preview-error.txt"),error.ToString());Shutdown(1);}return;
+        }
+        if(e.Args.Length == 3 && e.Args[0] == "--desktop-watch" && int.TryParse(e.Args[1],out var watchedPid) && long.TryParse(e.Args[2],out var watchedTicks))
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            Shutdown(await DesktopRecovery.WatchAsync(watchedPid,watchedTicks));return;
+        }
+        if(e.Args.Length == 2 && e.Args[0] is "--recovery-fixture" or "--recovery-contract")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            try{if(e.Args[0]=="--recovery-fixture")await DesktopRecovery.FixtureAsync(e.Args[1]);else await DesktopRecovery.ContractAsync(e.Args[1]);Shutdown();}
+            catch(Exception error){Directory.CreateDirectory(e.Args[1]);File.WriteAllText(Path.Combine(e.Args[1],"recovery-error.txt"),error.ToString());Shutdown(1);}return;
+        }
         if(e.Args.Length==2&&e.Args[0]=="--verify-update-source")
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
@@ -256,6 +275,7 @@ public partial class App : Application
                 await Task.Delay(500);
             }
         }
+        var migratedStartup = !SmokeMode && StartupRegistration.MigrateEnabledLegacy();
         var window = new MainWindow(); MainWindow = window;
         if(e.Args.Contains("--measure-current-window"))
         {
@@ -269,7 +289,7 @@ public partial class App : Application
         if(e.Args.Contains("--observe-state"))
         {var receipt=e.Args.SkipWhile(a=>a!="--observe-state").Skip(1).FirstOrDefault();if(receipt is not null)window.ObserveConfiguredState(receipt);}
         if(SmokeMode){window.ShowActivated=false;window.Loaded+=(_,_)=>{window.Left=-12000;window.Top=-12000;};}
-        if(!e.Args.Contains("--background"))window.Show();
+        if(!e.Args.Contains("--background") || migratedStartup)window.Show();
         if(e.Args.Contains("--authorized-trial"))
         {
             var arguments=e.Args.SkipWhile(a=>a!="--authorized-trial").Skip(1).ToArray();
@@ -282,6 +302,8 @@ public partial class App : Application
             await window.ShowRegistrationAsync(true); return;
         }
         if (!SmokeMode) {
+            DesktopRecovery.Adopt(e.Args);
+            _ = EnableRecoveryAsync(window,e.Args);
             if(e.Args.Contains("--update-health-receipt")){
                 var receipt=e.Args.SkipWhile(a=>a!="--update-health-receipt").Skip(1).FirstOrDefault();
                 if(receipt is not null&&Preferences.LoadState is "loaded" or "missing")DesktopAutoUpdate.WriteHealthReceipt(receipt);
@@ -294,8 +316,21 @@ public partial class App : Application
         try { await window.RunCurrentContractAsync(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "PASS isolated persistence safety, synchronous exit flush, bounded continuous history, full-height viewport and real timer progression.\nAudio output, physical dragging and multi-monitor DPI are NOT verified."); await window.ExitAsync(); }
         catch (Exception ex) { Directory.CreateDirectory(smokeOutput); File.WriteAllText(Path.Combine(smokeOutput, "ui-smoke.txt"), "FAIL " + ex.GetType().Name + " stage=" + SmokeStage+"\n"+ex.Message+"\n"+ex.StackTrace); Shutdown(1); }
     }
+    private static async Task EnableRecoveryAsync(MainWindow window,string[] args)
+    {
+        // Give the existing installer time to finish health verification/rollback.
+        if(args.Contains("--update-health-receipt"))
+        {
+            await Task.Delay(10000);
+            var receipt=args.SkipWhile(a=>a!="--update-health-receipt").Skip(1).FirstOrDefault();
+            if(receipt is null || !File.Exists(receipt))return;
+        }
+        if(Current?.MainWindow!=window)return;
+        await window.ConfigureRecoveryAsync();
+    }
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
+        if(SmokeMode)DesktopRecovery.CancelWatching();
         ProcessLifecycle.Write("session_query","session_ending");
         if(MainWindow is MainWindow window && !window.FlushForSessionEnding()){e.Cancel=true;window.Restore();}
         else if(MainWindow is MainWindow closing){ProcessLifecycle.ExitReason="session_ending";_=closing.ExitAsync();}
