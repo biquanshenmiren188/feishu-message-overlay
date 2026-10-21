@@ -60,6 +60,9 @@ foreach($contract in @('cloud-source','cloud-window','bottom-alignment')){
  if($check.ExitCode -ne 0 -or !(Test-Path -LiteralPath $report) -or !(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).passed){throw "$contract contract failed"}
 }
 & (Join-Path $PSScriptRoot 'test-update-process.ps1') -AppDirectory (Join-Path $root $OutputDirectory)
+$recoveryReport=Join-Path $root ('artifacts/verification/recovery-'+[guid]::NewGuid().ToString('N'))
+$recovery=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @('--recovery-contract',('"'+$recoveryReport+'"')) -WindowStyle Hidden -PassThru -Wait
+if($recovery.ExitCode -ne 0 -or !(Test-Path -LiteralPath (Join-Path $recoveryReport 'recovery-contract.json'))){throw 'Desktop recovery contracts failed'}
 # No installation, signing, certificate trust, startup registration, or system permissions.
 & (Join-Path $PSScriptRoot 'write-update-manifest.ps1') -Directory (Join-Path $root $OutputDirectory) -Version $UpdateVersion
 Add-Type -AssemblyName System.IO.Compression.FileSystem
