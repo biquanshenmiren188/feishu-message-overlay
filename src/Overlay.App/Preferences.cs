@@ -14,6 +14,7 @@ public sealed record Preferences
     public string AudioPath { get; init; } = "";
     public bool Topmost { get; init; } = true;
     public bool Sound { get; init; } = true;
+    public bool AutoRecovery { get; init; } = true;
     public string PinnedChatId {get;init;}="";
     public bool AutoListenJoined {get;init;} = false;
     public bool AutoScroll { get; init; } = true;
