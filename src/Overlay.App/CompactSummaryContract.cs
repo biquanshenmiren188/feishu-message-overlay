@@ -32,6 +32,19 @@ internal static class CompactSummaryContract
         var launched=new List<string>();var previous=MessageText.Launch;MessageText.Launch=uri=>launched.Add(uri.OriginalString);
         try
         {
+            const string topicBody="[Binance/Aster 专题价差] 1 个信号\n1. IRYS | 多 Binance / 空 Aster\n当前 take: 0.9446%\n一档可成交约: 145.55 U; 已持续 3分0秒\n查看详情: https://example.invalid/radar/?tab=FF&mode=FF&q=irys";
+            foreach(var structured in new[]{false,true})
+            {
+                var topicView=new MessageView{Message=new IncomingMessage("topic","fixture","",topicBody,DateTimeOffset.UtcNow,SenderKind.Bot){Card=structured?new MessageCard("",topicBody,Array.Empty<CardLink>()):null}};
+                content.Children.Insert(1,topicView);window.UpdateLayout();
+                Check(topicView.FullBody is not null&&!topicView.IsExpanded,"topic starts collapsed");
+                Check(Children<TextBlock>(topicView).Any(t=>t.Text=="IRYS｜FF｜BN → AS"),"topic title exact");
+                var detail=Children<Button>(topicView).Single();Check((string)detail.Content=="查看详情","topic detail button visible");
+                detail.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(!topicView.IsExpanded,"detail click does not expand original");
+                Check(launched.Last()=="https://example.invalid/radar/?tab=FF&mode=FF&q=irys","topic exact URL opened");
+                topicView.ToggleFullBody();Check(topicView.IsExpanded&&MessageText.GetContent(topicView.FullBody!)==topicBody,"topic original retained");topicView.ToggleFullBody();
+                if(!structured)content.Children.Remove(topicView);
+            }
             foreach(var view in views)
             {
                 var buttons=Children<Button>(view).Where(b=>b.Tag is string).ToArray();Check(buttons.Length==2,"two unchanged action buttons");

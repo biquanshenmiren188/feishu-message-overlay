@@ -7,7 +7,9 @@ const cases=[];let name='';
 const source=(await fs.readFile(new URL('../web/robot-push/summary.test.mjs',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
 vm.runInNewContext(source,{test:(title,body)=>{name=title;body();},assert,mobileSummary:message=>{
  const result=mobileSummary(message);const {title,signals,spread,risk,warning}=result;
- cases.push({name,input:message,expected:{title,signals,spread,risk,warning}});return result;
+ // Desktop preference (2026-10-22): quality remains only in expandable source.
+ const withoutQuality=text=>text.replace(/(?: · )?质量：[^\n]*/g,'');
+ cases.push({name,input:message,expected:{title,signals:withoutQuality(signals),spread:withoutQuality(spread),risk,warning}});return result;
 }});
 await fs.writeFile(new URL('../tests/Overlay.Core.Tests/summary-fixtures.json',import.meta.url),JSON.stringify(cases,null,2)+'\n');
 console.log(`${cases.length} web summary fixtures generated`);

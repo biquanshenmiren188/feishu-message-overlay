@@ -20,6 +20,7 @@ public static class CompactMessage
     private sealed record Dex(int Index,string Rank,string Mode,string Coin,string Route);
     public static CompactSummary From(string? originalTitle,string? body)
     {
+        if(TopicSpreadMessage.Summary(originalTitle,body??"") is {} topic)return topic;
         var lines=Regex.Split(body??"",@"\r\n|\r|\n").Select(s=>s.Trim()).Where(s=>s.Length>0).ToArray();
         var direction=lines.FirstOrDefault(s=>Has(s,@"^(买|买入|做多).*(→|->|卖|做空)"))??"";
         var route=Match(direction,@"^(?:买入|买|做多)\s+(\S+).*?(?:→|➡️?|->)\s*(?:卖出|卖|做空)\s+(\S+)");
@@ -41,9 +42,8 @@ public static class CompactMessage
                 var observed=Find(block,@"^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*/\s*[+−-]?\d+(?:\.\d+)?\s*%");
                 if(observed.Length==0)observed=Find(block,@"(?:^|[｜|])\s*盘口差\s*[:：]?\s*([+−-]?\d+(?:\.\d+)?\s*%)");
                 var spread=observed.Length>0?"盘口差 "+(Has(observed,@"^[+−-]")?"":"+")+Replace(observed,@"\s",""):"";
-                var quality=Find(block,@"^质量\s*[:：]\s*(.+)$");
-                if(dex.Count==1&&spread.Length>0){dexSpread=string.Join(" · ",new[]{spread,quality.Length>0?"质量："+quality:""}.Where(s=>s.Length>0));continue;}
-                var details=new[]{dex.Count>1?$"{entry.Coin}｜{entry.Mode}｜{entry.Route}｜{entry.Rank}":"",dex.Count>1?spread:"",quality.Length>0?"质量："+quality:""}.Where(s=>s.Length>0);
+                if(dex.Count==1&&spread.Length>0){dexSpread=spread;continue;}
+                var details=new[]{dex.Count>1?$"{entry.Coin}｜{entry.Mode}｜{entry.Route}｜{entry.Rank}":"",dex.Count>1?spread:""}.Where(s=>s.Length>0);
                 var text=string.Join(" · ",details);if(text.Length>0)signals.Add(text);
             }
         }

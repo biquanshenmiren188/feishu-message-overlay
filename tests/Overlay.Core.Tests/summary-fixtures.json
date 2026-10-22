@@ -7,7 +7,7 @@
     "expected": {
       "title": "TOKEN｜FS｜GT→BG｜P3",
       "signals": "",
-      "spread": "盘口差 +0.2202% · 质量：样本少",
+      "spread": "盘口差 +0.2202%",
       "risk": "",
       "warning": false
     }
@@ -292,7 +292,7 @@
     },
     "expected": {
       "title": "DEX套利｜FIRST、SECOND、THIRD｜3组",
-      "signals": "FIRST｜FF｜BN→AS｜P3\nSECOND｜FS｜GT→BG｜P5+ · 盘口差 +0.2202% · 质量：样本少\nTHIRD｜SF｜BY→OK｜P1 · 盘口差 +0.0000%",
+      "signals": "FIRST｜FF｜BN→AS｜P3\nSECOND｜FS｜GT→BG｜P5+ · 盘口差 +0.2202%\nTHIRD｜SF｜BY→OK｜P1 · 盘口差 +0.0000%",
       "spread": "",
       "risk": "",
       "warning": false
@@ -320,7 +320,7 @@
     "expected": {
       "title": "TOKEN｜SF｜BG→OK｜P3",
       "signals": "",
-      "spread": "盘口差 +0.9107% · 质量：瞬时，价差强",
+      "spread": "盘口差 +0.9107%",
       "risk": "",
       "warning": false
     }
@@ -333,7 +333,7 @@
     "expected": {
       "title": "TOKEN｜SF｜BG→OK｜P12+",
       "signals": "",
-      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "spread": "盘口差 -0.0120%",
       "risk": "",
       "warning": false
     }
@@ -346,7 +346,7 @@
     "expected": {
       "title": "TOKEN｜FS｜GT→BN｜P12+",
       "signals": "",
-      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "spread": "盘口差 -0.0120%",
       "risk": "",
       "warning": false
     }
@@ -359,7 +359,7 @@
     "expected": {
       "title": "TOKEN｜FF｜BY→AS｜P12+",
       "signals": "",
-      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "spread": "盘口差 -0.0120%",
       "risk": "",
       "warning": false
     }
@@ -372,7 +372,7 @@
     "expected": {
       "title": "TOKEN｜FF｜OK→BG｜P12+",
       "signals": "",
-      "spread": "盘口差 -0.0120% · 质量：样本少",
+      "spread": "盘口差 -0.0120%",
       "risk": "",
       "warning": false
     }
@@ -455,7 +455,7 @@
     "expected": {
       "title": "TOKEN｜FF｜BN→AS｜P3",
       "signals": "",
-      "spread": "盘口差 +0.3759% · 质量：样本少",
+      "spread": "盘口差 +0.3759%",
       "risk": "",
       "warning": false
     }
@@ -467,7 +467,7 @@
     },
     "expected": {
       "title": "DEX套利｜FIRST、SECOND、THIRD｜3组",
-      "signals": "FIRST｜SF｜GT→BG｜P3 · 盘口差 -0.015% · 质量：样本少\nSECOND｜FS｜OK→BN｜P9 · 盘口差 +0.32%\nTHIRD｜FF｜AS→BY｜P2",
+      "signals": "FIRST｜SF｜GT→BG｜P3 · 盘口差 -0.015%\nSECOND｜FS｜OK→BN｜P9 · 盘口差 +0.32%\nTHIRD｜FF｜AS→BY｜P2",
       "spread": "",
       "risk": "",
       "warning": false

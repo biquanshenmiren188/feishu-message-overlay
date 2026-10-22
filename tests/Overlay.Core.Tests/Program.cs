@@ -7,6 +7,7 @@ var checks = 0;
 void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); checks++; Console.WriteLine("PASS " + name); }
 await DesktopUpdateTests.RunAsync(Check);
 CompactSummaryTests.Run(Check);
+TopicSpreadTests.Run(Check);
 IncomingMessage Message(string id, string source = "chosen", int seconds = 1) => new(id, source, "演示发送人", "中文消息", now.AddSeconds(seconds), SenderKind.Bot, "fake-bot");
 store.Start(now);
 Check(!store.Add(Message("old", seconds: -1), "chosen", now), "历史消息不重播");

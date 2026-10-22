@@ -62,6 +62,11 @@ public sealed class MessageView : Grid
         FullBody=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
         var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(216,216,216)),BorderThickness=new Thickness(0,0,0,.5),Padding=new Thickness(1,1,1,3)};Children.Add(outer);
         var card=message.Card;
+        if(TopicSpreadMessage.Summary(card?.Title,card?.Body??message.Text) is not null)
+        {
+            card??=new MessageCard("",message.Text,Array.Empty<CardLink>());
+            card=card with {Buttons=card.Buttons.Concat(TopicSpreadMessage.Links(card.Body)).DistinctBy(x=>x.Url).Take(8).ToArray()};
+        }
         var summary=CompactMessage.From(card?.Title,card?.Body??message.Text);
         // Known monitor envelopes remain collapsed even when a new route format has no summary yet.
         var monitor=System.Text.RegularExpressions.Regex.IsMatch(card?.Body??message.Text,@"(?im)^\s*\[Dex\s+套利监控命中\]");
