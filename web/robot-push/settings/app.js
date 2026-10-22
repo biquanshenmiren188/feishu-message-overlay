@@ -1,7 +1,9 @@
 (()=>{
 const R=window.RadarRules,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],key='radar-rules-independent-preview-v2';
-let profiles={desktop:R.defaults(),mobile:R.defaults()},active='mobile',state=profiles.mobile,saved=false,edit=null,toastTimer,history=[],mobileLoaded=false,mobileHistory=[],mobileBusy=false;
+let profiles={desktop:R.defaults(),cards:R.defaults(),mobile:R.defaults()},active='mobile',state=profiles.mobile,saved=false,edit=null,toastTimer,history=[],mobileLoaded=false,mobileHistory=[],mobileBusy=false;
 try{const data=JSON.parse(localStorage.getItem(key));if(data&&data.version===2&&data.profiles&&['desktop','mobile'].every(c=>Array.isArray(data.profiles[c]?.coins)&&Array.isArray(data.profiles[c]?.legRules)&&Array.isArray(data.profiles[c]?.coinOI))){profiles=data.profiles;active='mobile';profiles.mobile=R.defaults();state=profiles[active];saved=true;}const h=JSON.parse(localStorage.getItem(key+'-history'));if(Array.isArray(h))history=h.slice(0,200);}catch{}
+profiles.desktop=R.defaults();profiles.cards=R.defaults();state=profiles[active];
+let desktopLoaded=false,desktopRevision=0,desktopHistory=[],desktopConnected=false,desktopError='正在连接电脑规则…';
 let savedSnapshot=JSON.stringify(profiles);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 const number=v=>v.trim()===''?null:Number(v);
@@ -17,7 +19,7 @@ $('#exchange-grid').innerHTML=R.exchanges.map(e=>`<label class="exchange-choice"
 $('#oi-exchanges').innerHTML=R.exchanges.map(e=>{const rule=state.exchangeOI[e[0]]||{mode:'inherit',value:null};return `<div class="oi-row"><div><b>${e[1]}</b><small id="oi-label-${e[0]}"></small></div><select aria-label="${e[1]} OI 设置" data-oi-mode="${e[0]}"><option value="inherit" ${rule.mode==='inherit'?'selected':''}>跟随统一</option><option value="custom" ${rule.mode==='custom'?'selected':''}>单独设置</option><option value="none" ${rule.mode==='none'?'selected':''}>不限制</option></select><div class="oi-custom unit-input" id="oi-custom-${e[0]}" ${rule.mode==='custom'?'':'hidden'}><input type="number" min="0" step="any" inputmode="decimal" data-oi-value="${e[0]}" aria-label="${e[1]} 最低 OI" value="${rule.value??''}" placeholder="输入最低持仓金额"><span>万 USDT</span></div></div>`;}).join('');updateOILabels();}
 function updateOILabels(){for(const e of R.exchanges){const r=state.exchangeOI[e[0]]||{mode:'inherit'};const n=r.mode==='none'?null:r.mode==='custom'?r.value:state.globalOI;$('#oi-label-'+e[0]).textContent=r.mode==='custom'&&n===null?'请填写门槛':n===null?'当前不限':`当前最低 ${n} 万 USDT`;}}
 function initialize(){
-$('#enabled').checked=state.enabled;$('#receive-label').textContent=state.enabled?'接收消息已开启':'接收消息已暂停';$('#global-oi').value=state.globalOI??'';$('#rows').value=state.rows;$('#interval').value=state.interval;$('#r-percent').value=state.rPercent??'';$('#r-ranks').value=state.ranks.join('、');$$('[name=missing]').forEach(x=>x.checked=x.value===state.missing);$('#mode-options').innerHTML=['SF','FS','FF'].map(m=>`<label><input type="checkbox" data-mode="${m}" ${state.modes.includes(m)?'checked':''}>${m}</label>`).join('');renderLists();renderExchanges();renderPhone();$('#save-status').textContent=JSON.stringify(state)!==JSON.stringify(JSON.parse(savedSnapshot)[active])?'有未保存的更改':active==='mobile'?(mobileLoaded?'已载入云端手机规则':'等待连接推送码'):saved?'已载入电脑预览配置':'尚未保存电脑预览配置';updateChannelUI();}
+$('#enabled').checked=state.enabled;$('#receive-label').textContent=state.enabled?'接收消息已开启':'接收消息已暂停';$('#global-oi').value=state.globalOI??'';$('#oi-conversion').textContent=state.globalOI===null?'留空不限制 OI':`相当于 ${(state.globalOI*10000).toLocaleString()} USDT`;$('#rows').value=state.rows;$('#interval').value=state.interval;$('#r-percent').value=state.rPercent??'';$('#r-ranks').value=state.ranks.join('、');$$('[name=missing]').forEach(x=>x.checked=x.value===state.missing);$('#mode-options').innerHTML=['SF','FS','FF'].map(m=>`<label><input type="checkbox" data-mode="${m}" ${state.modes.includes(m)?'checked':''}>${m}</label>`).join('');renderLists();renderExchanges();renderPhone();$('#save-status').textContent=JSON.stringify(state)!==JSON.stringify(JSON.parse(savedSnapshot)[active])?'有未保存的更改':active==='mobile'?(mobileLoaded?'已载入云端手机规则':'等待连接推送码'):(desktopLoaded?'已载入云端规则':desktopError);updateChannelUI();}
 function openEditor(kind,index=null,preset=null){edit={kind,index};const r=index===null?null:state[kind][index];$('#editor-title').textContent=(r?'编辑':'添加')+({coins:'币种屏蔽',legRules:'定向屏蔽',coinOI:'币种 OI 门槛'})[kind];$('#editor-error').textContent='';let fields='';if(kind!=='legRules')fields+=`<label class="stack-label">${kind==='coins'&&!r?'币种（可批量输入）':'币种'}<input id="rule-coin" placeholder="${kind==='coins'&&!r?'例如 MITO、PTB':'例如 MITO'}" value="${esc(r?.coin||'')}" autocomplete="off" required></label>`;fields+=`<label class="stack-label">交易所<select id="rule-exchange">${options(kind==='coins')}</select></label>`;
 if(kind==='legRules')fields+='<div class="two-col"><label>腿的位置<select id="rule-side"><option value="all">任意一侧</option><option value="left">左腿（买入）</option><option value="right">右腿（卖出）</option></select></label><label>市场类型<select id="rule-market"><option value="all">现货和永续</option><option value="spot">仅现货</option><option value="perp">仅永续</option></select></label></div>';
 if(kind==='coinOI')fields+='<label class="stack-label">最低 OI（万 USDT）<input id="rule-oi" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 500"></label><label class="form-check"><input id="rule-no-limit" type="checkbox">此币种在该交易所不限制 OI</label>';
@@ -39,8 +41,12 @@ $('#save').addEventListener('click',async()=>{
   catch(e){$('#save-status').textContent='保存失败，草稿已保留';toast(e.message);}
   finally{mobileBusy=false;$('.settings').inert=false;updateChannelUI();}return;
  }
- try{const next={desktop:profiles.desktop,mobile:R.defaults()};localStorage.setItem(key,JSON.stringify({version:2,active,profiles:next}));const before=JSON.parse(savedSnapshot);before.desktop=JSON.parse(JSON.stringify(state));savedSnapshot=JSON.stringify(before);saved=true;$('#save-status').textContent='电脑预览规则已保存';toast('已保存电脑规则预览，小窗行为尚未改变');}
- catch{toast('浏览器存储不可用，配置尚未保存');}
+ if(!desktopLoaded||mobileBusy){toast(desktopError);return;}
+ mobileBusy=true;$('.settings').inert=true;$('#save').disabled=true;
+ try{const channel=active;const result=await window.RadarDesktopSettings.save({revision:desktopRevision,channel,settings:toServer(state),action:channel==='cards'?'hide':state.desktopAction});applyDesktop(result,channel);toast('已保存，小窗下次同步后生效');}
+ catch(e){$('#save-status').textContent='保存失败，草稿已保留';toast(e.message);}
+ finally{mobileBusy=false;$('.settings').inert=false;updateChannelUI();}
+
 });
 const exchangeOut=e=>e==='hyperliquid'?'HL':e.toUpperCase();
 const exchangeIn=e=>e==='HL'?'hyperliquid':e.toLowerCase();
@@ -48,12 +54,25 @@ function toServer(s){return {notify_enabled:s.enabled,rows:s.rows,notify_interva
 function fromServer(s){const a=s.advanced||{};return {...R.defaults(),...a,enabled:s.notify_enabled,rows:s.rows,interval:s.notify_interval_seconds,rPercent:s.min_percent,ranks:s.excluded_ranks,modes:s.excluded_modes,blockedExchanges:s.excluded_exchanges.map(exchangeIn),coins:[...s.excluded_coins.map(coin=>({coin,exchange:'all',enabled:true})),...(a.coins||[])]};}
 document.addEventListener('radar-mobile-loaded',e=>{profiles.mobile=fromServer(e.detail.settings);mobileHistory=e.detail.blockedHistory||[];mobileLoaded=true;const snap=JSON.parse(savedSnapshot);snap.mobile=JSON.parse(JSON.stringify(profiles.mobile));savedSnapshot=JSON.stringify(snap);state=profiles[active];initialize();$('#mobile-status').textContent=e.detail.subscribed?'已连接云端 · 订阅已连接':'已连接云端 · 待开启通知';if(active==='mobile')$('#save-status').textContent='已载入云端手机规则';});
 
+function applyDesktop(data,channel=null){
+ desktopLoaded=true;desktopRevision=data.revision;desktopHistory=data.history||[];desktopConnected=data.connected;
+ const snapshot=JSON.parse(savedSnapshot);
+ for(const c of channel?[channel]:['desktop','cards']){profiles[c]={...fromServer(data[c].settings),desktopAction:data[c].action};snapshot[c]=JSON.parse(JSON.stringify(profiles[c]));}
+ savedSnapshot=JSON.stringify(snapshot);state=profiles[active];initialize();
+}
+document.addEventListener('radar-desktop-loaded',e=>applyDesktop(e.detail));
+document.addEventListener('radar-desktop-error',e=>{desktopLoaded=false;desktopError=e.detail;updateChannelUI();});
 function updateChannelUI(){
-  $('h1').textContent=active==='mobile'?'手机推送设置':'电脑屏蔽设置';$('#tab-other').textContent=active==='mobile'?'推送与预览':'其他设置';$('#refresh-history').hidden=active!=='mobile';$('#refresh-history').disabled=!mobileLoaded;
-  $$('[data-channel]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.channel===active));
-  $('#channel-hint').textContent=active==='mobile'?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请展开“通知与推送码”连接；连接前不会覆盖现有设置。'):'当前编辑电脑屏蔽规则，不影响手机推送。';
-  $('#mobile-cadence').hidden=active!=='mobile';$('#mobile-account').hidden=active!=='mobile';$('#desktop-action').hidden=active!=='desktop';$$('[name=desktop-action]').forEach(x=>x.checked=x.value===(state.desktopAction||'hide'));$('#save').disabled=active==='mobile'&&(!mobileLoaded||mobileBusy);$('#save-help').textContent=active==='mobile'?'保存到当前推送码':'仅保存电脑规则预览';$('#history-note').textContent=active==='mobile'?'最近 200 条云端屏蔽记录，包含命中原因与规则版本。历史记录从本次接入后开始。':'保留本浏览器此前生成的模拟记录；真实电脑记录尚未接入。';$('#save').textContent=active==='mobile'?'保存手机规则':'保存电脑规则';
-  $('#history-caption').textContent=active==='mobile'?'手机消息被过滤的原因与时间。':'电脑小窗的历史模拟记录。';renderHistory();
+ const mobile=active==='mobile',label=mobile?'手机推送':active==='cards'?'行情卡片':'电脑消息';
+ $('h1').textContent=label+'设置';$('#tab-other').textContent=mobile?'推送与预览':'其他设置';$('#refresh-history').hidden=false;$('#refresh-history').disabled=mobile?!mobileLoaded:!desktopLoaded;
+ $$('[data-channel]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.channel===active));
+ $('#channel-hint').textContent=mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'只控制左侧行情卡片，不改变右侧消息和手机推送。':'命中规则后按下方选择静音或隐藏；不影响行情卡片和手机。'):desktopError;
+ $('#mobile-cadence').hidden=!mobile;$('#mobile-account').hidden=false;$('#desktop-action').hidden=active!=='desktop';
+ $$('[name=desktop-action]').forEach(x=>x.checked=x.value===(state.desktopAction||'hide'));
+ $('#save').disabled=mobileBusy||(mobile?!mobileLoaded:!desktopLoaded);$('#save-help').textContent=mobile?'保存到当前推送码':'保存到云端 · 约 3 秒同步';
+ $('#history-note').textContent=mobile?'最近 200 条云端手机屏蔽记录。':'仅记录真实桌面请求中的命中，标明静音或隐藏；重复同步不重复记。电脑两类记录合计保留最近 200 条。';
+ $('#save').textContent='保存'+label+'规则';$('#history-caption').textContent=label+'被屏蔽的原因、时间和处理方式。';
+ $('#desktop-status').textContent=desktopLoaded?(desktopConnected?'小窗在线 · 规则已接入':'等待小窗连接'):'等待原始管理码连接';renderHistory();
 }
 function renderPhone(){
   const mobile=profiles.mobile;
@@ -64,7 +83,12 @@ function renderPhone(){
   $('#phone-notification').innerHTML=allowed.length?'<div class="notification-head"><span class="notification-icon">雷</span><b>雷达</b><span>现在</span></div>'+allowed.map(x=>{const mode=R.evaluate(mobile,x).mode;return '<div class="notification-line">'+esc(x.time.slice(0,5)+' '+(x.percent>=0?'+':'')+x.percent.toFixed(2)+'% '+x.rank.toUpperCase()+' '+mode+' '+abbreviations[x.left.exchange]+'→'+abbreviations[x.right.exchange]+' '+x.coin)+'</div>';}).join(''):'<div class="notification-empty">'+(!mobile.enabled?'手机接收消息已关闭':'没有符合手机规则的样例')+'<small>本轮不产生通知</small></div>';
   $('#phone-preview-meta').textContent='最多 '+mobile.rows+' 条 · '+(mobile.interval<60?mobile.interval+' 秒':mobile.interval/60+' 分钟')+'合并一次 · 当前 '+allowed.length+' 条通过 · 当前草稿';
 }
-function renderHistory(){if(active==='mobile'){$('#history-count').textContent=mobileHistory.length;$('#history-list').innerHTML=mobileHistory.length?mobileHistory.map(x=>'<article class="history-record"><div class="history-top"><b>'+esc(x.coin)+' · '+esc(x.mode)+'</b><span>规则版本 '+esc(x.revision)+'</span></div><small>'+esc(new Date(x.at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))+' UTC+8</small><p>'+esc(x.buy+' → '+x.sell+' · '+x.rank+' '+x.value)+'</p><ul>'+x.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></article>').join(''):'<div class="empty">'+(mobileLoaded?'暂无云端屏蔽记录，新消息被屏蔽后将在这里显示。':'连接推送码后查看云端记录。')+'</div>';return;}const records=history.filter(x=>x.channel===active);$('#history-count').textContent=records.length;$('#history-list').innerHTML=records.length?records.map(x=>'<article class="history-record"><div class="history-top"><b>'+esc(x.sample.coin)+'</b><span>模拟记录</span></div><small>'+esc(new Date(x.at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))+' UTC+8</small><p>'+esc(R.name(x.sample.left.exchange)+' 买入 '+R.marketName(x.sample.left.market)+' → '+R.name(x.sample.right.exchange)+' 卖出 '+R.marketName(x.sample.right.market))+'</p><ul>'+x.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul><small>'+(x.channel==='mobile'?'手机：不发送通知':'电脑：不显示、不响铃')+'</small></article>').join(''):'<div class="empty">暂无屏蔽记录。真实记录接入后将在这里显示。</div>';}
-$('#refresh-history').addEventListener('click',async()=>{const b=$('#refresh-history');b.disabled=true;try{mobileHistory=await window.RadarMobileSettings.history();renderHistory();}catch(e){toast(e.message);}finally{b.disabled=false;}});
+function renderHistory(){
+ const records=active==='mobile'?mobileHistory:desktopHistory.filter(x=>x.channel===active);
+ $('#history-count').textContent=records.length;
+ $('#history-list').innerHTML=records.length?records.map(x=>'<article class="history-record"><div class="history-top"><b>'+esc(x.coin)+' · '+esc(x.mode)+'</b><span>'+esc(x.action==='mute'?'仅静音 · 消息照常显示':x.action==='hide'?'已隐藏':'未推送')+'</span></div><small>'+esc(new Date(x.at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))+' UTC+8 · 规则版本 '+esc(x.revision)+'</small><p>'+esc(x.buy+' → '+x.sell+' · '+x.rank+' '+x.value)+'</p><ul>'+x.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></article>').join(''):'<div class="empty">暂无屏蔽记录，后续命中将在这里显示。</div>';
+}
+$('#refresh-history').addEventListener('click',async()=>{const b=$('#refresh-history');b.disabled=true;try{if(active==='mobile')mobileHistory=await window.RadarMobileSettings.history();else{const result=await window.RadarDesktopSettings.status();desktopHistory=result.history||[];desktopConnected=result.connected;}renderHistory();}catch(e){toast(e.message);}finally{b.disabled=false;}});
+
 initialize();
 })();

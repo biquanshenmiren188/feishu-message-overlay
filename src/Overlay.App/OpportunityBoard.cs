@@ -95,6 +95,7 @@ internal sealed class OpportunityModel
 internal sealed class OpportunityBoard : DockPanel
 {
     internal readonly OpportunityModel Model=new();
+    internal DesktopRuleDecisions Rules=DesktopRuleDecisions.Empty;
     private readonly TextBlock heading=new(){FontSize=14,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,6,4,8)};
     private readonly ListBox cards=new(){BorderThickness=new Thickness(0),Background=Brushes.Transparent,HorizontalContentAlignment=HorizontalAlignment.Stretch};
     private string? lastRender;
@@ -152,10 +153,11 @@ internal sealed class OpportunityBoard : DockPanel
     internal void Update(JsonElement? envelope,bool healthy,DateTimeOffset now,bool visible)
     {
         Model.Ingest(envelope,healthy,now);Model.Prune(now);
-        ActiveCount=Model.Cards.Values.Count(c=>Model.State(c,now)=="ACTIVE");
+        bool Allowed(OpportunityModel.Entry c)=>Rules.ShowCard(OpportunityModel.Text(c.Data,"pair") is {Length:>0} pair?pair:OpportunityModel.Text(c.Data,"id"));
+        ActiveCount=Model.Cards.Values.Count(c=>Allowed(c)&&Model.State(c,now)=="ACTIVE");
         if(!visible)return;
         // Values are committed at most once per ten seconds; expiry/connection changes remain immediate.
-        var ordered=Model.Cards.Values.OrderBy(c=>OpportunityModel.Asset(c.Data),StringComparer.Ordinal).ThenByDescending(c=>OpportunityModel.Number(OpportunityModel.Get(c.Data,"v2Residual"),"level")??-1).ToArray();
+        var ordered=Model.Cards.Values.Where(Allowed).OrderBy(c=>OpportunityModel.Asset(c.Data),StringComparer.Ordinal).ThenByDescending(c=>OpportunityModel.Number(OpportunityModel.Get(c.Data,"v2Residual"),"level")??-1).ToArray();
         var states=JsonSerializer.Serialize(ordered.Select(c=>new{id=OpportunityModel.Text(c.Data,"id"),state=Model.State(c,now),transfers=Transfers(OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"legs",2),OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"transferWallets",20),now)}));
         var signature=string.Join(',',ordered.Select(c=>c.ContentVersion))+states;
         heading.Text=$"卡片推送   {ActiveCount} ACTIVE";

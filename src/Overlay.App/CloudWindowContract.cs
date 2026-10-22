@@ -38,6 +38,36 @@ public partial class MainWindow
         await Until(()=>readingQueue.Length==8 && displayed.LastOrDefault()?.Id==readingQueue.Last().Id);
         if(Math.Abs(MessageScroll.VerticalOffset-MessageScroll.ScrollableHeight)>2 || !displayed.Select(m=>m.Id).SequenceEqual(readingQueue.Select(m=>m.Id)))throw new InvalidOperationException("Cloud reconnect must show latest full viewport");
         checks.Add("reconnected_cloud_skips_backlog_and_shows_latest_viewport");
+        Sound.IsChecked=true;AutoScroll.IsChecked=false;
+        var ruleCount=0;
+        string WithRules(object[] fresh,Dictionary<string,string> decisions)
+        {
+            var node=System.Text.Json.Nodes.JsonNode.Parse(Snapshot(8,"pin3"))!.AsObject();
+            foreach(var m in fresh)node["messages"]!.AsArray().Add(JsonSerializer.SerializeToNode(m));
+            node["desktopRules"]=JsonSerializer.SerializeToNode(new{revision=++ruleCount,messages=decisions,cards=new{},desktopEnabled=true,cardsEnabled=true});
+            return node.ToJsonString();
+        }
+        var beforeSound=soundRequests;
+        var muteId=PublicWebPublisher.Digest("muted");var hideId=PublicWebPublisher.Digest("hidden");
+        var muted=Message("muted",normalGroup,DateTimeOffset.UtcNow);
+        Volatile.Write(ref snapshot,WithRules([muted],new(){{muteId,"mute"}}));
+        await Until(()=>readingQueue.Any(m=>m.Id==muteId));
+        if(soundRequests!=beforeSound)throw new InvalidOperationException("Muted message played sound");
+        checks.Add("rule_mute_keeps_actual_message_visible_without_sound");
+        var hidden=Message("hidden",normalGroup,DateTimeOffset.UtcNow);
+        Volatile.Write(ref snapshot,WithRules([muted,hidden],new(){{muteId,"mute"},{hideId,"hide"},{PublicWebPublisher.Digest("pin3"),"hide"}}));
+        await Until(()=>cloud.Rules.Revision==ruleCount&&PinnedCard.Content is null);
+        if(readingQueue.Any(m=>m.Id==hideId)||soundRequests!=beforeSound)throw new InvalidOperationException("Hidden message rendered or sounded");
+        checks.Add("rule_hide_suppresses_regular_and_pinned_display_and_sound");
+        var audible=Message("audible",normalGroup,DateTimeOffset.UtcNow);
+        Volatile.Write(ref snapshot,WithRules([muted,hidden,audible],new(){{muteId,"mute"},{hideId,"hide"}}));
+        await Until(()=>soundRequests==beforeSound+1);
+        if(!readingQueue.Any(m=>m.Id==PublicWebPublisher.Digest("audible")))throw new InvalidOperationException("Allowed message missing");
+        checks.Add("unblocked_message_in_mixed_batch_still_sounds");
+        Volatile.Write(ref snapshot,WithRules([muted,hidden,audible],new()));
+        await Until(()=>readingQueue.Any(m=>m.Id==hideId));
+        if(soundRequests!=beforeSound+1)throw new InvalidOperationException("Rule edit replayed historical sound");
+        checks.Add("removing_rule_restores_history_without_sound_replay");
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,regularVisible=displayed.Count,pinnedVisible=PinnedCard.Content is not null,syntheticOnly=true,realCredentialUsed=false}));
         verifyReadingTimer=false;
     }

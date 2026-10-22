@@ -175,6 +175,12 @@ class Handler(BaseHTTPRequestHandler):
                     result=receiver.state()
                     result['opportunities']=read_cards(publisher.directory)
                     result=conditional_state(result,control.get('known'))
+                    if control.get('desktopRules') == 1:
+                        try:
+                            from urllib.request import urlopen
+                            with urlopen('http://127.0.0.1:18885/internal/desktop-state',timeout=8) as policy:
+                                result['desktopRules']=json.loads(policy.read(1024*1024))
+                        except Exception:result['desktopRulesUnavailable']=True
                 elif isinstance(control,dict) and set(control)=={'action','pinnedGroupId'} and control['action']=='pin':result=receiver.select_pin(control['pinnedGroupId'])
                 else:raise Rejected(400,'invalid_control')
             elif self.path==CONFIG_ROUTE:

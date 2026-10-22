@@ -264,6 +264,10 @@ class Trial:
 
 
 def handler(trial):
+    desktop = None
+    if hasattr(trial, 'accounts'):
+        from desktop_rules import DesktopRules
+        desktop = DesktopRules(trial.directory)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -278,11 +282,18 @@ def handler(trial):
             self.wfile.write(raw)
 
         def do_GET(self):
+            # This path is deliberately outside every public /radar proxy route.
+            if self.path == '/internal/desktop-state' and self.client_address[0] == '127.0.0.1' and desktop:
+                try:return self.reply(200, desktop.evaluate())
+                except Exception:return self.reply(503, {'error':'desktop_rules_unavailable'})
             if self.path == BASE + 'api/health':
                 return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') or hasattr(trial, 'resolve') else 'synthetic-only'})
             account = self.authorized_account()
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})
+            if self.path == BASE + 'api/desktop-settings' and desktop:
+                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
+                return self.reply(200, desktop.status())
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
             if self.path == BASE + 'api/binding':
@@ -320,6 +331,9 @@ def handler(trial):
                 account = self.authorized_account()
                 if account is None:
                     return self.reply(401, {'error': '请先用测试码连接'})
+                if route == 'desktop-settings' and desktop:
+                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
+                    return self.reply(200, desktop.configure(data))
                 if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
                     return self.reply(200, trial.transfer_subscription(account, data))
                 if route == 'settings' and hasattr(account, 'configure'):

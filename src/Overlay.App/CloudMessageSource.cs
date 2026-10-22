@@ -20,6 +20,8 @@ internal sealed class CloudMessageSource : IMessageSource
     internal IncomingMessage? Pinned{get;private set;}
     internal string PinnedGroupId{get;private set;}="";
     internal JsonElement? Opportunities{get;private set;}
+    internal DesktopRuleDecisions Rules{get;private set;}=DesktopRuleDecisions.Empty;
+    internal bool RulesConnected{get;private set;}
     internal bool TransportConnected{get;private set;}
     internal DateTimeOffset StartedAt{get;}=DateTimeOffset.UtcNow;
     public bool IsRealConnection=>State==LinkState.Connected;
@@ -46,7 +48,7 @@ internal sealed class CloudMessageSource : IMessageSource
         {
             try
             {
-                object payload=known is null?new{action="state"}:(object)new{action="state",known};
+                object payload=known is null?new{action="state",desktopRules=1}:(object)new{action="state",known,desktopRules=1};
                 using var result=await request(payload,stop.Token);
                 var root=result.RootElement;if(!root.GetProperty("cloudMode").GetBoolean())throw new JsonException();
                 var conditional=root.TryGetProperty("protocol",out var protocol)&&protocol.ValueKind==JsonValueKind.Number&&protocol.GetInt32()==1;
@@ -80,6 +82,8 @@ internal sealed class CloudMessageSource : IMessageSource
                 if(pinned is not null&&pinned.SourceId!=selected)throw new JsonException();
                 lock(gate)
                 {
+                    RulesConnected=root.TryGetProperty("desktopRules",out var decisions);
+                    if(RulesConnected)Rules=DesktopRuleDecisions.Parse(decisions);
                     Groups=groups;Pinned=pinned;PinnedGroupId=selected;StateLoaded=true;
                     Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():conditional?Opportunities:null;
                     TransportConnected=true;

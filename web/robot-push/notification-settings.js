@@ -2,7 +2,9 @@ const BASE='/radar/push-test/', API=BASE+'api/';
 const integrated=document.querySelector('#live-mobile-account');
 const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-android1';document.head.append(css);
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
-const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';mount?.append(button);
+const button=document.createElement('button');button.type='button';button.id='notification-settings-open';button.textContent='推送设置';// Entry is the shared navigation tab, never a floating blue button.
+const nav=document.querySelector('.site-nav')||document.querySelector('.tabs');
+if(nav&&!nav.querySelector('a[href$="/settings/"]')){const link=document.createElement('a');link.href='/radar/robot-push/settings/';link.textContent='消息设置';nav.append(link);}
 const dialog=document.createElement(integrated?'section':'dialog');dialog.id='notification-settings';dialog.setAttribute('aria-labelledby','notification-settings-title');
 dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在上。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
 <div class="ns-body"><p id="ns-message" role="status" aria-live="polite"></p>
@@ -210,5 +212,9 @@ if(integrated){
   history:async()=>{const status=await api('status');return status.blockedHistory||[];},
   save:async(settings)=>{if(new TextEncoder().encode(JSON.stringify({revision,settings})).length>8192)throw Error('规则总量过多，请精简后保存');if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后保存');if(!token)throw Error('请先连接推送码');return task(async()=>{const result=await api('settings',{revision,settings});fill(result);message('已保存，后续新消息按此设置推送。');return result;},true);}
  };
+ window.RadarDesktopSettings={status:()=>api('desktop-settings'),save:async(data)=>{if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('规则总量过多，请精简后保存');return api('desktop-settings',data);}};
+ let desktopToken='';
+ async function loadDesktop(){if(desktopToken===token)return;const auth=token;try{const data=await api('desktop-settings',undefined,auth);if(auth!==token)return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(auth===token)document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.message}));}}
+ document.addEventListener('radar-mobile-loaded',loadDesktop);
  task(load);
 }
