@@ -32,6 +32,7 @@ let deviceToken=localStorage.getItem('radar-test-token')||'';
 let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false;
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+if(standalone)for(const a of document.querySelectorAll('a[href="/radar/robot-push/settings/"]'))a.href=BASE+'settings/';
 const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const android=/Android/i.test(navigator.userAgent)||navigator.userAgentData?.platform==='Android';
 const phoneApp=android||(standalone&&ios);
@@ -214,7 +215,7 @@ if(integrated){
  };
  window.RadarDesktopSettings={status:()=>api('desktop-settings'),save:async(data)=>{if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('规则总量过多，请精简后保存');return api('desktop-settings',data);}};
  let desktopToken='';
- async function loadDesktop(){if(desktopToken===token)return;const auth=token;try{const data=await api('desktop-settings',undefined,auth);if(auth!==token)return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(auth===token)document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.message}));}}
+ async function loadDesktop(){if(desktopToken===token)return;const auth=token;document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:'正在连接电脑规则…'}));try{const data=await api('desktop-settings',undefined,auth);if(auth!==token)return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(auth===token){desktopToken='';document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.message}));}}}
  document.addEventListener('radar-mobile-loaded',loadDesktop);
  task(load);
 }

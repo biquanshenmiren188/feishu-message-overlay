@@ -2,6 +2,7 @@
 import fcntl,hashlib,json,os,re,shutil,subprocess,sys,time,urllib.request
 from pathlib import Path
 stage=Path(sys.argv[1]).resolve();sha=sys.argv[2]
+web_only='--web-only' in sys.argv[3:]
 assert stage.parent==Path('/tmp') and stage.name.startswith('radar-desktop-rules-') and re.fullmatch('[a-f0-9]{40}',sha)
 manifest=json.loads((stage/'manifest.json').read_text());current=Path('/opt/funding-radar-web/current');phone=Path('/opt/radar-webpush-test');publisher=Path('/opt/robot-push')
 def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -19,9 +20,10 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  for path,h in manifest['baseline'].items():assert digest(Path(path))==h,'Changed production baseline: '+path
  for path,h in manifest['assets'].items():assert digest(stage/'files'/path)==h
  backend={phone/'server.py':'web/push-test/server.py',phone/'desktop_rules.py':'web/push-test/desktop_rules.py',publisher/'server.py':'web/robot-push/publisher/server.py',publisher/'state_delta.py':'web/robot-push/publisher/state_delta.py'}
+ if web_only:backend={}
  candidate=stage/'candidate';candidate.mkdir()
  for p in phone.glob('*.py'):shutil.copyfile(p,candidate/p.name)
- for name in ('server.py','desktop_rules.py','desktop_rules_test.py'):shutil.copyfile(stage/'files/web/push-test'/name,candidate/name)
+ for name in ('server.py','desktop_rules.py','desktop_rules_test.py','advanced_rules_test.py'):shutil.copyfile(stage/'files/web/push-test'/name,candidate/name)
  tests=run(str(phone/'venv/bin/python'),'-m','unittest','discover','-s',str(candidate),'-p','*_test.py');print(tests.stderr.strip(),flush=True)
  # Isolated real-data parsing: no writes to live rules or phone state.
  sys.path.insert(0,str(candidate));from desktop_rules import DesktopRules
@@ -47,7 +49,8 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  try:
   for dest,src in backend.items():
    temp=dest.with_suffix('.next');shutil.copyfile(stage/'files'/src,temp);temp.chmod(0o644);os.replace(temp,dest)
-  changed=True;run('systemctl','restart','radar-webpush-test')
+  changed=bool(backend)
+  if changed:run('systemctl','restart','radar-webpush-test')
   for attempt in range(30):
    try:get('/radar/push-test/api/health');break
    except Exception:
@@ -61,7 +64,8 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
    else:
     try:get('/radar/push-test/api/desktop-settings',data['token']);raise AssertionError('Non-owner desktop access')
     except urllib.error.HTTPError as error:assert error.code==403
-  run('systemctl','restart','robot-push');run('systemctl','is-active','robot-push','radar-webpush-test')
+  if changed:run('systemctl','restart','robot-push')
+  run('systemctl','is-active','robot-push','radar-webpush-test')
   assert identity()==before
   temp=fallback.with_suffix('.next');temp.write_bytes(version(fallback_before));temp.chmod(0o644);os.replace(temp,fallback)
   link=current.with_name('current.desktop-next');link.symlink_to(new);os.replace(link,current)
