@@ -4,6 +4,15 @@ internal static class CompactSummaryTests
 {
     public static void Run(Action<bool,string> check)
     {
+        const string observation="CTUSDT / USDT-FUTURES | 5分钟 close持续突降 | -3.4321 个百分点 | 档位 跌幅>=0.10 个百分点 | close 0.0000% -> -3.4321%";
+        var repeated="1. "+observation+"\n2. "+observation.Replace(">=0.10",">=0.20")+"\n3. "+observation;
+        var one=CompactMessage.From("BG 溢价指数突变提醒","1. "+observation).Signals;
+        check(CompactMessage.From("BG 溢价指数突变提醒",repeated).Signals==one,"premium repeated tiers collapse to one observation");
+        foreach(var distinct in new[]{observation.Replace("-3.4321%","-3.4322%"),observation.Replace("CTUSDT","BTCUSDT"),observation.Replace("USDT-FUTURES","COIN-FUTURES")})
+            check(CompactMessage.From("BG 溢价指数突变提醒",repeated+"\n4. "+distinct).Signals==one+"\n"+CompactMessage.From("BG 溢价指数突变提醒","1. "+distinct).Signals,"premium preserves distinct observation "+distinct);
+        check(CompactMessage.From("BG 溢价指数突变提醒",repeated).Signals==one,"premium dedup does not suppress later messages");
+        check(one=="CTUSDT 溢价指数 0% → -3.4321%","premium uses requested one-line format");
+        check(CompactMessage.From("BG 溢价指数突变提醒",repeated+"\n4. "+observation.Replace("5分钟","1分钟")).Signals==one,"same index transition across windows appears once");
         using var document=JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"summary-fixtures.json")));
         foreach(var fixture in document.RootElement.EnumerateArray())
         {

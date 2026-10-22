@@ -50,7 +50,9 @@
    <ComboBox x:Name="PinnedGroup" DisplayMemberPath="Value" SelectedValuePath="Key" SelectionChanged="PinnedGroupChanged"/>
    <TextBlock x:Name="PinnedStatus" FontSize="12" Foreground="#777777" TextWrapping="Wrap" Margin="0,4,0,8"/>
    <CheckBox x:Name="AutoJoined" Content="自动监听本机器人已加入群的机器人新消息" Click="AutoJoinedClick" Margin="0,8"/>
-    <CheckBox x:Name="Autostart" Content="开机自动启动（随Windows登录启动）" Margin="0,12" Click="StartupClick"/>
+    <CheckBox x:Name="Autostart" Content="开机启动并显示右侧小窗" Margin="0,12,0,6" Click="StartupClick"/>
+    <CheckBox x:Name="AutoRecovery" Content="异常退出后自动恢复" Margin="0,6" Click="RecoveryClick"/>
+    <TextBlock x:Name="RecoveryStatus" Text="手动退出保持关闭；连续异常最多恢复 3 次。" TextWrapping="Wrap" FontSize="12" Foreground="#555555" Margin="0,0,0,12"/>
    <TextBlock Foreground="#111111" Text="消息字体"/><ComboBox x:Name="FontChoice" Margin="0,4,0,8" SelectionChanged="FontChanged" AutomationProperties.Name="消息字体" Foreground="#111111"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Source}" Foreground="#111111"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
    <TextBlock Foreground="#111111" Text="字号"/><Slider x:Name="FontScale" Minimum="12" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SizeChangedHandler" AutomationProperties.Name="字号"/>
    <TextBlock Foreground="#111111" x:Name="OpacityLabel" Text="背景透明度 96%" Margin="0,12,0,0"/><Slider x:Name="OpacityScale" Minimum="60" Maximum="100" Value="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OpacityChanged" AutomationProperties.Name="背景透明度"/>

@@ -20,6 +20,7 @@ public static class CompactMessage
     private sealed record Dex(int Index,string Rank,string Mode,string Coin,string Route);
     public static CompactSummary From(string? originalTitle,string? body)
     {
+        if(TopicSpreadMessage.Summary(originalTitle,body??"") is {} topic)return topic;
         var lines=Regex.Split(body??"",@"\r\n|\r|\n").Select(s=>s.Trim()).Where(s=>s.Length>0).ToArray();
         var direction=lines.FirstOrDefault(s=>Has(s,@"^(买|买入|做多).*(→|->|卖|做空)"))??"";
         var route=Match(direction,@"^(?:买入|买|做多)\s+(\S+).*?(?:→|➡️?|->)\s*(?:卖出|卖|做空)\s+(\S+)");
@@ -28,7 +29,7 @@ public static class CompactMessage
         var signals=new List<string>();var dex=new List<Dex>();var dexSpread="";
         for(var i=0;i<lines.Length;i++)
         {
-            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)\s*[/／]\s*空\s+(\S+)\s*$");
+            var m=Match(lines[i],@"^\d+[.、)]\s*\[(P\d+\+?)\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*([^\s|｜]+)\s*[|｜]\s*多\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*[/／]\s*(?:空|借卖)\s+(\S+)(?:\s+(?:现货|合约|永续))?\s*$");
             if(m.Success)dex.Add(new(i,m.Groups[1].Value.ToUpperInvariant(),m.Groups[2].Value switch {"期期"=>"FF","现期"=>"SF","期现"=>"FS",var mode=>mode.ToUpperInvariant()},m.Groups[3].Value,Abbreviation(m.Groups[4].Value)+"→"+Abbreviation(m.Groups[5].Value)));
         }
         if(dex.Count>0)
@@ -36,13 +37,13 @@ public static class CompactMessage
             var first=dex[0];title=dex.Count==1?$"{first.Coin}｜{first.Mode}｜{first.Route}｜{first.Rank}":$"DEX套利｜{string.Join("、",dex.Select(x=>x.Coin).Distinct())}｜{dex.Count}组";
             for(var i=0;i<dex.Count;i++)
             {
-                var entry=dex[i];var block=lines.Skip(entry.Index+1).Take((i+1<dex.Count?dex[i+1].Index:lines.Length)-entry.Index-1).ToArray();
+                // Stop at every numbered entry, including unsupported routes.
+                var entry=dex[i];var block=lines.Skip(entry.Index+1).TakeWhile(line=>!Has(line,@"^\d+[.、)]")).ToArray();
                 var observed=Find(block,@"^take\s*[:：]\s*([+−-]?\d+(?:\.\d+)?\s*%)\s*/\s*[+−-]?\d+(?:\.\d+)?\s*%");
                 if(observed.Length==0)observed=Find(block,@"(?:^|[｜|])\s*盘口差\s*[:：]?\s*([+−-]?\d+(?:\.\d+)?\s*%)");
                 var spread=observed.Length>0?"盘口差 "+(Has(observed,@"^[+−-]")?"":"+")+Replace(observed,@"\s",""):"";
-                var quality=Find(block,@"^质量\s*[:：]\s*(.+)$");
-                if(dex.Count==1&&spread.Length>0){dexSpread=string.Join(" · ",new[]{spread,quality.Length>0?"质量："+quality:""}.Where(s=>s.Length>0));continue;}
-                var details=new[]{dex.Count>1?$"{entry.Coin}｜{entry.Mode}｜{entry.Route}｜{entry.Rank}":"",dex.Count>1?spread:"",quality.Length>0?"质量："+quality:""}.Where(s=>s.Length>0);
+                if(dex.Count==1&&spread.Length>0){dexSpread=spread;continue;}
+                var details=new[]{dex.Count>1?$"{entry.Coin}｜{entry.Mode}｜{entry.Route}｜{entry.Rank}":"",dex.Count>1?spread:""}.Where(s=>s.Length>0);
                 var text=string.Join(" · ",details);if(text.Length>0)signals.Add(text);
             }
         }
@@ -58,13 +59,18 @@ public static class CompactMessage
             if(signals.Count>0){var count=Match(title,@"(\d+)\s*组");title=string.Join("｜",Regex.Split(Replace(title,@"^(?:🚨|\s)+","").Replace("强信号聚集","强信号"),@"[｜|]").Take(2).Select(s=>s.Trim()))+"｜"+(count.Success?count.Groups[1].Value:signals.Count.ToString(CultureInfo.InvariantCulture))+"组";}
         }
         title=Short(title);
+        var premiumEntries=new HashSet<string>(StringComparer.Ordinal);
         if(title.Contains("溢价指数突变"))foreach(var line in lines)
         {
             var m=Match(line,@"^\d+[.、)]\s*(?:(?:🟢|🔴|🟣|🟡|↑|↓)\s*)*([A-Z0-9][A-Z0-9._/-]*)\s*/\s*([^|｜]+)[|｜]\s*(.+)$");if(!m.Success)continue;
             var parts=Regex.Split(m.Groups[3].Value,@"[|｜]").Select(s=>s.Trim()).ToArray();var change=Find(parts,@"^([+−-]?\d+(?:\.\d+)?)\s*个百分点$");
             var window=Match(parts[0],@"\d+\s*(?:分钟|小时|秒)").Value;var values=parts.Select(s=>Match(s,@"^close\s+([+−-]?\d+(?:\.\d+)?%)\s*(?:->|→)\s*([+−-]?\d+(?:\.\d+)?%)$")).FirstOrDefault(x=>x.Success);
             var move=parts[0];if(change.Length>0){var number=double.Parse(change.Replace('−','-'),CultureInfo.InvariantCulture);move=window+(number<0?"下跌":number>0?"上涨":"持平")+" "+Replace(change,@"^[+−-]","")+" 个百分点";}
-            signals.Add(m.Groups[1].Value+" · "+move+(values is not null?"\n溢价指数 "+values.Groups[1].Value+" → "+values.Groups[2].Value:""));
+            var summary=values is not null
+                ? m.Groups[1].Value+" 溢价指数 "+Replace(values.Groups[1].Value,@"^[+−-]?0(?:\.0+)?%$","0%")+" → "+Replace(values.Groups[2].Value,@"^[+−-]?0(?:\.0+)?%$","0%")
+                : m.Groups[1].Value+" · "+move;
+            // Collapse identical visible index transitions; keep distinct values and markets.
+            if(premiumEntries.Add(m.Groups[2].Value.Trim()+"\n"+summary))signals.Add(summary);
         }
         const string placeholder=@"^(?:(?:无|没有|暂无)(?:数据|信息|风险|警告|警示|提醒)?|未知|未提供|不适用|无数据|未核验|待核验|不确定|[-—/|·.,，。:：;；\s])+$";
         const string warningLabel=@"^(?:[⚠\uFE0F\s]*(?:警告|警示|注意|风险提示|风险|提醒)\s*[:：]?\s*|[⚠\uFE0F\s]+)";
