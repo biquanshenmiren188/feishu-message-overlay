@@ -56,11 +56,12 @@ internal sealed class OpportunityModel
     internal static string? CopyGcStrategy(JsonElement data)
     {
         var legs=Array(Get(data,"details"),"legs",3);
-        var supported=new[]{"binance","bybit","gate","okx","hyperliquid"};
+        var supported=new[]{"binance","bybit","gate","okx","hyperliquid","aster"};
         var strategy=Text(data,"strategy");
         if(strategy is not ("SF" or "FS" or "FF")||legs.Length!=2||legs.Any(l=>Get(l,"spot").ValueKind is not (JsonValueKind.True or JsonValueKind.False))||strategy=="SF"&&Text(legs[0],"exchange")=="hyperliquid")return null;
         // FS borrows on the spot sell leg. Astro accepts cross margin only on ordinary venues.
-        var buyGc=supported.Contains(Text(legs[0],"exchange"));
+        // Aster GC supports futures only, never the SF spot buy leg.
+        var buyGc=supported.Contains(Text(legs[0],"exchange"))&&!(strategy=="SF"&&Text(legs[0],"exchange")=="aster");
         var sellGc=strategy!="FS"&&supported.Contains(Text(legs[1],"exchange"));
         if(!buyGc&&!sellGc)return null;
         var normal=CopyStrategy(data);if(normal is null)return null;
