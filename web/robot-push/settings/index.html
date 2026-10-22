@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息屏蔽设置 · 聚宝扫描</title><meta name="description" content="聚宝扫描电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息屏蔽设置 · 聚宝扫描</title><meta name="description" content="聚宝扫描电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css?v=20261022-site2"></head>
 <body>
-<div class="preview-banner">交互预览 · 配置仅保存在此浏览器，不影响真实推送</div>
-<header class="masthead"><a class="brand" href="#">聚宝扫描<span>推送偏好</span></a><span class="preview-pill">方案预览</span></header>
+<header class="masthead"><a class="brand" href="/radar/robot-push/" aria-label="资金费雷达，返回 BOT"><img src="/radar/radar-brand-treasure-v2.svg" width="154" height="46" alt="资金费雷达"></a><span class="preview-pill">设置预览</span></header>
+<nav class="site-nav" aria-label="资金费雷达导航"><a href="/radar/?tab=market">全市场费率</a><a href="/radar/?tab=FF&amp;mode=FF">机会筛选</a><a href="/radar/?panel=transfer">充提查询</a><a href="/radar/robot-push/">BOT</a><a href="/radar/position-limits/">HY限额查询</a><a href="/radar/robot-push/settings/" aria-current="page">消息设置</a></nav>
+<div class="preview-banner">预览模式：只保存本浏览器配置，现有电脑与手机推送规则不变。</div>
 <main class="layout">
 <div class="settings">
 <div class="title-row"><div><h1>消息屏蔽设置</h1><p>电脑和手机各自设置，互不影响。</p></div><label class="switch"><input id="enabled" type="checkbox" checked aria-label="接收消息"><span></span></label></div>
@@ -40,5 +41,5 @@
 </main>
 <dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-title"><h2 id="editor-title">添加规则</h2><button type="button" class="icon-button" id="editor-close" aria-label="关闭规则编辑">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="editor-cancel">取消</button><button type="submit" class="primary">确定</button></div></form></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="rules.js"></script><script src="app.js"></script>
+<script src="rules.js?v=20261022-site2"></script><script src="app.js?v=20261022-site2"></script>
 </body></html>

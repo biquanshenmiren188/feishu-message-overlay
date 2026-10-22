@@ -51,11 +51,15 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
     fcntl.flock(lock,fcntl.LOCK_EX)
     old=current.resolve()
     assert old.parent == Path('/opt/funding-radar-web/releases')
-    assert not (old/'robot-push/settings').exists(), 'Existing settings route requires review before replacement'
+    if (old/'robot-push/settings').exists():
+        prior=json.loads((old/'settings-preview-source.json').read_text())
+        assert prior['repository']=='biquanshenmiren188/feishu-message-overlay'
+        assert set(prior['assets'])==set(expected)
+        assert all(digest(old/'robot-push/settings'/name)==value for name,value in prior['assets'].items()), 'Preview assets changed outside the recorded release'
     before_pids=pids()
     assert all(int(v)>0 for v in before_pids.values())
     before_preferences=private_configuration()
-    before_files=static_inventory(old)
+    before_files={rel:value for rel,value in static_inventory(old).items() if not rel.startswith('robot-push/settings/') and rel!='settings-preview-source.json'}
     fallback=Path('/opt/radar-webpush-test/public/index.html')
     fallback_hash=digest(fallback)
     release_name='20261022-settings-preview-'+str(int(time.time()))
@@ -67,7 +71,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
     try:
         shutil.copytree(old,new,symlinks=True)
         target=new/'robot-push/settings'
-        target.mkdir(mode=0o755)
+        target.mkdir(mode=0o755,exist_ok=True)
         for name in expected:
             shutil.copyfile(stage/'page'/name,target/name)
             (target/name).chmod(0o644)
