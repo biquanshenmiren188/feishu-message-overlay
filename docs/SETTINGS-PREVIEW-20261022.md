@@ -20,4 +20,12 @@ OI 需核实同交易所、同合约、同永续腿的金额单位及新鲜度�
 
 `scripts/deploy-settings-preview.py` 在既有 guard.lock 内克隆最新静态发布，只添加四个新页面资产与源码索引，原子切换。全量比较已有文件、推送配置／绑定、PWA fallback 和服务 PID，失败回滚 current。不会启动或重启任何服务。
 
-部署提交、验证结果与回滚目录在完成部署后补录。
+## 已发布与核验
+
+- 首次预览源码 `9547224828c3e988feed6f2c7159fd7393619764`，release `20261022-settings-preview-1792675773`。
+- 主站视觉对齐版源码 `f41aad3d14a93a856515dc686f11a2eab2b79957`，当前 release `/opt/funding-radar-web/releases/20261022-settings-preview-1792675989`。
+- 回滚上一版：`/opt/funding-radar-web/releases/20261022-settings-preview-1792675773`；回滚到本任务前：`/opt/funding-radar-web/releases/20261022-aster-components-1792639274`。备份元数据在 `/opt/funding-radar-web/backups/20261022-settings-preview-1792675989`。
+- 两次发布均保留既有 3,282 个静态文件；2 份推送配置与绑定不变，PWA fallback 不变，两项推送服务 PID 不变。静态页四个资产与对应 Git 提交的字节哈希一致。
+- 已登录的 3 号浏览器正式打开新 URL，确认手机独立规则默认页、四个标签、手机通知格式、现用品牌 SVG 成功加载，以及主站导航和配色。发布前本地验证手机屏蔽 Gate 不影响电脑、记录分端且刷新保留、手机通知剔除 MITO／SOL 两条样例。
+- 24 项规则检查与 JS 语法检查通过。初版 320px／393px 已检查；最终视觉改版的浏览器 viewport 覆盖未实际应用到目标页，最终截图为桌面宽度，不声称最终改版已做实体手机或完整手机浏览器验收。
+- GitHub PR #45，未合并。部署已完成；后续文档提交与实际功能源码 SHA 分别记录，不能将文档 SHA 当成新部署。
