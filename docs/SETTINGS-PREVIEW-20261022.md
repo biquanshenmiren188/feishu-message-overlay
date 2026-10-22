@@ -33,3 +33,12 @@ OI 使用现有 relay 的 double-v1 同口径持仓金额，按精确 USDT 合�
 发布时还会在服务器使用现有 venv 执行完整线上 Python 测试及私有状态迁移演练。正式发布 SHA、release、回滚位置和线上验证随后补充。
 
 GitHub PR #45，未授权合并。最初预览版本 f41aad3 对应 `20261022-settings-preview-1792675989`；此次将手机部分升级为真实云端设置，电脑部分仍是预览。
+
+## 2026-10-22 本次正式发布结果
+
+- 功能源码 `278d2154b9e74d6bfb268f05cdac2cc8cc850c87`，release `/opt/funding-radar-web/releases/20261022-settings-live-1792678546`。
+- 上一版 `/opt/funding-radar-web/releases/20261022-settings-preview-1792675989`；备份 `/opt/funding-radar-web/backups/20261022-settings-live-1792678546`。回滚使用该备份源码与上一静态版本，不回滚私有状态。
+- 服务器完整 58 项 Python 测试通过；两次私有状态初始化一致。2 份原方案设置／revision／token／订阅保持不变，3,280 个非目标静态文件逐字节保持。原 publisher PID 不变；仅重启手机推送服务；PWA worker、manifest 和既有静态资产不变。
+- 3 号浏览器正式验证：主站原按钮跳转新设置、读取原 0.5%／4 条／1 分钟、格式预览按门槛显示三条固定样例、真实屏蔽记录入口与刷新、Logo 和导航正确。两个入口均成功载入云端配置。
+- 最终线上 393×852 与 320×640 viewport 已实际生效；无横向溢出，OI 七所列表可用。保存／回读及电脑静音独立性在隔离 API 中验证；没有为了测试更改真实筛选值，没有发人工通知。未操作实体 iPhone 的系统通知授权或验证锁屏最终外观。
+- Chrome 钱包扩展存在自身注入异常，不属于设置页脚本。网站本次设置流程正常。
