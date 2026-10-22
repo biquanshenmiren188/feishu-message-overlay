@@ -65,7 +65,7 @@ public sealed class MessageView : Grid
         if(TopicSpreadMessage.Summary(card?.Title,card?.Body??message.Text) is not null)
         {
             card??=new MessageCard("",message.Text,Array.Empty<CardLink>());
-            card=card with {Buttons=card.Buttons.Concat(TopicSpreadMessage.Links(card.Body)).DistinctBy(x=>x.Url).Take(8).ToArray()};
+            card=card with {HeaderTone="red",Buttons=card.Buttons.Concat(TopicSpreadMessage.Links(card.Body)).DistinctBy(x=>x.Url).Take(8).ToArray()};
         }
         var summary=CompactMessage.From(card?.Title,card?.Body??message.Text);
         // Known monitor envelopes remain collapsed even when a new route format has no summary yet.
@@ -79,6 +79,7 @@ public sealed class MessageView : Grid
         }
         var stack=new StackPanel();outer.Child=stack;
         var displayTitle=RankFirstTitle(compact?summary.Title:card.Title);
+        if(TopicSpreadMessage.Summary(card.Title,card.Body) is not null)displayTitle="专题｜"+displayTitle;
         if(displayTitle.Length>0)
         {
             var color=Tone(MessageCard.SafeTone(card.HeaderTone));var light=Color.FromRgb((byte)(255-(255-color.R)*.12),(byte)(255-(255-color.G)*.12),(byte)(255-(255-color.B)*.12));

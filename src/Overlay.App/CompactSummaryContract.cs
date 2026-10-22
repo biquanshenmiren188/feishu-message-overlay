@@ -38,7 +38,7 @@ internal static class CompactSummaryContract
                 var topicView=new MessageView{Message=new IncomingMessage("topic","fixture","",topicBody,DateTimeOffset.UtcNow,SenderKind.Bot){Card=structured?new MessageCard("",topicBody,Array.Empty<CardLink>()):null}};
                 content.Children.Insert(1,topicView);window.UpdateLayout();
                 Check(topicView.FullBody is not null&&!topicView.IsExpanded,"topic starts collapsed");
-                Check(Children<TextBlock>(topicView).Any(t=>t.Text=="IRYS｜FF｜BN → AS"),"topic title exact");
+                Check(Children<TextBlock>(topicView).Any(t=>t.Text=="专题｜IRYS｜FF｜BN → AS" && t.Foreground is SolidColorBrush brush && brush.Color==Color.FromRgb(184,73,75)),"topic entire title red with prefix");
                 var detail=Children<Button>(topicView).Single();Check((string)detail.Content=="查看详情","topic detail button visible");
                 detail.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(!topicView.IsExpanded,"detail click does not expand original");
                 Check(launched.Last()=="https://example.invalid/radar/?tab=FF&mode=FF&q=irys","topic exact URL opened");
