@@ -3,7 +3,7 @@
   const name=id=>(exchanges.find(e=>e[0]===id)||[id,id])[1];
   const sideName=s=>({all:'任意一侧',left:'左腿（买入）',right:'右腿（卖出）'})[s];
   const marketName=s=>({all:'现货和永续',spot:'现货',perp:'永续'})[s];
-  const defaults=()=>({version:1,enabled:true,coins:[],blockedExchanges:[],legRules:[],globalOI:null,exchangeOI:{},coinOI:[],missing:'block',rows:4,interval:60,rPercent:null,ranks:[],modes:[]});
+  const defaults=()=>({version:1,desktopAction:"hide",enabled:true,coins:[],blockedExchanges:[],legRules:[],globalOI:null,exchangeOI:{},coinOI:[],missing:'block',rows:4,interval:60,rPercent:null,ranks:[],modes:[]});
   const coin=s=>String(s||'').trim().toUpperCase();
   function threshold(s,c,e){const special=s.coinOI.find(r=>r.enabled&&r.coin===coin(c)&&r.exchange===e);if(special)return {value:special.value,source:'币种特殊门槛'};const ex=s.exchangeOI[e];if(ex&&ex.mode!=='inherit')return {value:ex.mode==='none'?null:ex.value,source:'交易所门槛'};return {value:s.globalOI,source:'统一门槛'};}
   function evaluate(s,sample){

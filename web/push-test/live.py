@@ -6,8 +6,10 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from server import Trial, compact_rows, validate_subscription, ORIGIN
 from delivery import fingerprint, with_fallback, TTL
-from signals import parse_message, stamp
-from preferences import DEFAULTS, validate, matches
+from signals import parse_messages, stamp
+import hashlib
+from preferences import DEFAULTS, validate, matches, exclusion_reasons
+from advanced_rules import OISnapshot
 
 
 class Live(Trial):
@@ -16,6 +18,7 @@ class Live(Trial):
         self.state.setdefault('live', dict(settings=copy.deepcopy(DEFAULTS), revision=0,
             activated=time.time(), seen={}, history=[], pending=[], lastAttempt=0, retryAt=0, failures=0))
         validate(self.state['live']['settings'])
+        self.oi_snapshot = OISnapshot()
         self.source = {'connected': False, 'error': None}
         self.save()
 
@@ -44,6 +47,7 @@ class Live(Trial):
                           lastDelivery=s.get('lastDelivery'), pending=len(s['pending']))
             result.update(subscriptionFingerprint=fingerprint(self.state.get('subscription')),
                           device=self.state.get('device'), deliveryTtl=TTL)
+            result['blockedHistory']=copy.deepcopy(s.get('blockedHistory',[]))
             return result
 
     def device_status(self, value):
@@ -110,6 +114,9 @@ class Live(Trial):
             s = self.state['live']
             if type(value.get('revision')) is not int or value['revision'] != s['revision']:
                 raise ValueError('设置已在其他页面修改，请重新打开设置再保存')
+            # A cached legacy client cannot silently erase the new rules.
+            if 'advanced' not in settings and 'advanced' in s['settings']:
+                settings['advanced']=copy.deepcopy(s['settings']['advanced'])
             previous = copy.deepcopy(s)
             # Saving an unchanged form must not discard messages waiting for the interval.
             pending = [r['id'] for r in s['history'] if r['id'] in s['pending'] and matches(r, settings)] if settings['notify_enabled'] else []
@@ -162,7 +169,9 @@ class Live(Trial):
             old = json.dumps(s, sort_keys=True)
             s['seen'] = {k:v for k,v in s['seen'].items() if now-v < 172800}
             s['history'] = [r for r in s['history'] if now-r['at'] <= 1800]
-            parsed = [r for m in messages if (r := parse_message(m, now))]
+            parsed = [r for m in messages for r in parse_messages(m, now)]
+            if s['settings'].get('advanced'):
+                self.oi_snapshot.enrich(s['history']+parsed,s['settings']['advanced'],now)
             for row in sorted(parsed, key=lambda r:(r['at'], r['id'])):
                 if row['id'] in s['seen']:
                     continue
@@ -170,6 +179,12 @@ class Live(Trial):
                 if any(r['fingerprint'] == row['fingerprint'] and abs(r['at']-row['at']) <= 120 for r in s['history']):
                     continue
                 s['history'] = sorted(s['history']+[row], key=lambda r:(r['at'], r['id']))[-100:]
+                if row['at'] >= s.get('acceptAfter', s['activated']-120) and -30 <= now-row['at'] <= 120:
+                    blocked=exclusion_reasons(row,s['settings'])
+                    if not s['settings']['notify_enabled']:blocked.insert(0,'手机接收消息已关闭')
+                    if blocked:
+                        item=dict(id=row['id'],at=now,messageAt=row['at'],coin=row['coin'],mode=row['mode'],buy=row['buy'],sell=row['sell'],rank=row['rank'],value=row['value'],reasons=blocked,revision=s['revision'],oi=copy.deepcopy(row.get('oi',{})))
+                        s['blockedHistory']=([item]+s.get('blockedHistory',[]))[:200]
                 if (s['settings']['notify_enabled'] and matches(row, s['settings'])
                         and row['at'] >= s.get('acceptAfter', s['activated']-120) and -30 <= now-row['at'] <= 120):
                     s['pending'] = (s['pending']+[row['id']])[-100:]
@@ -192,6 +207,12 @@ class Live(Trial):
             self.state['seq'] += 1
             payload = self.notification_payload(dict(kind='radar-six-test', title='', seq=self.state['seq'], run='live', rows=rows))
             assert len(json.dumps(payload, ensure_ascii=False).encode()) < 3000
+            # Keep bounded, private evidence of the exact outgoing rows. A send
+            # count alone cannot establish whether a reported signal was included.
+            audit = dict(at=now, seq=payload['seq'], rows=list(rows),
+                         signalIds=[r['id'] for r in sorted(self.selected(now), key=lambda r:(r['at'],r['id']), reverse=True)],
+                         bodyHash=hashlib.sha256('\n'.join(rows).encode('utf-8')).hexdigest())
+            self.state['deliveryAudit'] = (self.state.get('deliveryAudit', [])+[audit])[-200:]
             # Persist intent before sending: an uncertain timeout/restart cannot replay an alert.
             s['lastDelivery'] = dict(at=now, seq=payload['seq'], rows=len(rows), state='attempted')
             self.save()

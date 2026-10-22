@@ -253,6 +253,10 @@ class Trial:
             if isinstance(x, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', x):
                 safe[key] = x
         safe['enumerationError'] = value.get('enumerationError') is True
+        for key in ('bodyHash', 'shownHash'):
+            x = value.get(key)
+            if isinstance(x, str) and re.fullmatch(r'[a-f0-9]{64}', x):
+                safe[key] = x
         with self.lock:
             self.state['receipts'].append(safe)
             self.state['receipts'] = self.state['receipts'][-2000:]
