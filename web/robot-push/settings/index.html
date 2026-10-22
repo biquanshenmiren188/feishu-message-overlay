@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息屏蔽设置 · 聚宝扫描</title><meta name="description" content="聚宝扫描电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="preview-banner">交互预览 · 配置仅保存在此浏览器，不影响真实推送</div>
+<header class="masthead"><a class="brand" href="#">聚宝扫描<span>推送偏好</span></a><span class="preview-pill">方案预览</span></header>
+<main class="layout">
+<div class="settings">
+<div class="title-row"><div><h1>消息屏蔽设置</h1><p>电脑和手机各自设置，互不影响。</p></div><label class="switch"><input id="enabled" type="checkbox" checked aria-label="接收消息"><span></span></label></div>
+<div class="receive-row"><span id="receive-label">接收消息已开启</span><span>默认全部接收，按需排除</span></div>
+<div class="channel-switch" aria-label="选择规则对象"><button data-channel="desktop" aria-pressed="false">电脑屏蔽规则</button><button data-channel="mobile" aria-pressed="true">手机推送规则</button></div><div class="channel-hint" id="channel-hint">当前编辑手机推送规则，不影响电脑小窗。</div>
+<nav class="tabs" role="tablist" aria-label="设置分类"><button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="true" data-tab="block">屏蔽设置</button><button type="button" role="tab" id="tab-oi" aria-controls="panel-oi" aria-selected="false" data-tab="oi">OI 门槛</button><button type="button" role="tab" id="tab-other" aria-controls="panel-other" aria-selected="false" data-tab="other">其他设置</button><button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" data-tab="history">屏蔽记录</button></nav>
+<section id="panel-block" role="tabpanel" aria-labelledby="tab-block">
+<section class="section"><div class="section-heading"><div><h2>屏蔽币种 <span class="count" id="coin-count">0</span></h2><p>全部屏蔽，或只屏蔽指定交易所的币种。</p></div><button class="text-button" id="add-coin">＋ 添加</button></div><div id="coin-list"></div></section>
+<section class="section"><div class="section-heading"><div><h2>整所屏蔽</h2><p>选中后，涉及该交易所的机会都不推送。</p></div></div><div class="exchange-grid" id="exchange-grid"></div></section>
+<section class="section"><div class="section-heading"><div><h2>按左腿、右腿或现货屏蔽 <span class="count" id="leg-count">0</span></h2><p>只排除指定方向或市场，保留其他机会。</p></div></div>
+<div class="quick-actions"><button data-preset="left">＋ 屏蔽左腿</button><button data-preset="right">＋ 屏蔽右腿</button><button data-preset="spot">＋ 屏蔽现货</button></div>
+<div class="direction-key"><span>左腿 = 买入侧</span><span>右腿 = 卖出侧</span></div><div id="leg-list"></div>
+<div class="note">同一条规则的条件需同时命中；不同规则命中任意一条就屏蔽。</div></section>
+</section>
+<section id="panel-oi" role="tabpanel" aria-labelledby="tab-oi" hidden>
+<section class="section"><div class="section-heading"><div><h2>统一最低 OI</h2><p>只检查永续腿；每条腿分别判断，不相加。</p></div></div><label class="field-label" for="global-oi">持仓金额门槛</label><div class="unit-input"><input id="global-oi" type="number" min="0" step="any" placeholder="不限" inputmode="decimal"><span>万 USDT</span></div><div class="helper" id="oi-conversion">留空不限制 OI</div></section>
+<section class="section"><div class="section-heading"><div><h2>按交易所单独设置</h2><p>未单独设置时，跟随统一门槛。</p></div></div><div id="oi-exchanges"></div></section>
+<section class="section"><div class="section-heading"><div><h2>币种特殊门槛 <span class="count" id="oi-count">0</span></h2><p>优先于交易所设置和统一门槛。</p></div><button class="text-button" id="add-oi">＋ 添加</button></div><div id="oi-list"></div></section>
+<section class="section"><h2>缺失或过期的 OI</h2><p class="helper">仅在该永续腿设有 OI 门槛时适用。</p><label class="radio-row"><input type="radio" name="missing" value="block" checked><span>暂不推送<small>等拿到有效 OI，再判断是否符合条件</small></span></label><label class="radio-row"><input type="radio" name="missing" value="allow"><span>仍然推送<small>跳过缺失 OI 的检查，继续其他筛选</small></span></label></section>
+</section>
+<section id="panel-other" role="tabpanel" aria-labelledby="tab-other" hidden>
+<section class="section" id="mobile-cadence"><h2>手机通知节奏</h2><div class="two-col"><label>显示条数<select id="rows"><option value="1">1 条</option><option value="2">2 条</option><option value="3">3 条</option><option value="4" selected>4 条</option></select></label><label>提醒间隔<select id="interval"><option value="30">30 秒</option><option value="60" selected>1 分钟</option><option value="180">3 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option></select></label></div><p class="helper">手机间隔内合并新消息；电脑的字号、滚动速度和声音开关继续在软件内设置。</p></section>
+<section class="section"><h2>机会筛选</h2><label class="stack-label">最低 R 百分比（%）<input id="r-percent" type="number" step="any" placeholder="不限" inputmode="decimal"></label><label class="stack-label">屏蔽等级<input id="r-ranks" placeholder="例如 R0、R5+" autocomplete="off"></label><p class="helper">R5 包含 R5+；只填 R5+ 不影响 R5，不代表所有 ≥ 5。</p><label class="field-label">屏蔽类型</label><div class="mode-options" id="mode-options"></div></section>
+<section class="section"><h2>接入状态</h2><div class="connection-row"><span>电脑桌面小窗</span><b>待接入</b></div><div class="connection-row"><span>手机 Web Push</span><b>待接入</b></div><div class="note">正式接入后，同一身份下分别保存电脑规则和手机规则。云端按目标设备分别筛选：电脑命中则不显示、不响铃，手机命中则不发送通知。两端规则互不覆盖。</div></section>
+</section>
+<section id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden><section class="section"><div class="section-heading"><div><h2>屏蔽记录 <span class="count" id="history-count">0</span></h2><p id="history-caption">手机推送的模拟拦截记录。</p></div></div><div class="note history-note">仅记录你点击“记录拦截样例”的模拟结果，最近 200 条保存在此浏览器。真实云端记录尚未接入。</div><div id="history-list"></div></section></section><div class="save-bar"><div><strong id="save-status" role="status">尚未保存预览配置</strong><small>保存后仅在此浏览器保留</small></div><button class="primary" id="save">保存手机规则</button></div>
+</div>
+<aside class="inspection"><div class="inspection-title"><span class="eyebrow">筛选结果预览</span><span class="sample-badge">虚构样例</span></div><h2>这条机会，会推送吗？</h2><p>同一条样例，分别用电脑和手机规则判断。</p>
+<label class="stack-label">币种<input id="sample-coin" value="MITO" maxlength="32" autocomplete="off"></label>
+<div class="sample-leg"><div class="leg-heading"><b>左腿</b><span>买入侧</span></div><div class="two-col"><label>交易所<select id="sample-left-ex"></select></label><label>市场<select id="sample-left-market"><option value="perp">永续</option><option value="spot">现货</option></select></label></div><label class="stack-label">OI（万 USDT）<input type="number" id="sample-left-oi" min="0" step="any" value="120" placeholder="留空模拟缺失" inputmode="decimal"></label></div>
+<div class="sample-leg"><div class="leg-heading"><b>右腿</b><span>卖出侧</span></div><div class="two-col"><label>交易所<select id="sample-right-ex"></select></label><label>市场<select id="sample-right-market"><option value="perp">永续</option><option value="spot">现货</option></select></label></div><label class="stack-label">OI（万 USDT）<input type="number" id="sample-right-oi" min="0" step="any" value="320" placeholder="留空模拟缺失" inputmode="decimal"></label></div>
+<div class="two-col sample-r"><label>R 等级<input id="sample-rank" value="R1" maxlength="20"></label><label>R 百分比（%）<input id="sample-percent" type="number" value="0.6" step="any" inputmode="decimal"></label></div>
+<div id="result" class="result" aria-live="polite"></div><div class="channel-results" id="channel-results" aria-live="polite"></div><button type="button" class="record-button" id="record-sample">记录拦截样例</button><div class="phone-preview"><div class="inspection-title"><span class="eyebrow">手机通知格式</span><span class="sample-badge">模拟内容</span></div><div class="notification" id="phone-notification" aria-live="polite"></div><p class="helper" id="phone-preview-meta"></p><p class="helper">按手机规则筛选，最新在上。实际换行和折叠由手机系统决定。</p></div><p class="inspection-foot">两端结果均为模拟，使用当前未保存的设置。真实联动需接入软件和推送后端。</p></aside>
+</main>
+<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-title"><h2 id="editor-title">添加规则</h2><button type="button" class="icon-button" id="editor-close" aria-label="关闭规则编辑">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="editor-cancel">取消</button><button type="submit" class="primary">确定</button></div></form></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="rules.js"></script><script src="app.js"></script>
+</body></html>
