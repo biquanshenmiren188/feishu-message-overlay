@@ -15,4 +15,8 @@
 
 ## 发布
 
-使用 scripts/deploy-inline-card-manager.py 校验线上基线后增量发布。保持现有性能 bundle，只更新策略模块入口；BOT 与 PWA 同步。校验既有规则、版本、日志及手机绑定，重启必要的 webpush/publisher 服务。回滚只恢复代码，不回滚用户数据。正式发布及安装结果将在完成后补充。
+使用 scripts/deploy-inline-card-manager.py 校验线上基线后增量发布。保持现有性能 bundle，只更新策略模块入口；BOT 与 PWA 同步。校验既有规则、版本、日志及手机绑定，重启必要的 webpush/publisher 服务。回滚只恢复代码，不回滚用户数据。
+
+功能提交 fccebf758d292db8c0229eb3532b4b672dfc0dbe，线上 current 为 20261023-inline-cards-1792760774，前版 20261023-web-cards-1792759125，备份同名。BOT/PWA bundle 为 bot-cards-363a2757cd74.js，3292 个非目标文件保留。正式静态与两个后端 manifest 哈希、PWA 入口和服务健康核对通过；规则/版本/操作日志、手机绑定保持。
+
+Windows 已安装 v2026.10.23.4，健康回执与候选哈希一致；DPAPI、连接配置、窗口偏好和启动项保持。真实签名只读 coin-rules 请求成功，安装后 Connected、desktopRulesConnected=true、revision=8、可见、watching。3号 Chrome 正式卡片管理原地打开并加载云端规则，网址不变，检查后关闭未保存。未创建正式 GitHub Release，PR45 待合并。
