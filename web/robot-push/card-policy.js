@@ -13,6 +13,12 @@ export class CardPolicyState {
     return this.data.decisions[card.pair||card.id]||'pending';
   }
   visible(card,now){return ['public','allow'].includes(this.outcome(card,now));}
+  emptyMessage(cards,now){
+    if(!this.token||cards.some(c=>this.visible(c,now)))return '';
+    if(!this.data||now-this.receivedAt>=10000||cards.some(c=>this.outcome(c,now)==='pending'))return '等待卡片规则校验后显示';
+    if(!this.data.cardsEnabled)return '行情卡片接收已关闭，可在“卡片规则”恢复';
+    return cards.length?'当前卡片均已被规则屏蔽':'';
+  }
 }
 
 export function createCardPolicy(toolbar,render){
@@ -40,7 +46,10 @@ export function createCardPolicy(toolbar,render){
   function summary(rows){
     syncIdentity();const now=Date.now(),blocked=rows.filter(c=>state.outcome(c.data,now)==='hide').length,pending=rows.filter(c=>state.outcome(c.data,now)==='pending').length;
     status.textContent=!state.token?'公共浏览 · 连接管理码后应用卡片规则':!state.data||now-state.receivedAt>=10000?(state.error||'正在同步卡片规则…')+' · 暂停展示':!state.data.cardsEnabled?'行情卡片已暂停':`中台规则已接入 · 已屏蔽 ${blocked} 张${pending?' · 待校验 '+pending+' 张':''}${state.error?' · 同步重试中':''}`;
-    const empty=document.querySelector('.bp-empty');if(empty&&!rows.some(c=>state.visible(c.data,now))&&state.token){empty.hidden=false;empty.textContent=pending||!state.data?'等待卡片规则校验后显示':state.data.cardsEnabled?'当前卡片均已被规则屏蔽':'行情卡片接收已关闭，可在“卡片规则”恢复';}
+    const empty=document.querySelector('.bp-empty');
+    // A genuine empty market keeps the original source/connection message.
+    const message=state.emptyMessage(rows.map(c=>c.data),now);
+    if(empty&&message){empty.hidden=false;empty.textContent=message;}
   }
   function decorate(card,data){
     if(card.querySelector('[data-action="manage-rules"]'))return;

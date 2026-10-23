@@ -14,6 +14,6 @@ def patch_bundle(raw):
  for old,new in replacements:
   assert source.count(old)==1,old
   source=source.replace(old,new)
- return ('import {createCardPolicy} from "/radar/robot-push/card-policy.js?v=20261023-cards1";\n'+source).encode()
+ return ('import {createCardPolicy} from "/radar/robot-push/card-policy.js?v=20261023-cards2";\n'+source).encode()
 if __name__=='__main__':
  Path(sys.argv[2]).write_bytes(patch_bundle(Path(sys.argv[1]).read_bytes()))

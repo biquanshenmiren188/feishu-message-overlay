@@ -1,6 +1,6 @@
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate} from './mobile-scroll.js';
-import {createCardPolicy} from './card-policy.js?v=20261023-cards1';
+import {createCardPolicy} from './card-policy.js?v=20261023-cards2';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005fill1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
 import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
