@@ -84,7 +84,7 @@ public sealed class MessageView : Grid
     private void Rebuild()
     {
         FullBody=null;badgeHost=null;muteInline=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
-        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(184,196,206)),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Background=Brushes.White,Padding=new Thickness(3,3,3,4),Margin=new Thickness(0,0,0,5),SnapsToDevicePixels=true};Children.Add(outer);
+        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(144,160,174)),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Background=Brushes.White,Padding=new Thickness(3,3,3,4),Margin=new Thickness(0,0,0,3),SnapsToDevicePixels=true};Children.Add(outer);
         var card=message.Card;
         if(TopicSpreadMessage.Summary(card?.Title,card?.Body??message.Text) is not null)
         {
