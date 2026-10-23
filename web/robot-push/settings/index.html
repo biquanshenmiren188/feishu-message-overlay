@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css?v=20261022-desktop1"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css?v=20261023-split1"></head>
 <body>
 <header class="masthead"><a class="brand" href="/radar/robot-push/" aria-label="资金费雷达，返回 BOT"><img src="/radar/radar-brand-treasure-v2.svg" width="154" height="46" alt="资金费雷达"></a><a class="preview-pill" href="/radar/robot-push/">返回 BOT</a></header>
 <nav class="site-nav" aria-label="资金费雷达导航"><a href="/radar/?tab=market">全市场费率</a><a href="/radar/?tab=FF&amp;mode=FF">机会筛选</a><a href="/radar/?panel=transfer">充提查询</a><a href="/radar/robot-push/">BOT</a><a href="/radar/position-limits/">HY限额查询</a><a href="/radar/robot-push/settings/" aria-current="page">消息设置</a></nav>
@@ -11,9 +11,10 @@
 <div class="title-row"><div><h1>消息屏蔽设置</h1><p>三类规则独立保存，互不覆盖。</p></div><label class="switch"><input id="enabled" type="checkbox" checked aria-label="接收消息"><span></span></label></div>
 <div class="receive-row"><span id="receive-label">接收消息已开启</span><span>默认全部接收，按需排除</span></div>
 <div class="channel-switch" aria-label="选择规则对象"><button data-channel="desktop" aria-pressed="false">电脑消息</button><button data-channel="cards" aria-pressed="false">行情卡片</button><button data-channel="mobile" aria-pressed="true">手机推送</button></div><div class="channel-hint" id="channel-hint">当前编辑手机推送规则，不影响电脑小窗。</div>
+<section class="section desktop-action" id="desktop-action" hidden><h2>电脑消息规则</h2><div class="desktop-rule-switch" role="group" aria-label="选择独立规则"><label><input type="radio" name="desktop-action" value="mute"><span>仅屏蔽声音</span></label><label><input type="radio" name="desktop-action" value="hide"><span>屏蔽消息</span></label></div><p class="helper" id="desktop-editing"></p><p class="helper">两套规则独立保存，切换时保留草稿。都未命中时正常提醒；同时命中时屏蔽消息优先。顶部接收开关控制所有电脑消息。</p></section>
 <nav class="tabs" role="tablist" aria-label="设置分类"><button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="true" data-tab="block">屏蔽设置</button><button type="button" role="tab" id="tab-oi" aria-controls="panel-oi" aria-selected="false" data-tab="oi">OI 门槛</button><button type="button" role="tab" id="tab-other" aria-controls="panel-other" aria-selected="false" data-tab="other">其他设置</button><button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" data-tab="history">屏蔽记录</button></nav>
 <section id="panel-block" role="tabpanel" aria-labelledby="tab-block">
-<section class="section desktop-action" id="desktop-action" hidden><h2>命中规则后的处理</h2><label class="radio-row"><input type="radio" name="desktop-action" value="mute"><span>仅屏蔽声音<small>消息仍正常接收和显示，不响铃</small></span></label><label class="radio-row"><input type="radio" name="desktop-action" value="hide"><span>屏蔽消息<small>不显示，也不响铃</small></span></label><p class="helper">适用于下方币种、交易所、左右腿及 OI 等规则；未命中照常提醒。多组合消息任一组合命中，按整条消息处理。无法识别组合的普通文本仅受接收开关控制。</p></section>
+
 <section class="section"><div class="section-heading"><div><h2>屏蔽币种 <span class="count" id="coin-count">0</span></h2><p>全部屏蔽，或只屏蔽指定交易所的币种。</p></div><button class="text-button" id="add-coin">＋ 添加</button></div><div id="coin-list"></div></section>
 <section class="section"><div class="section-heading"><div><h2>整所屏蔽</h2><p>选择要屏蔽的交易所，任一侧命中即可。</p></div></div><div class="exchange-grid" id="exchange-grid"></div></section>
 <section class="section"><div class="section-heading"><div><h2>按左腿、右腿或现货屏蔽 <span class="count" id="leg-count">0</span></h2><p>只排除指定方向或市场，保留其他机会。</p></div></div>
@@ -38,6 +39,6 @@
 </main>
 <dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-title"><h2 id="editor-title">添加规则</h2><button type="button" class="icon-button" id="editor-close" aria-label="关闭规则编辑">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="editor-cancel">取消</button><button type="submit" class="primary">确定</button></div></form></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="rules.js?v=20261022-desktop1"></script><script src="app.js?v=20261022-desktop1"></script>
-<script type="module" src="/radar/robot-push/notification-settings.js?v=20261022-desktop1"></script>
+<script src="rules.js?v=20261023-split1"></script><script src="app.js?v=20261023-split1"></script>
+<script type="module" src="/radar/robot-push/notification-settings.js?v=20261023-split1"></script>
 </body></html>

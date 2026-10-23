@@ -18,7 +18,7 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
   focus(){} showModal(){} close(){}
  }
  const body=new Element(),toolbar=new Element();
- const document={createElement:()=>new Element(),createTextNode:text=>({text}),querySelector:()=>toolbar,head:new Element(),body:new Element(),addEventListener:(name,fn)=>events[name]=fn,visibilityState:'visible'};
+ const document={createElement:()=>new Element(),createTextNode:text=>({text}),querySelector:selector=>['#live-mobile-account','.site-nav','.tabs'].includes(selector)?null:toolbar,querySelectorAll:()=>[],head:new Element(),body:new Element(),addEventListener:(name,fn)=>events[name]=fn,visibilityState:'visible'};
  const plan=auth=>({profileId:auth==='owner-token'?'legacy':'a'.repeat(32),revision:auth==='owner-token'?7:2,publicKey:'AQID',subscribed:true,subscriptionFingerprint:null,source:{connected:true},settings:{notify_enabled:true,rows:auth==='owner-token'?4:1,notify_interval_seconds:60,min_percent:null,excluded_ranks:[],excluded_coins:auth==='owner-token'?['BTC']:['ETH'],excluded_modes:[],excluded_exchanges:[]}});
  const fetch=async(url,options)=>{
   const route=url.split('/').pop(),auth=options.headers.Authorization.slice(7);requests.push({route,auth,body:options.body&&JSON.parse(options.body)});
@@ -32,6 +32,7 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
  const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
  const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
+ context.AbortSignal=AbortSignal;
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
  return {elements,storage,requests,workerTokens,events,actions,run};
