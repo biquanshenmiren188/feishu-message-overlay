@@ -105,7 +105,9 @@ class DesktopRules:
             try:expires=datetime.fromisoformat(entry['card']['validUntil'].replace('Z','+00:00')).timestamp()
             except (ValueError,TypeError,AttributeError):expires=now if identity in present else 0
             if entry['missing'] is not None:expires=min(expires,entry['missing'])
-            if now>=expires+30:del self.card_cache[identity]
+            # One extra 30s window covers client polling/transport delay: its
+            # local "missing" clock starts after the server observes removal.
+            if now>=expires+60:del self.card_cache[identity]
         # Match the signed reader's bounded decision map; current cards win.
         if len(self.card_cache)>1100:
             order=sorted(self.card_cache,key=lambda key:(key in present,self.card_cache[key]['missing'] or now),reverse=True)

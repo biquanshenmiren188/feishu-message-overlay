@@ -15,8 +15,8 @@ def mobile():
 with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
     fcntl.flock(lock,fcntl.LOCK_EX)
     old=current.resolve()
-    assert old.name=='20261023-message-nav-1792724745','Inspect changed production baseline'
-    assert digest(backend)=='f64bfe9ab5bd39d1d46b098a16d3e042e13e9950e0536f5d0216ba0f3fbe68b0','Backend baseline changed'
+    assert old.name==(sys.argv[3] if len(sys.argv)>3 else '20261023-message-nav-1792724745'),'Inspect changed production baseline'
+    assert digest(backend)==(sys.argv[4] if len(sys.argv)>4 else 'f64bfe9ab5bd39d1d46b098a16d3e042e13e9950e0536f5d0216ba0f3fbe68b0'),'Backend baseline changed'
     release='20261023-split-rules-'+str(int(time.time()));new=old.parent/release
     backup=Path('/opt/funding-radar-web/backups')/release;backup.mkdir(mode=0o700)
     previous_mobile=mobile();publisher_pid=pid()

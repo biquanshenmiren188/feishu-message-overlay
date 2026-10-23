@@ -54,7 +54,8 @@ class DesktopRulesTest(unittest.TestCase):
   restored=DesktopRules(self.root,self.feed,self.cards)
   with patch('desktop_rules.time.time',return_value=now+29):self.assertEqual(restored.evaluate()['cards'],{'pair-one':'hide'})
   self.assertEqual(len([h for h in restored.status()['history'] if h['channel']=='cards']),1)
-  with patch('desktop_rules.time.time',return_value=now+32):self.assertEqual(restored.evaluate()['cards'],{})
+  with patch('desktop_rules.time.time',return_value=now+32):self.assertEqual(restored.evaluate()['cards'],{'pair-one':'hide'})
+  with patch('desktop_rules.time.time',return_value=now+62):self.assertEqual(restored.evaluate()['cards'],{})
 
  def test_edit_applies_to_retained_cards_and_unblock_restores(self):
   now=time.time()
