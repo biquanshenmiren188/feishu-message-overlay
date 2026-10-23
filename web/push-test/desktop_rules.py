@@ -7,7 +7,7 @@ import copy, hashlib, json, os, re, threading, time
 from pathlib import Path
 from datetime import datetime
 import preferences
-from advanced_rules import DEFAULT as ADVANCED, OISnapshot
+from advanced_rules import DEFAULT as ADVANCED, OISnapshot, VENUES, symbol
 from signals import parse_messages, message_fields, DIRECTION, EXCHANGES
 
 def defaults():
@@ -42,12 +42,75 @@ class DesktopRules:
         settings=preferences.validate(raw['settings'])
         with self.lock:
             if type(raw['revision']) is not int or raw['revision']!=self.data['revision']:raise ValueError('电脑规则已在其他页面更新，请刷新后重试')
+            previous=copy.deepcopy(self.data)
             if raw['channel']=='desktop':
                 policy=self.data['desktop'];policy['settings']=settings;policy['action']=raw['action'];policy['rules'][raw['action']]=copy.deepcopy(settings)
                 for rules in policy['rules'].values():rules['notify_enabled']=settings['notify_enabled']
             else:self.data['cards']=dict(settings=settings,action=raw['action'])
-            self.data['revision']+=1;self.save()
+            self.data['revision']+=1
+            try:self.save()
+            except OSError:
+                self.data=previous
+                raise
             return self.status()
+
+    def coin_state(self, account):
+        with self.lock, account.lock:
+            live=account.state['live']
+            return dict(desktop=self.status(),mobile=dict(settings=copy.deepcopy(live['settings']),revision=live['revision']),operations=copy.deepcopy(self.data.get('coinOperations',[])))
+
+    @staticmethod
+    def add_coins(settings, coins, exchange):
+        result=copy.deepcopy(settings)
+        advanced=result.setdefault('advanced',copy.deepcopy(ADVANCED))
+        for coin in coins:
+            # Existing broader exclusions already cover this requested scope.
+            if coin in result['excluded_coins'] or any(r['enabled'] and r['coin']==coin and r['exchange'] in ('all',exchange) for r in advanced['coins']):continue
+            found=next((r for r in advanced['coins'] if r['coin']==coin and r['exchange']==exchange),None)
+            if found:found['enabled']=True
+            else:advanced['coins'].append(dict(coin=coin,exchange=exchange,enabled=True))
+        return preferences.validate(result)
+
+    def block_coins(self, raw, account):
+        if set(raw)!={'requestId','coins','exchange'} or not isinstance(raw['requestId'],str) or not re.fullmatch(r'[a-zA-Z0-9_-]{8,64}',raw['requestId']):raise ValueError('一键屏蔽请求无效')
+        if not isinstance(raw['coins'],list) or not 1<=len(raw['coins'])<=30 or any(not symbol(c) for c in raw['coins']) or raw['exchange'] not in (*VENUES,'all'):raise ValueError('请填写有效币种和交易所，每次最多30个币种')
+        coins=sorted(set(c.upper() for c in raw['coins']));exchange=raw['exchange'];identity=raw['requestId']
+        with self.lock, account.lock:
+            operations=self.data.setdefault('coinOperations',[])
+            operation=next((x for x in operations if x['id']==identity),None)
+            if operation and (operation['coins']!=coins or operation['exchange']!=exchange):raise ValueError('重试内容不一致，请重新操作')
+            if operation is None:
+                operation=dict(id=identity,at=time.time(),coins=coins,exchange=exchange,results={c:dict(state='pending') for c in ('desktop','cards','mobile')})
+                self.data['coinOperations']=[operation,*operations][:100]
+                # Write intent first; an interrupted call can be retried with the same id.
+                try:self.save()
+                except OSError:
+                    self.data['coinOperations']=operations
+                    raise
+            for channel in ('desktop','cards','mobile'):
+                if operation['results'][channel]['state']=='saved':continue
+                before=copy.deepcopy(self.data)
+                try:
+                    if channel=='mobile':
+                        live=account.state['live'];settings=self.add_coins(live['settings'],coins,exchange)
+                        if settings!=live['settings']:account.configure(dict(revision=live['revision'],settings=settings))
+                    else:
+                        current=self.data['desktop']['rules']['hide'] if channel=='desktop' else self.data['cards']['settings']
+                        settings=self.add_coins(current,coins,exchange)
+                        if settings!=current:
+                            if channel=='desktop':
+                                self.data['desktop']['rules']['hide']=settings
+                                if self.data['desktop']['action']=='hide':self.data['desktop']['settings']=copy.deepcopy(settings)
+                            else:self.data['cards']['settings']=settings
+                            self.data['revision']+=1
+                    operation['results'][channel]=dict(state='saved')
+                    self.save()
+                except (OSError,ValueError) as error:
+                    self.data=before
+                    operation=next(x for x in self.data['coinOperations'] if x['id']==identity)
+                    operation['results'][channel]=dict(state='failed',error=str(error)[:120] if isinstance(error,ValueError) else '保存暂时失败，请重试')
+                    self.save()
+            return self.coin_state(account)|dict(operation=copy.deepcopy(operation))
 
     @staticmethod
     def rows(message, now):

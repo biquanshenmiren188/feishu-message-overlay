@@ -294,6 +294,9 @@ def handler(trial):
             if self.path == BASE + 'api/desktop-settings' and desktop:
                 if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
                 return self.reply(200, desktop.status())
+            if self.path == BASE + 'api/coin-blocks' and desktop:
+                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能查看和操作三端币种规则'})
+                return self.reply(200, desktop.coin_state(account))
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
             if self.path == BASE + 'api/binding':
@@ -334,6 +337,9 @@ def handler(trial):
                 if route == 'desktop-settings' and desktop:
                     if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
                     return self.reply(200, desktop.configure(data))
+                if route == 'block-coins' and desktop:
+                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能一键屏蔽三端'})
+                    return self.reply(200, desktop.block_coins(data,account))
                 if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
                     return self.reply(200, trial.transfer_subscription(account, data))
                 if route == 'settings' and hasattr(account, 'configure'):

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css?v=20261023-split1"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达电脑小窗与手机推送独立设置页预览"><link rel="stylesheet" href="style.css?v=20261023-coins1"></head>
 <body>
 <header class="masthead"><a class="brand" href="/radar/robot-push/" aria-label="资金费雷达，返回 BOT"><img src="/radar/radar-brand-treasure-v2.svg" width="154" height="46" alt="资金费雷达"></a><a class="preview-pill" href="/radar/robot-push/">返回 BOT</a></header>
 <nav class="site-nav" aria-label="资金费雷达导航"><a href="/radar/?tab=market">全市场费率</a><a href="/radar/?tab=FF&amp;mode=FF">机会筛选</a><a href="/radar/?panel=transfer">充提查询</a><a href="/radar/robot-push/">BOT</a><a href="/radar/position-limits/">HY限额查询</a><a href="/radar/robot-push/settings/" aria-current="page">消息设置</a></nav>
@@ -12,8 +12,15 @@
 <div class="receive-row"><span id="receive-label">接收消息已开启</span><span>默认全部接收，按需排除</span></div>
 <div class="channel-switch" aria-label="选择规则对象"><button data-channel="desktop" aria-pressed="false">电脑消息</button><button data-channel="cards" aria-pressed="false">行情卡片</button><button data-channel="mobile" aria-pressed="true">手机推送</button></div><div class="channel-hint" id="channel-hint">当前编辑手机推送规则，不影响电脑小窗。</div>
 <section class="section desktop-action" id="desktop-action" hidden><h2>电脑消息规则</h2><div class="desktop-rule-switch" role="group" aria-label="选择独立规则"><label><input type="radio" name="desktop-action" value="mute"><span>仅屏蔽声音</span></label><label><input type="radio" name="desktop-action" value="hide"><span>屏蔽消息</span></label></div><p class="helper" id="desktop-editing"></p><p class="helper">两套规则独立保存，切换时保留草稿。都未命中时正常提醒；同时命中时屏蔽消息优先。顶部接收开关控制所有电脑消息。</p></section>
-<nav class="tabs" role="tablist" aria-label="设置分类"><button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="true" data-tab="block">屏蔽设置</button><button type="button" role="tab" id="tab-oi" aria-controls="panel-oi" aria-selected="false" data-tab="oi">OI 门槛</button><button type="button" role="tab" id="tab-other" aria-controls="panel-other" aria-selected="false" data-tab="other">其他设置</button><button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" data-tab="history">屏蔽记录</button></nav>
-<section id="panel-block" role="tabpanel" aria-labelledby="tab-block">
+<nav class="tabs" role="tablist" aria-label="设置分类"><button type="button" role="tab" id="tab-coins" aria-controls="panel-coins" aria-selected="true" data-tab="coins">已屏蔽币种</button><button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="false" data-tab="block">屏蔽设置</button><button type="button" role="tab" id="tab-oi" aria-controls="panel-oi" aria-selected="false" data-tab="oi">OI 门槛</button><button type="button" role="tab" id="tab-other" aria-controls="panel-other" aria-selected="false" data-tab="other">其他设置</button><button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" data-tab="history">屏蔽记录</button></nav>
+<section id="panel-coins" role="tabpanel" aria-labelledby="tab-coins"><section class="section">
+<div class="section-heading"><div><h2>已屏蔽币种 <span class="count" id="blocked-count">0</span></h2><p>汇总三端已保存的币种规则；仅静音会单独标注。</p></div><button class="text-button" id="add-blocked-coin">＋ 添加</button></div>
+<div class="coin-toolbar"><input type="search" id="blocked-search" aria-label="搜索已屏蔽币种" placeholder="搜索币种"><button id="refresh-coins">刷新列表</button></div>
+<p class="helper" id="coin-sync-status" role="status">正在载入已保存规则…</p><div id="blocked-list"></div>
+<p class="helper">“屏蔽三端”直接保存：隐藏电脑消息、行情卡片，并停止当前手机方案推送。不会修改仅静音规则或其他手机方案。</p>
+<div id="coin-operation-result" role="status"></div>
+</section></section>
+<section id="panel-block" role="tabpanel" aria-labelledby="tab-block" hidden>
 
 <section class="section"><div class="section-heading"><div><h2>屏蔽币种 <span class="count" id="coin-count">0</span></h2><p>全部屏蔽，或只屏蔽指定交易所的币种。</p></div><button class="text-button" id="add-coin">＋ 添加</button></div><div id="coin-list"></div></section>
 <section class="section"><div class="section-heading"><div><h2>整所屏蔽</h2><p>选择要屏蔽的交易所，任一侧命中即可。</p></div></div><div class="exchange-grid" id="exchange-grid"></div></section>
@@ -33,12 +40,14 @@
 <section class="section"><h2>机会筛选</h2><label class="stack-label">最低 R 百分比（%）<input id="r-percent" type="number" step="any" placeholder="不限" inputmode="decimal"></label><label class="stack-label">屏蔽等级<input id="r-ranks" placeholder="例如 R0、R5+" autocomplete="off"></label><p class="helper">R5 包含 R5+；只填 R5+ 不影响 R5，不代表所有 ≥ 5。</p><label class="field-label">屏蔽类型</label><div class="mode-options" id="mode-options"></div></section>
 <section class="section"><h2>接入状态</h2><div class="connection-row"><span>电脑桌面小窗</span><b id="desktop-status">正在连接…</b></div><div class="connection-row"><span>手机 Web Push</span><b id="mobile-status">正在连接…</b></div><p class="note">手机保存后应用于当前推送码的新消息。电脑规则独立保留，不会覆盖手机设置。</p></section>
 </section>
-<section id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden><section class="section"><div class="section-heading"><div><h2>屏蔽记录 <span class="count" id="history-count">0</span></h2><p id="history-caption">手机推送的屏蔽记录。</p></div><button id="refresh-history" class="text-button" type="button">刷新记录</button></div><div class="note history-note" id="history-note">保留此前在本浏览器生成的模拟记录。真实屏蔽记录尚未接入。</div><div id="history-list"></div></section></section><div class="save-bar"><div><strong id="save-status" role="status">尚未保存预览配置</strong><small id="save-help">手机规则保存到云端</small></div><button class="primary" id="save">保存手机规则</button></div>
+<section id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden><section class="section"><div class="section-heading"><div><h2>屏蔽记录 <span class="count" id="history-count">0</span></h2><p id="history-caption">手机推送的屏蔽记录。</p></div><button id="refresh-history" class="text-button" type="button">刷新记录</button></div><div class="note history-note" id="history-note">保留此前在本浏览器生成的模拟记录。真实屏蔽记录尚未接入。</div><div id="history-list"></div><details class="operation-history"><summary>一键屏蔽操作记录 <span id="operation-count">0</span></summary><p class="helper">记录保存结果；上方是实际拦截记录。只保留最近100次一键操作。</p><div id="coin-operations"></div></details></section></section><div class="save-bar"><div><strong id="save-status" role="status">尚未保存预览配置</strong><small id="save-help">手机规则保存到云端</small></div><button class="primary" id="save">保存手机规则</button></div>
 </div>
 
 </main>
-<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-title"><h2 id="editor-title">添加规则</h2><button type="button" class="icon-button" id="editor-close" aria-label="关闭规则编辑">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="editor-cancel">取消</button><button type="submit" class="primary">确定</button></div></form></dialog>
+<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-title"><h2 id="editor-title">添加规则</h2><button type="button" class="icon-button" id="editor-close" aria-label="关闭规则编辑">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="editor-cancel">取消</button><button type="button" class="secondary" id="editor-all" hidden>屏蔽三端并保存</button><button type="submit" class="primary" id="editor-confirm">确定</button></div></form></dialog>
+<dialog id="coin-manager" aria-labelledby="coin-manager-title"><div class="dialog-title"><h2 id="coin-manager-title">管理币种规则</h2><button type="button" id="coin-manager-close" aria-label="关闭">×</button></div><p class="helper">编辑和删除仅修改选中渠道的草稿，之后点击底部保存。</p><div id="coin-manager-body"></div></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="rules.js?v=20261023-split1"></script><script src="app.js?v=20261023-split1"></script>
-<script type="module" src="/radar/robot-push/notification-settings.js?v=20261023-split1"></script>
+<script src="rules.js?v=20261023-coins1"></script><script src="app.js?v=20261023-coins1"></script>
+<script src="coin-list.js?v=20261023-coins1"></script>
+<script type="module" src="/radar/robot-push/notification-settings.js?v=20261023-coins1"></script>
 </body></html>

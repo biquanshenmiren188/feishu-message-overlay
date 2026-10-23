@@ -14,7 +14,7 @@ function toast(t){$('#toast').textContent=t;$('#toast').hidden=false;clearTimeou
 const actionText=()=>active==='desktop'&&state.desktopAction==='mute'?'仅静音，消息仍接收并显示':'不推送';
 function changed(){ $('#save-status').textContent='有未保存的更改';renderPhone(); }
 function renderRules(kind,selector){const a=state[kind];const empty=kind==='coins'?'尚未屏蔽币种，所有币种都可接收':kind==='legRules'?'尚未添加定向屏蔽规则':'尚未添加特殊门槛';$(selector).innerHTML=a.length?a.map((r,i)=>{let title,sub;if(kind==='coins'){title=r.coin;sub=r.exchange==='all'?'全部交易所':R.name(r.exchange);}else if(kind==='legRules'){title=R.name(r.exchange);sub=`${R.sideName(r.side)} · ${R.marketName(r.market)}`;}else{title=`${r.coin} · ${R.name(r.exchange)}`;sub=r.value===null?'OI 不限制':`最低 OI ${r.value} 万 USDT`;}return `<div class="rule ${r.enabled?'':'rule-paused'}"><div class="rule-top"><div class="rule-text"><b>${esc(title)}</b><small>${esc(sub)}</small></div><label class="rule-enabled"><input type="checkbox" data-rule-toggle="${kind}" data-index="${i}" ${r.enabled?'checked':''}>启用</label></div><div class="rule-actions"><button data-edit="${kind}" data-index="${i}">编辑</button><button data-delete="${kind}" data-index="${i}">删除</button></div></div>`;}).join(''):`<div class="empty">${empty}</div>`;}
-function renderLists(){renderRules('coins','#coin-list');renderRules('legRules','#leg-list');renderRules('coinOI','#oi-list');$('#coin-count').textContent=state.coins.length;$('#leg-count').textContent=state.legRules.length;$('#oi-count').textContent=state.coinOI.length;}
+function renderLists(){renderRules('coins','#coin-list');renderRules('legRules','#leg-list');renderRules('coinOI','#oi-list');$('#coin-count').textContent=state.coins.length;$('#leg-count').textContent=state.legRules.length;$('#oi-count').textContent=state.coinOI.length;document.dispatchEvent(new Event('radar-coins-changed'));}
 function renderExchanges(){
 $('#exchange-grid').innerHTML=R.exchanges.map(e=>`<label class="exchange-choice"><input type="checkbox" data-block-ex="${e[0]}" ${state.blockedExchanges.includes(e[0])?'checked':''}><span>${e[1]} ${e[2]?'<small>'+e[2]+'</small>':''}</span></label>`).join('');
 $('#oi-exchanges').innerHTML=R.exchanges.map(e=>{const rule=state.exchangeOI[e[0]]||{mode:'inherit',value:null};return `<div class="oi-row"><div><b>${e[1]}</b><small id="oi-label-${e[0]}"></small></div><select aria-label="${e[1]} OI 设置" data-oi-mode="${e[0]}"><option value="inherit" ${rule.mode==='inherit'?'selected':''}>跟随统一</option><option value="custom" ${rule.mode==='custom'?'selected':''}>单独设置</option><option value="none" ${rule.mode==='none'?'selected':''}>不限制</option></select><div class="oi-custom unit-input" id="oi-custom-${e[0]}" ${rule.mode==='custom'?'':'hidden'}><input type="number" min="0" step="any" inputmode="decimal" data-oi-value="${e[0]}" aria-label="${e[1]} 最低 OI" value="${rule.value??''}" placeholder="输入最低持仓金额"><span>万 USDT</span></div></div>`;}).join('');updateOILabels();}
@@ -24,7 +24,7 @@ $('#enabled').checked=state.enabled;$('#receive-label').textContent=state.enable
 function openEditor(kind,index=null,preset=null){edit={kind,index};const r=index===null?null:state[kind][index];$('#editor-title').textContent=(r?'编辑':'添加')+({coins:'币种屏蔽',legRules:'定向屏蔽',coinOI:'币种 OI 门槛'})[kind];$('#editor-error').textContent='';let fields='';if(kind!=='legRules')fields+=`<label class="stack-label">${kind==='coins'&&!r?'币种（可批量输入）':'币种'}<input id="rule-coin" placeholder="${kind==='coins'&&!r?'例如 MITO、PTB':'例如 MITO'}" value="${esc(r?.coin||'')}" autocomplete="off" required></label>`;fields+=`<label class="stack-label">交易所<select id="rule-exchange">${options(kind==='coins')}</select></label>`;
 if(kind==='legRules')fields+='<div class="two-col"><label>腿的位置<select id="rule-side"><option value="all">任意一侧</option><option value="left">左腿（买入）</option><option value="right">右腿（卖出）</option></select></label><label>市场类型<select id="rule-market"><option value="all">现货和永续</option><option value="spot">仅现货</option><option value="perp">仅永续</option></select></label></div>';
 if(kind==='coinOI')fields+='<label class="stack-label">最低 OI（万 USDT）<input id="rule-oi" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 500"></label><label class="form-check"><input id="rule-no-limit" type="checkbox">此币种在该交易所不限制 OI</label>';
-fields+='<div class="live-description" id="rule-description"></div>';$('#editor-fields').innerHTML=fields;$('#rule-exchange').value=r?.exchange||(kind==='coins'?'all':'gate');if(kind==='legRules'){$('#rule-side').value=r?.side||(preset==='left'||preset==='right'?preset:'all');$('#rule-market').value=r?.market||(preset==='spot'?'spot':'all');}if(kind==='coinOI'){$('#rule-oi').value=r?.value??'';$('#rule-no-limit').checked=!!r&&r.value===null;}describeRule();$('#editor').showModal();}
+fields+='<div class="live-description" id="rule-description"></div>';$('#editor-fields').innerHTML=fields;$('#rule-exchange').value=r?.exchange||(kind==='coins'?'all':'gate');if(kind==='legRules'){$('#rule-side').value=r?.side||(preset==='left'||preset==='right'?preset:'all');$('#rule-market').value=r?.market||(preset==='spot'?'spot':'all');}if(kind==='coinOI'){$('#rule-oi').value=r?.value??'';$('#rule-no-limit').checked=!!r&&r.value===null;}$('#editor-all').hidden=kind!=='coins'||index!==null;$('#editor-confirm').textContent=kind==='coins'&&index===null?'仅添加到当前渠道':'确定';describeRule();$('#editor').showModal();}
 function describeRule(){const e=$('#rule-exchange').value;if(edit.kind==='legRules')$('#rule-description').textContent=`只屏蔽 ${R.name(e)} 的${R.sideName($('#rule-side').value)}、${R.marketName($('#rule-market').value)}；命中后${actionText()}。`;else if(edit.kind==='coins')$('#rule-description').textContent=`该币种${e==='all'?'在全部交易所':'在 '+R.name(e)}出现时，命中后${actionText()}。`;else{$('#rule-oi').disabled=$('#rule-no-limit').checked;$('#rule-description').textContent='此规则优先于交易所和统一 OI 门槛；仅检查对应永续腿。';}}
 function validate(){const errors=[];if(state.globalOI!==null&&(!Number.isFinite(state.globalOI)||state.globalOI<0))errors.push('统一 OI 门槛必须是非负数');for(const [e,r] of Object.entries(state.exchangeOI))if(r.mode==='custom'&&(r.value===null||!Number.isFinite(r.value)||r.value<0))errors.push(R.name(e)+' 请填写有效 OI 门槛');if(state.rPercent!==null&&!Number.isFinite(state.rPercent))errors.push('请填写有效 R 百分比');if(state.ranks.some(r=>!/^R\d+\+?$/.test(r)))errors.push('屏蔽等级请使用 R0、R5+ 等格式');return errors;}
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.channel){active=b.dataset.channel;state=profiles[active];initialize();}if(b.dataset.tab){$$('[data-tab]').forEach(x=>x.setAttribute('aria-selected',x===b));$$('[role=tabpanel]').forEach(p=>p.hidden=p.id!=='panel-'+b.dataset.tab);}if(b.id==='add-coin')openEditor('coins');if(b.id==='add-oi')openEditor('coinOI');if(b.dataset.preset)openEditor('legRules',null,b.dataset.preset);if(b.dataset.edit)openEditor(b.dataset.edit,Number(b.dataset.index));if(b.dataset.delete){state[b.dataset.delete].splice(Number(b.dataset.index),1);renderLists();changed();toast('已移除规则，保存后保留此更改');}if(b.id==='editor-close'||b.id==='editor-cancel')$('#editor').close();});
@@ -99,5 +99,36 @@ function renderHistory(){
 }
 $('#refresh-history').addEventListener('click',async()=>{const b=$('#refresh-history');b.disabled=true;try{if(active==='mobile')mobileHistory=await window.RadarMobileSettings.history();else{const result=await window.RadarDesktopSettings.status();desktopHistory=result.history||[];desktopConnected=result.connected;}renderHistory();}catch(e){toast(e.message);}finally{b.disabled=false;}});
 
+const clone=x=>JSON.parse(JSON.stringify(x));
+function mergeDraft(draft,old,next){
+ const result=clone(next);
+ for(const k of Object.keys(draft))if(JSON.stringify(draft[k])!==JSON.stringify(old[k]))result[k]=clone(draft[k]);
+ const id=r=>r.coin+'|'+r.exchange,base=new Map(old.coins.map(r=>[id(r),r])),local=new Map(draft.coins.map(r=>[id(r),r])),merged=new Map(next.coins.map(r=>[id(r),clone(r)]));
+ for(const [k,r] of base)if(!local.has(k))merged.delete(k);else if(JSON.stringify(local.get(k))!==JSON.stringify(r))merged.set(k,clone(local.get(k)));
+ for(const [k,r] of local)if(!base.has(k))merged.set(k,clone(r));
+ result.coins=[...merged.values()];return result;
+}
+window.RadarCoinSettings={
+ syncUI:updateChannelUI,
+ snapshot:()=>({profiles:{desktop:clone(desktopSaved.hide),mute:clone(desktopSaved.mute),cards:JSON.parse(savedSnapshot).cards,mobile:JSON.parse(savedSnapshot).mobile},desktopLoaded,mobileLoaded}),
+ receive(data){
+  const snap=JSON.parse(savedSnapshot);
+  for(const action of ['mute','hide']){const next={...fromServer(data.desktop.desktop.rules[action]),desktopAction:action};desktopSets[action]=mergeDraft(desktopSets[action],desktopSaved[action],next);desktopSaved[action]=clone(next);}
+  for(const channel of ['cards','mobile']){const next={...fromServer(channel==='cards'?data.desktop.cards.settings:data.mobile.settings),...(channel==='cards'?{desktopAction:'hide'}:{})};profiles[channel]=mergeDraft(profiles[channel],snap[channel],next);snap[channel]=clone(next);}
+  // The explicit operation wins only for its successful target coins; all other drafts stay intact.
+  if(data.operation)for(const channel of ['desktop','cards','mobile'])if(data.operation.results[channel].state==='saved'){
+   const target=channel==='desktop'?desktopSets.hide:profiles[channel];
+   for(const coin of data.operation.coins){const rule=target.coins.find(r=>r.coin===coin&&r.exchange===data.operation.exchange);if(rule)rule.enabled=true;else if(!target.coins.some(r=>r.enabled&&r.coin===coin&&r.exchange==='all'))target.coins.push({coin,exchange:data.operation.exchange,enabled:true});}
+  }
+  profiles.desktop=desktopSets[desktopAction];snap.desktop=clone(desktopSaved[desktopAction]);savedSnapshot=JSON.stringify(snap);desktopRevision=data.desktop.revision;desktopHistory=data.desktop.history||[];desktopConnected=data.desktop.connected;desktopLoaded=true;state=profiles[active];window.RadarCoinAPI.adopt(data.mobile);initialize();
+ },
+ manage(channel,rule,remove=false){
+  active=channel==='mute'?'desktop':channel;if(active==='desktop'){desktopAction=channel==='mute'?'mute':'hide';profiles.desktop=desktopSets[desktopAction];}state=profiles[active];initialize();$('#tab-block').click();
+  const index=state.coins.findIndex(r=>r.coin===rule.coin&&r.exchange===rule.exchange);
+  if(index<0){toast('这条规则在当前草稿中已移除，请保存或刷新后再操作');return;}
+  if(remove){state.coins.splice(index,1);renderLists();changed();toast('已移除当前渠道规则，请点击底部保存');}else openEditor('coins',index);
+ },
+ add:()=>openEditor('coins'),toast
+};
 initialize();
 })();
