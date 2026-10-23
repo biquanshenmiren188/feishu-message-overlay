@@ -337,6 +337,9 @@ def handler(trial):
                 if route == 'desktop-settings' and desktop:
                     if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
                     return self.reply(200, desktop.configure(data))
+                if route == 'edit-coins' and desktop:
+                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能管理三端规则'})
+                    return self.reply(200, desktop.edit_coins(data,account))
                 if route == 'block-coins' and desktop:
                     if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能一键屏蔽三端'})
                     return self.reply(200, desktop.block_coins(data,account))

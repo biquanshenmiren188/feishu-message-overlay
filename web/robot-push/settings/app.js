@@ -116,9 +116,14 @@ window.RadarCoinSettings={
   for(const action of ['mute','hide']){const next={...fromServer(data.desktop.desktop.rules[action]),desktopAction:action};desktopSets[action]=mergeDraft(desktopSets[action],desktopSaved[action],next);desktopSaved[action]=clone(next);}
   for(const channel of ['cards','mobile']){const next={...fromServer(channel==='cards'?data.desktop.cards.settings:data.mobile.settings),...(channel==='cards'?{desktopAction:'hide'}:{})};profiles[channel]=mergeDraft(profiles[channel],snap[channel],next);snap[channel]=clone(next);}
   // The explicit operation wins only for its successful target coins; all other drafts stay intact.
-  if(data.operation)for(const channel of ['desktop','cards','mobile'])if(data.operation.results[channel].state==='saved'){
+  if(data.operation&&data.operation.kind!=='edit')for(const channel of ['desktop','cards','mobile'])if(data.operation.results[channel].state==='saved'){
    const target=channel==='desktop'?desktopSets.hide:profiles[channel];
    for(const coin of data.operation.coins){const rule=target.coins.find(r=>r.coin===coin&&r.exchange===data.operation.exchange);if(rule)rule.enabled=true;else if(!target.coins.some(r=>r.enabled&&r.coin===coin&&r.exchange==='all'))target.coins.push({coin,exchange:data.operation.exchange,enabled:true});}
+  }
+  if(data.operation?.kind==='edit')for(const change of data.operation.changes)if(data.operation.results[change.channel].state==='saved'){
+   const c=change.channel,draft=c==='desktop'?desktopSets.hide:c==='mute'?desktopSets.mute:profiles[c],latest=c==='desktop'?desktopSaved.hide:c==='mute'?desktopSaved.mute:snap[c];
+   draft.coins=draft.coins.filter(r=>r.coin!==change.coin||r.exchange!==change.exchange);
+   draft.coins.push(...clone(latest.coins.filter(r=>r.coin===change.coin&&r.exchange===change.exchange)));
   }
   profiles.desktop=desktopSets[desktopAction];snap.desktop=clone(desktopSaved[desktopAction]);savedSnapshot=JSON.stringify(snap);desktopRevision=data.desktop.revision;desktopHistory=data.desktop.history||[];desktopConnected=data.desktop.connected;desktopLoaded=true;state=profiles[active];window.RadarCoinAPI.adopt(data.mobile);initialize();
  },

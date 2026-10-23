@@ -78,6 +78,8 @@ class CoinBlocksTest(unittest.TestCase):
    self.assertEqual(request('coin-blocks','wrong')[0],401);self.assertEqual(request('coin-blocks',other)[0],403)
    self.assertEqual(request('block-coins',other,self.request)[0],403);self.assertEqual(request('block-coins',token,self.request,'https://evil.invalid')[0],403)
    self.assertEqual(request('block-coins',token,self.request)[0],200);self.assertEqual(request('coin-blocks',token)[0],200)
+   edit=dict(requestId='owner-edit-001',changes=[dict(channel='mute',coin='TEST',exchange='gate',before=None,after=True)])
+   self.assertEqual(request('edit-coins','wrong',edit)[0],401);self.assertEqual(request('edit-coins',other,edit)[0],403);self.assertEqual(request('edit-coins',token,edit,'https://evil.invalid')[0],403);self.assertEqual(request('edit-coins',token,edit)[0],200)
    self.assertEqual(profiles.resolve(other).state['live']['revision'],0)
   finally:server.shutdown();server.server_close();thread.join()
 

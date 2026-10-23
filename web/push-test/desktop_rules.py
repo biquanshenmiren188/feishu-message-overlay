@@ -78,7 +78,7 @@ class DesktopRules:
         with self.lock, account.lock:
             operations=self.data.setdefault('coinOperations',[])
             operation=next((x for x in operations if x['id']==identity),None)
-            if operation and (operation['coins']!=coins or operation['exchange']!=exchange):raise ValueError('重试内容不一致，请重新操作')
+            if operation and (operation.get('kind')=='edit' or operation['coins']!=coins or operation['exchange']!=exchange):raise ValueError('重试内容不一致，请重新操作')
             if operation is None:
                 operation=dict(id=identity,at=time.time(),coins=coins,exchange=exchange,results={c:dict(state='pending') for c in ('desktop','cards','mobile')})
                 self.data['coinOperations']=[operation,*operations][:100]
@@ -111,6 +111,10 @@ class DesktopRules:
                     operation['results'][channel]=dict(state='failed',error=str(error)[:120] if isinstance(error,ValueError) else '保存暂时失败，请重试')
                     self.save()
             return self.coin_state(account)|dict(operation=copy.deepcopy(operation))
+
+    def edit_coins(self, raw, account):
+        from coin_edits import edit_coins
+        return edit_coins(self, raw, account)
 
     @staticmethod
     def rows(message, now):
