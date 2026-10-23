@@ -84,7 +84,7 @@ public sealed class MessageView : Grid
     private void Rebuild()
     {
         FullBody=null;badgeHost=null;muteInline=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
-        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(216,216,216)),BorderThickness=new Thickness(0,0,0,.5),Padding=new Thickness(1,1,1,3)};Children.Add(outer);
+        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(184,196,206)),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Background=Brushes.White,Padding=new Thickness(3,3,3,4),Margin=new Thickness(0,0,0,5),SnapsToDevicePixels=true};Children.Add(outer);
         var card=message.Card;
         if(TopicSpreadMessage.Summary(card?.Title,card?.Body??message.Text) is not null)
         {
@@ -129,7 +129,7 @@ public sealed class MessageView : Grid
             if(card.Body.Length>0)
             {
                 FullBody=Block(card.Body,markdown:card.IsMarkdown);FullBody.Visibility=Visibility.Collapsed;FullBody.Margin=new Thickness(0,6,0,3);stack.Children.Add(FullBody);
-                outer.Focusable=true;outer.Background=Brushes.Transparent;outer.ToolTip="点击消息展开或收起原文";
+                outer.Focusable=true;outer.ToolTip="点击消息展开或收起原文";
                 AutomationProperties.SetName(outer,displayTitle);AutomationProperties.SetHelpText(outer,"点击或按回车展开、收起原文");
                 outer.MouseLeftButtonUp+=(_,e)=>{if(IsAction(e.OriginalSource as DependencyObject,outer))return;outer.Focus();ToggleFullBody();e.Handled=true;};
                 outer.KeyDown+=(_,e)=>{if(e.OriginalSource==outer && e.Key is Key.Enter or Key.Space){ToggleFullBody();e.Handled=true;}};
