@@ -28,7 +28,12 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  raw=patcher.patch_bundle((old/old_bundle).read_bytes());bundle='performance-20261017/bot-cards-'+hashlib.sha256(raw).hexdigest()[:12]+'.js'
  fallback=backend/'public/index.html';old_fallback=fallback.read_bytes();old_index=(old/'robot-push/index.html').read_text()
  marker='/radar/'+old_bundle
- assert old_index.count(marker)==1 and old_fallback.decode().count(marker)==1,'BOT/PWA entry changed'
+ # PWA fallback still uses the pre-Aster bundle. Verified byte comparison:
+ # only the two already-approved Aster GC expressions differ from current BOT.
+ pwa_marker='/radar/performance-20261017/bot-summary-874b3c8416fa.js'
+ assert hashlib.sha256(old_fallback).hexdigest()=='7aba3f9c09fce2b71369e5a93aa9883cd5b7188730e5d80c46a41f4add06eba9','PWA fallback changed'
+ assert digest(old/pwa_marker.removeprefix('/radar/'))=='874b3c8416faf6dcb3a6c617fac023b8db6268563ff1110bbe2f92ad6285a3dc','PWA bundle changed'
+ assert old_index.count(marker)==1 and old_fallback.decode().count(pwa_marker)==1,'BOT/PWA entry changed'
  release='20261023-web-cards-'+str(int(time.time()));new=old.parent/release;backup=Path('/opt/funding-radar-web/backups')/release;backup.mkdir(mode=0o700)
  excluded=set(assets)|{'robot-push/index.html','settings-preview-source.json'}
  preserved={str(p.relative_to(old)):digest(p) for p in old.rglob('*') if p.is_file() and str(p.relative_to(old)) not in excluded}
@@ -48,7 +53,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   assert settings()==before,'Existing settings changed'
   assert pid()==publisher,'Publisher unexpectedly restarted'
   link=current.with_name('current.web-cards-next');link.symlink_to(new);os.replace(link,current)
-  temp=fallback.with_suffix('.next');temp.write_text(old_fallback.decode().replace(marker,'/radar/'+bundle));temp.chmod(0o644);os.replace(temp,fallback)
+  temp=fallback.with_suffix('.next');temp.write_text(old_fallback.decode().replace(pwa_marker,'/radar/'+bundle));temp.chmod(0o644);os.replace(temp,fallback)
   result=dict(source_sha=sha,release=str(new),previous=str(old),backup=str(backup),bundle=bundle,preservedFiles=len(preserved),existingRulesPreserved=True,mobileBindingsPreserved=True,publisherUnchanged=True,desktopRestarted=False)
   (backup/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
  except Exception:

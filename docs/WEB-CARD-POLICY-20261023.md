@@ -12,6 +12,8 @@ BOT 的网页卡片原来直接展示公开行情源，未应用中台行情卡�
 
 实际线上 BOT 是性能打包模块，并非根目录旧源码入口。`scripts/build-card-policy.py` 校验原 bundle SHA256 `8db43cfeb5cd754668bdd04ec5572720c2eecda947887a50599c9cc3949f06fb`，仅添加规则模块及四个渲染钩子；保留复制、GC Aster、混合腿、Unicode、SharedWorker URL 和原有摘要补丁。源码 basispulse.js 同步接入。新 bundle 使用内容哈希命名，BOT/PWA 两入口同时更新。
 
+发布前发现 PWA fallback 仍引用旧 `bot-summary-874b3c8416fa.js`。逐字比较确认仅缺少网站已验证的两处 Aster GC 表达式；本次将 fallback 对齐当前网页 bundle 后一起接入规则，增加旧 PWA 入口与 bundle 的完整哈希保护。首次部署因该差异在任何线上修改前安全终止。
+
 87 项 Python 完整测试在服务器隔离目录运行通过；60 项 Node 测试通过（卡片策略、卡片模型、复制和通知设置）。覆盖网页不改变电脑心跳、不受电脑静音影响、与桌面相同左右腿/OI 判定、源错误、权限隔离、初始校验、失效、解除恢复和换码清理。三号 Chrome 的隔离真实 bundle：PTB 默认仅静音仍显示；中台启用卡片屏蔽后显示 ALT/IRYS、屏蔽数 1；删除该卡片规则后 PTB 自动恢复，静音保留。未以真实用户规则或人工推送测试。
 
 ## 发布与回滚
