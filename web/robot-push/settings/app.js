@@ -75,7 +75,7 @@ function updateChannelUI(){
  const mobile=active==='mobile',label=mobile?'手机推送':active==='cards'?'行情卡片':'电脑消息';
  const overview=!$('#panel-coins').hidden;$('.settings').classList.toggle('coin-overview',overview);$('#tab-coins').setAttribute('aria-pressed',overview);$('h1').textContent=overview?'已屏蔽币种':label+'设置';$('.title-row p').textContent=overview?'统一查看三端规则，按币种与交易所范围管理。':'屏蔽币种 / '+label+' · 独立保存';$('#tab-other').textContent=mobile?'推送与预览':'其他设置';$('#refresh-history').hidden=false;$('#refresh-history').disabled=mobile?!mobileLoaded:!desktopLoaded;
  $$('[data-channel]').forEach(b=>b.setAttribute('aria-pressed',!overview&&b.dataset.channel===active));
- $('#channel-hint').textContent=overview?'选择下方币种可一键屏蔽三端；单独设置请进入上方子菜单。':mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'只控制左侧行情卡片，不改变右侧消息和手机推送。':'静音与屏蔽消息分别配置、同时生效；同时命中时优先屏蔽消息。'):desktopError;
+ $('#channel-hint').textContent=overview?'选择下方币种可一键屏蔽三端；单独设置请进入上方子菜单。':mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'同时控制桌面行情卡片和已连接管理码的网页卡片推送，保存后约 3 秒同步。':'静音与屏蔽消息分别配置、同时生效；同时命中时优先屏蔽消息。'):desktopError;
  $('#mobile-cadence').hidden=!mobile;$('#mobile-account').hidden=false;$('#desktop-action').hidden=active!=='desktop';
  $$('[name=desktop-action]').forEach(x=>x.checked=x.value===desktopAction);$('#desktop-editing').textContent=desktopAction==='mute'?'正在编辑：仅屏蔽声音。下方币种、交易所、左右腿、OI 和等级条件只用于静音，消息照常显示。':'正在编辑：屏蔽消息。下方条件命中后不显示消息，也不响铃。';
  $('#save').disabled=mobileBusy||(mobile?!mobileLoaded:!desktopLoaded);$('#save-help').textContent=mobile?'保存到当前推送码':'保存到云端 · 约 3 秒同步';

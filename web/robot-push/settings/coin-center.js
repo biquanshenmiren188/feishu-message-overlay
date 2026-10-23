@@ -67,4 +67,17 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)r
 $('#coin-manager').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
 document.addEventListener('radar-mobile-loaded',()=>{generation++;if($('#coin-manager').open)$('#coin-manager').close();queue=null;});
 window.RadarCoinCenter={matrix,batch,retryOperation,undo,describe};
+// Card-page links open a fully loaded matrix; a URL never writes a rule.
+const entry=new URLSearchParams(location.search),entryCoin=(entry.get('coin')||'').trim().toUpperCase();
+let entryOpened=false;
+function openEntry(){
+ if(entryOpened)return;
+ if(validCoin(entryCoin)){
+  const s=B.snapshot();if(!s.desktopLoaded||!s.mobileLoaded)return;
+  entryOpened=true;$('#tab-coins').click();matrix(entryCoin);
+ }else if(entry.get('channel')==='cards'){entryOpened=true;$('[data-channel="cards"]').click();}
+}
+document.addEventListener('radar-desktop-loaded',()=>queueMicrotask(openEntry));
+document.addEventListener('radar-mobile-loaded',()=>queueMicrotask(openEntry));
+openEntry();
 })();

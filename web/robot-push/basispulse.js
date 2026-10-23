@@ -1,5 +1,6 @@
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate} from './mobile-scroll.js';
+import {createCardPolicy} from './card-policy.js?v=20261023-cards1';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005fill1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
 import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
@@ -28,6 +29,7 @@ function render() {
   count.dataset.connected=String(healthy);
   const keep=new Set(); let active=0, shown=0;
   for(const c of rows) {
+    if(!cardPolicy.visible(c.data)){nodes.get(c.data.id)?.card.remove();nodes.delete(c.data.id);continue;}
     const id=c.data.id, state=opportunityState(c,healthy,now), live=state==='active';
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
@@ -35,7 +37,7 @@ function render() {
     const matrixStamp=JSON.stringify(matrix);
     if(!deferStructure && (!node || node.matrixStamp!==matrixStamp || commitValues&&node.stamp!==JSON.stringify([c.data,matrix]))) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
-      const next=cardNode(c,matrix); if(node)node.card.replaceWith(next.card); node=next;node.matrixStamp=matrixStamp; nodes.set(id,node);
+      const next=cardNode(c,matrix); cardPolicy.decorate(next.card,c.data); if(node)node.card.replaceWith(next.card); node=next;node.matrixStamp=matrixStamp; nodes.set(id,node);
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
     if(!node)continue;
@@ -48,7 +50,9 @@ function render() {
   }
   count.textContent=`${active} ACTIVE`; if(!deferStructure)empty.hidden=shown>0;
   empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
+  cardPolicy.summary(rows);
 }
+const cardPolicy=createCardPolicy(tools,render);
 subscribePush('basispulse',{
   data(next){
     envelope=next;failed=false;model.ingest(envelope);

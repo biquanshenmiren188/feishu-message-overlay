@@ -297,6 +297,10 @@ def handler(trial):
             if self.path == BASE + 'api/coin-blocks' and desktop:
                 if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能查看和操作三端币种规则'})
                 return self.reply(200, desktop.coin_state(account))
+            if self.path == BASE + 'api/card-decisions' and desktop:
+                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能应用行情卡片规则'})
+                try:return self.reply(200, desktop.web_cards())
+                except Exception:return self.reply(503, {'error':'行情卡片规则暂时无法同步'})
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
             if self.path == BASE + 'api/binding':

@@ -17,6 +17,33 @@ class DesktopRulesTest(unittest.TestCase):
   return self.app.configure(dict(revision=state['revision'],channel=channel,settings=s,action=action))
  def test_defaults_do_not_change_delivery_or_write_settings(self):
   d=self.app.evaluate();self.assertEqual(d['messages'],{});self.assertEqual(d['cards'],{});self.assertFalse(self.app.path.exists())
+ def test_web_cards_only_uses_card_rules_without_desktop_heartbeat(self):
+  self.configure(action='mute',change=lambda s:s['excluded_coins'].append('BTC'))
+  self.assertEqual(self.app.web_cards()['decisions'],{'pair-one':'allow'})
+  self.assertEqual(self.app.last_seen,0);self.assertEqual(self.app.status()['history'],[])
+  self.configure('cards',change=lambda s:s['excluded_coins'].append('BTC'))
+  self.assertEqual(self.app.web_cards()['decisions'],{'pair-one':'hide'})
+  self.assertFalse(self.app.status()['connected']);self.assertEqual([h['channel'] for h in self.app.status()['history']],['cards'])
+  self.app.web_cards();self.app.evaluate()
+  self.assertEqual(len([h for h in self.app.status()['history'] if h['channel']=='cards']),1)
+ def test_web_card_source_errors_are_not_empty_successes(self):
+  self.cards.write_text('{}')
+  with self.assertRaises(ValueError):self.app.web_cards()
+  self.cards.unlink()
+  with self.assertRaises(OSError):self.app.web_cards()
+ def test_web_card_side_spot_oi_and_unblock_share_desktop_decisions(self):
+  self.configure('cards',change=lambda s:s['advanced']['legRules'].append(dict(exchange='gate',side='right',market='spot',enabled=True)))
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'allow')
+  self.configure('cards',change=lambda s:s['advanced']['legRules'][0].update(market='perp'))
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'hide')
+  self.configure('cards',change=lambda s:s['advanced'].update(legRules=[],globalOI=100))
+  self.app.oi._read=lambda ex,n:(ex,{ex+':BTCUSDT':dict(value=1e6,time=n*1000,basis='double-v1')})
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'allow')
+  self.app.oi.cache['gate']['gate:BTCUSDT']['value']=999999
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'hide')
+  self.assertEqual(self.app.evaluate()['cards'],{'pair-one':'hide'})
+  self.configure('cards',change=lambda s:s['advanced'].update(globalOI=None))
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'allow')
  def test_mute_hide_independent_history_and_restart(self):
   self.configure(action='mute',change=lambda s:s['excluded_coins'].append('BTC'))
   d=self.app.evaluate();self.assertEqual(d['messages'],{'a'*64:'mute'});self.assertEqual(d['cards'],{})

@@ -76,6 +76,8 @@ class CoinBlocksTest(unittest.TestCase):
    conn=HTTPConnection(*server.server_address);conn.request('GET' if data is None else 'POST',BASE+'api/'+route,body=None if data is None else json.dumps(data),headers={'Authorization':'Bearer '+auth,'Origin':origin,'Content-Type':'application/json'});r=conn.getresponse();body=json.loads(r.read());conn.close();return r.status,body
   try:
    self.assertEqual(request('coin-blocks','wrong')[0],401);self.assertEqual(request('coin-blocks',other)[0],403)
+   self.assertEqual(request('card-decisions','wrong')[0],401);self.assertEqual(request('card-decisions',other)[0],403)
+   with patch.object(DesktopRules,'web_cards',return_value={'decisions':{},'cardsEnabled':True,'revision':0}):self.assertEqual(request('card-decisions',token)[0],200)
    self.assertEqual(request('block-coins',other,self.request)[0],403);self.assertEqual(request('block-coins',token,self.request,'https://evil.invalid')[0],403)
    self.assertEqual(request('block-coins',token,self.request)[0],200);self.assertEqual(request('coin-blocks',token)[0],200)
    edit=dict(requestId='owner-edit-001',changes=[dict(channel='mute',coin='TEST',exchange='gate',before=None,after=True)])

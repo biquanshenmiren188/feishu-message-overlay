@@ -186,6 +186,34 @@ class DesktopRules:
             os.replace(temp,self.card_cache_path)
         return [entry['card'] for entry in self.card_cache.values()]
 
+    def card_decisions(self, envelope, now):
+        """One evaluator for desktop and authenticated BOT cards; caller holds lock."""
+        decisions={}
+        for card in self.retained_cards(envelope,now):
+            legs=card.get('details',{}).get('legs',[]);mode=card.get('strategy');rows=[]
+            if len(legs)==2 and mode in ('SF','FS','FF'):
+                residual=card.get('v2Residual') or {};level=residual.get('level');bps=residual.get('bps')
+                rows=[dict(coin=card.get('asset','').split(':')[-1].upper(),mode=mode,buy=EXCHANGES.get(legs[0].get('exchange','').upper(),''),sell=EXCHANGES.get(legs[1].get('exchange','').upper(),''),rank='R'+str(level) if level is not None else '',value=str(bps/100 if type(bps) in (int,float) else 0)+'%',at=now,unranked=level is None or bps is None)]
+            identity=card.get('pair') or card.get('id','')
+            decisions[identity]=self.decision('cards',identity,rows,now) or 'allow'
+        return decisions
+
+    def prune_seen(self, now):
+        self.data['seen']={k:v for k,v in self.data['seen'].items() if now-v<86400}
+        if len(self.data['seen'])>10000:self.data['seen']=dict(sorted(self.data['seen'].items(),key=lambda x:x[1])[-10000:])
+
+    def web_cards(self):
+        # Do not update desktop heartbeat or evaluate computer messages here.
+        # A missing source is an error, not a successful empty/unfiltered result.
+        with self.lock:
+            envelope=json.loads(self.cards.read_text())
+            if not isinstance(envelope.get('snapshot'),dict):raise ValueError('cards_source_unavailable')
+            now=time.time();before=dict(self.data['seen'])
+            decisions=self.card_decisions(envelope,now)
+            self.prune_seen(now)
+            if self.data['seen']!=before:self.save()
+            return dict(revision=self.data['revision'],cardsEnabled=self.data['cards']['settings']['notify_enabled'],decisions=decisions)
+
     def evaluate(self):
         with self.lock:
             now=time.time();self.last_seen=now
@@ -198,16 +226,8 @@ class DesktopRules:
                 if action:result['messages'][m['id']]=action
             try:envelope=json.loads(self.cards.read_text())
             except (OSError,ValueError,AttributeError):envelope={}
-            for card in self.retained_cards(envelope,now):
-                legs=card.get('details',{}).get('legs',[]);mode=card.get('strategy');rows=[]
-                if len(legs)==2 and mode in ('SF','FS','FF'):
-                    residual=card.get('v2Residual',{});level=residual.get('level');bps=residual.get('bps')
-                    rows=[dict(coin=card.get('asset','').split(':')[-1].upper(),mode=mode,buy=EXCHANGES.get(legs[0].get('exchange','').upper(),''),sell=EXCHANGES.get(legs[1].get('exchange','').upper(),''),rank='R'+str(level) if level is not None else '',value=str(bps/100 if type(bps) in (int,float) else 0)+'%',at=now,unranked=level is None or bps is None)]
-                identity=card.get('pair') or card.get('id','')
-                action=self.decision('cards',identity,rows,now)
-                if action:result['cards'][identity]=action
+            result['cards']={key:action for key,action in self.card_decisions(envelope,now).items() if action!='allow'}
             changed=len(self.data['seen'])!=before
-            self.data['seen']={k:v for k,v in self.data['seen'].items() if now-v<86400}
-            if len(self.data['seen'])>10000:self.data['seen']=dict(sorted(self.data['seen'].items(),key=lambda x:x[1])[-10000:])
+            self.prune_seen(now)
             if changed:self.save()
             return result
