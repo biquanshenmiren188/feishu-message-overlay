@@ -47,6 +47,18 @@ public partial class App : Application
             try{await WeixinContract.RunAsync(e.Args.Last());Shutdown();}catch{Shutdown(1);}return;
         }
         base.OnStartup(e);
+        if(e.Args.Length==2&&e.Args[0]=="--coin-rules-read-check")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            try{await CoinRulesWindow.VerifyConnectionAsync(e.Args[1]);Shutdown();}
+            catch(Exception){File.WriteAllText(e.Args[1],"{\"connected\":false,\"readOnly\":true}");Shutdown(1);}return;
+        }
+        if(e.Args.Length==2&&e.Args[0]=="--coin-rules-contract")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            try{await CoinRulesContract.RunAsync(e.Args[1]);Shutdown();}
+            catch(Exception error){Directory.CreateDirectory(e.Args[1]);File.WriteAllText(Path.Combine(e.Args[1],"coin-rules-contract.json"),System.Text.Json.JsonSerializer.Serialize(new{passed=false,error=error.ToString()}));Shutdown(1);}return;
+        }
         if(e.Args.Length==2&&e.Args[0]=="--compact-summary-contract")
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;

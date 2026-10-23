@@ -239,6 +239,11 @@ internal sealed class OpportunityBoard : DockPanel
             var content=new FrameworkElementFactory(typeof(TextBlock));content.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Content"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetBinding(TextBlock.ForegroundProperty,new System.Windows.Data.Binding("Foreground"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetValue(FrameworkElement.HorizontalAlignmentProperty,HorizontalAlignment.Center);content.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);outline.AppendChild(content);
             gc.Template=new ControlTemplate(typeof(Button)){VisualTree=outline};
         }gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
+        foreach(var (caption,quick) in new[]{("管理",false),("屏蔽三端",true)})
+        {
+            var button=FooterButton(caption);button.ToolTip=quick?"立即屏蔽此币种全部交易所的电脑消息、行情卡片和原始管理码手机方案":"在软件内设置此币种规则";
+            button.Click+=(_,_)=>{var owner=Window.GetWindow(this);var dialog=new CoinRulesWindow(OpportunityModel.Asset(data),quick){Owner=owner,Topmost=owner?.Topmost==true};dialog.ShowDialog();};SetDock(button,Dock.Left);footer.Children.Add(button);
+        }
         if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);

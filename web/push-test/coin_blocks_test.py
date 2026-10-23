@@ -83,6 +83,12 @@ class CoinBlocksTest(unittest.TestCase):
    edit=dict(requestId='owner-edit-001',changes=[dict(channel='mute',coin='TEST',exchange='gate',before=None,after=True)])
    self.assertEqual(request('edit-coins','wrong',edit)[0],401);self.assertEqual(request('edit-coins',other,edit)[0],403);self.assertEqual(request('edit-coins',token,edit,'https://evil.invalid')[0],403);self.assertEqual(request('edit-coins',token,edit)[0],200)
    self.assertEqual(profiles.resolve(other).state['live']['revision'],0)
+   conn=HTTPConnection(*server.server_address)
+   conn.request('POST','/internal/coin-rules',json.dumps({'op':'block','request':dict(requestId='native-control-001',coins=['NATIVE'],exchange='all')}),{'Content-Type':'application/json'})
+   response=conn.getresponse();native=json.loads(response.read());conn.close()
+   self.assertEqual(response.status,200);self.assertTrue(all(r['state']=='saved' for r in native['operation']['results'].values()))
+   self.assertIn('NATIVE',[r['coin'] for r in profiles.accounts['legacy'].state['live']['settings']['advanced']['coins']]);self.assertEqual(profiles.resolve(other).state['live']['revision'],0)
+   conn=HTTPConnection(*server.server_address);conn.request('POST','/internal/coin-rules',json.dumps({'op':'state'}),{'Content-Type':'application/json','Origin':'https://evil.invalid'});response=conn.getresponse();response.read();conn.close();self.assertEqual(response.status,403)
   finally:server.shutdown();server.server_close();thread.join()
 
 if __name__=='__main__':unittest.main()

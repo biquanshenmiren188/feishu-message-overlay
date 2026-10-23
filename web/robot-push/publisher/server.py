@@ -86,9 +86,13 @@ class Publisher:
         if reader:
             if not re.fullmatch(r'[0-9a-f]{16}',requested_key) or route!=CONTROL_ROUTE:
                 raise Rejected(401,'unknown_key')
-            try: read_only=state_request(json.loads(body))
+            coin_manager=False
+            try:
+                control=json.loads(body);read_only=state_request(control)
+                from coin_control import valid_control
+                coin_manager=valid_control(control) and (self.public_key.parent/('desktop-coin-manager-'+requested_key+'.enabled')).is_file()
             except (ValueError,UnicodeError): read_only=False
-            if not read_only: raise Rejected(403,'reader_state_only')
+            if not read_only and not coin_manager: raise Rejected(403,'reader_state_only')
             verify_key=self.public_key.parent/('desktop-reader-'+requested_key+'.pem')
             if not verify_key.is_file(): raise Rejected(401,'unknown_key')
         if not re.fullmatch(r'[0-9]{10,11}',stamp) or abs(now-int(stamp))>60 or not re.fullmatch(r'[0-9a-f]{32}',nonce): raise Rejected(401,'expired_or_invalid')
@@ -181,6 +185,9 @@ class Handler(BaseHTTPRequestHandler):
                             with urlopen('http://127.0.0.1:18885/internal/desktop-state',timeout=8) as policy:
                                 result['desktopRules']=json.loads(policy.read(1024*1024))
                         except Exception:result['desktopRulesUnavailable']=True
+                elif isinstance(control,dict) and control.get('action')=='coin-rules':
+                    from coin_control import coin_control
+                    result=coin_control(control)
                 elif isinstance(control,dict) and set(control)=={'action','pinnedGroupId'} and control['action']=='pin':result=receiver.select_pin(control['pinnedGroupId'])
                 else:raise Rejected(400,'invalid_control')
             elif self.path==CONFIG_ROUTE:

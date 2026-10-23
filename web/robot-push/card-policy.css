@@ -6,4 +6,11 @@
 .bp-card-foot{flex-wrap:wrap;gap:5px!important}
 .bp-card-foot .bp-manage-rules{margin-left:auto;font-size:13px}
 .bp-card-foot .bp-radar{margin-left:0}
+.bp-card-foot [data-action="block-all"]{margin-left:0;color:#b63b42}
+.bp-rule-dialog{width:min(880px,calc(100vw - 24px));max-height:calc(100dvh - 28px);box-sizing:border-box;padding:20px;border:1px solid #d7dce5;border-radius:16px;color:#202932;background:white;font:14px/1.5 system-ui,sans-serif;overflow:auto}
+.bp-rule-dialog::backdrop{background:#26384480;backdrop-filter:blur(3px)}
+.bp-rule-dialog header,.bp-rule-dialog footer{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bp-rule-dialog header{justify-content:space-between}.bp-rule-dialog h2{font-size:20px;margin:0}.bp-rule-help,.bp-rule-review{color:#64748b;font-size:13px}
+.bp-rule-dialog fieldset{border:0;margin:0;padding:0}.bp-rule-row{display:grid;grid-template-columns:1.25fr repeat(4,1fr) auto;gap:8px;padding:12px 0;border-top:1px solid #e1e5eb;align-items:end}.bp-rule-row label{display:grid;gap:5px;font-size:12px;font-weight:600}.bp-rule-dialog select{width:100%;min-width:0;font-size:14px;background:white;color:#202932;padding:8px 5px;border:1px solid #ccd4df;border-radius:8px}
+.bp-rule-dialog button{font:inherit;color:#0075e9;background:#f4f7fb;border:1px solid #d7dce5;border-radius:8px;padding:8px 12px;cursor:pointer}.bp-rule-dialog button:disabled{opacity:.5;cursor:default}.bp-rule-dialog [data-save]{background:#0075e9;color:white}.bp-rule-dialog [data-block]{color:#b63b42;margin-right:auto}.bp-rule-result{min-height:22px;white-space:pre-line}.bp-rule-dialog button:focus-visible,.bp-rule-dialog select:focus-visible{outline:2px solid #0075e9;outline-offset:2px}.bp-rule-dialog footer{position:sticky;bottom:-20px;background:white;padding:12px 0 3px}
+@media(max-width:650px){.bp-rule-dialog{padding:14px}.bp-rule-row{grid-template-columns:1fr 1fr}.bp-rule-row label:first-child{grid-column:1/-1}.bp-rule-dialog footer{bottom:-14px}.bp-rule-dialog button{padding:9px 10px}}
 @media(max-width:600px){.bp-policy{width:100%;margin-left:0;justify-content:space-between}.bp-policy-status{flex:1;min-width:180px}.bp-policy-link{padding:6px 8px}.bp-card-foot .bp-manage-rules{font-size:12px;padding:6px 7px}}

@@ -325,6 +325,11 @@ def handler(trial):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError('请求格式错误')
+                # Only the existing authenticated publisher can bridge here.
+                # This loopback path is outside all public /radar proxy routes.
+                if self.path == '/internal/coin-rules' and self.client_address[0] == '127.0.0.1' and desktop:
+                    from coin_control import dispatch
+                    return self.reply(200, dispatch(desktop, trial.accounts['legacy'], data))
                 if not self.path.startswith(BASE + 'api/'):
                     return self.reply(404, {'error': '不存在'})
                 route = self.path.removeprefix(BASE + 'api/')
