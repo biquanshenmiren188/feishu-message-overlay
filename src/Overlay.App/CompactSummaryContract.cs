@@ -107,6 +107,16 @@ internal static class CompactSummaryContract
             }
             var ordinary=new MessageView{Message=new IncomingMessage("ordinary","fixture","","普通自定义正文\n第二行",DateTimeOffset.UtcNow,SenderKind.Bot)};
             Check(ordinary.FullBody is null,"unrelated ordinary text retains its original rendering");
+            var muted=views[1];muted.ToggleFullBody();
+            content.SetValue(MessageView.MutedIdsProperty,new HashSet<string>{muted.Message!.Id});window.UpdateLayout();
+            Check(muted.HasMuteBadge&&muted.IsExpanded,"rule badge preserves expanded original");
+            var badge=Children<Border>(muted).Single(b=>System.Windows.Automation.AutomationProperties.GetName(b)=="仅静音");
+            Check(badge.BorderBrush is SolidColorBrush red&&red.Color==Color.FromRgb(223,69,69)&&badge.BorderThickness.Left==1,"red outlined mute badge");
+            Check(Children<TextBlock>(muted).Any(t=>t.Inlines.FirstInline is System.Windows.Documents.InlineUIContainer inline&&inline.Child==badge),"mute badge precedes title text");
+            foreach(var width in new[]{320.0,430.0}){window.Width=width;window.UpdateLayout();Check(badge.ActualWidth>0&&badge.ActualWidth<36,"badge stays compact at narrow width");}
+            var badgeImage=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);badgeImage.Render(window);var badgePng=new PngBitmapEncoder();badgePng.Frames.Add(BitmapFrame.Create(badgeImage));using(var stream=File.Create(Path.Combine(directory,"mute-badge-preview.png")))badgePng.Save(stream);
+            content.SetValue(MessageView.MutedIdsProperty,new HashSet<string>());window.UpdateLayout();
+            Check(!muted.HasMuteBadge&&muted.IsExpanded,"unmute removes badge without closing expanded original");muted.ToggleFullBody();
             window.UpdateLayout();
             var image=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);image.Render(window);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using(var stream=File.Create(Path.Combine(directory,"desktop-summary-preview.png")))png.Save(stream);
             await File.WriteAllTextAsync(Path.Combine(directory,"desktop-summary-contract.json"),JsonSerializer.Serialize(new{passed=true,views=views.Count,actionClicks=launched.Count,exactUrls=true,fullText=true,syntheticOnly=true}));

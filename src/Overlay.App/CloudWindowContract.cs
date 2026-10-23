@@ -53,6 +53,9 @@ public partial class MainWindow
         Volatile.Write(ref snapshot,WithRules([muted],new(){{muteId,"mute"}}));
         await Until(()=>readingQueue.Any(m=>m.Id==muteId));
         if(soundRequests!=beforeSound)throw new InvalidOperationException("Muted message played sound");
+        await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
+        if(MessageView.CountMuteBadges(this)!=1)throw new InvalidOperationException("Muted message must show exactly one leading badge");
+        checks.Add("muted_message_has_leading_badge_in_actual_window");
         checks.Add("rule_mute_keeps_actual_message_visible_without_sound");
         var hidden=Message("hidden",normalGroup,DateTimeOffset.UtcNow);
         Volatile.Write(ref snapshot,WithRules([muted,hidden],new(){{muteId,"mute"},{hideId,"hide"},{PublicWebPublisher.Digest("pin3"),"hide"}}));
@@ -67,6 +70,8 @@ public partial class MainWindow
         Volatile.Write(ref snapshot,WithRules([muted,hidden,audible],new()));
         await Until(()=>readingQueue.Any(m=>m.Id==hideId));
         if(soundRequests!=beforeSound+1)throw new InvalidOperationException("Rule edit replayed historical sound");
+        await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();
+        if(MessageView.CountMuteBadges(this)!=0)throw new InvalidOperationException("Unmuted history retained a stale badge");
         checks.Add("removing_rule_restores_history_without_sound_replay");
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,regularVisible=displayed.Count,pinnedVisible=PinnedCard.Content is not null,syntheticOnly=true,realCredentialUsed=false}));
         verifyReadingTimer=false;

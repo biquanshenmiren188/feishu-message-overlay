@@ -216,6 +216,8 @@ public partial class MainWindow
         opportunityBoard.Update(null,true,now.AddSeconds(2),true);
         Check(opportunityBoard.VisibleCount==7&&opportunityBoard.Model.Cards.Count==8,"card rule hides only target while retaining original data");
         Check(opportunityBoard.Rules.ShowMessage("ordinary-message")&&opportunityBoard.Rules.SoundMessage("ordinary-message"),"card rule leaves message visibility and sound unchanged");
+        opportunityBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).Where(c=>OpportunityModel.Text(JsonSerializer.SerializeToElement(c),"pair")!=filtered).ToArray(),now.AddSeconds(3)),true,now.AddSeconds(3),true);
+        Check(opportunityBoard.VisibleCount==7&&opportunityBoard.Model.Cards.Count==8,"retained expired card remains hidden with server decision");
         opportunityBoard.Rules=DesktopRuleDecisions.Empty;
         opportunityBoard.Update(null,true,now.AddSeconds(3),true);
         Check(opportunityBoard.VisibleCount==8,"removing card rule restores retained card immediately");

@@ -12,6 +12,7 @@ internal sealed class DesktopRuleDecisions
     private readonly Dictionary<string,string> messages=new(StringComparer.Ordinal),cards=new(StringComparer.Ordinal);
     internal bool ShowMessage(string id)=>DesktopEnabled&&messages.GetValueOrDefault(id)!="hide";
     internal bool SoundMessage(string id)=>DesktopEnabled&&!messages.ContainsKey(id);
+    internal IReadOnlySet<string> MutedMessageIds()=>messages.Where(pair=>DesktopEnabled&&pair.Value=="mute").Select(pair=>pair.Key).ToHashSet(StringComparer.Ordinal);
     internal bool ShowCard(string id)=>CardsEnabled&&!cards.ContainsKey(id);
     internal static DesktopRuleDecisions Parse(JsonElement value)
     {
