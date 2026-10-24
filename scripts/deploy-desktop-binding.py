@@ -104,9 +104,11 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
         if current.resolve()==new:
             link=current.with_name('current.desktop-binding-rollback');link.symlink_to(old);os.replace(link,current)
         fallback.write_bytes(oldfallback)
-        subprocess.run(['systemctl','stop','robot-push','radar-webpush-test'],check=True)
-        for target,original,existed in restores:
-            if existed:shutil.copy2(original,target)
-            else:target.unlink(missing_ok=True)
-        subprocess.run(['systemctl','start','radar-webpush-test','robot-push'],check=True)
+        subprocess.run(['systemctl','stop','robot-push','radar-webpush-test'],check=False)
+        try:
+            for target,original,existed in restores:
+                if existed:shutil.copy2(original,target)
+                else:target.unlink(missing_ok=True)
+        finally:
+            subprocess.run(['systemctl','start','radar-webpush-test','robot-push'],check=False)
         raise
