@@ -1,5 +1,5 @@
 import unittest
-from basispulse import normalize, retry_delay, NoRedirect
+from basispulse import normalize, retry_delay, NoRedirect, retain_removed
 
 class MirrorTests(unittest.TestCase):
     def sample(self):
@@ -34,5 +34,27 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual(warnings,[{'exchange':'okx','summary':'delisting','status':'postponed'}])
     def test_no_redirects(self):
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.test'))
+
+    def test_shared_history_survives_restart_and_expires_at_exactly_thirty_seconds(self):
+        from datetime import datetime
+        first=normalize(self.sample());start=datetime.fromisoformat(first['sampledAt'].replace('Z','+00:00')).timestamp()
+        gone=dict(first,active=[],sampledAt='2026-10-04T00:00:05Z')
+        saved=retain_removed(gone,first,start+7)
+        self.assertEqual(saved['retained'][0]['expiredAt'],'2026-10-04T00:00:05+00:00')
+        self.assertEqual(saved['retained'][0]['card'],first['active'][0])
+        import json
+        restarted=json.loads(json.dumps(saved))
+        self.assertEqual(len(retain_removed(gone,restarted,start+34.999)['retained']),1)
+        self.assertEqual(retain_removed(gone,restarted,start+35)['retained'],[])
+        self.assertEqual(retain_removed(first,saved,start+8),saved)
+        returned=dict(first,sampledAt='2026-10-04T00:00:10Z')
+        self.assertEqual(retain_removed(returned,saved,start+10)['retained'],[])
+
+    def test_partial_snapshot_keeps_known_card_without_inventing_failure(self):
+        from datetime import datetime
+        first=normalize(self.sample());start=datetime.fromisoformat(first['sampledAt'].replace('Z','+00:00')).timestamp()
+        partial=dict(first,active=[],complete=False,sampledAt='2026-10-04T00:00:05Z')
+        kept=retain_removed(partial,first,start+5)
+        self.assertEqual(kept['active'],first['active']);self.assertEqual(kept['retained'],[])
 
 if __name__=='__main__': unittest.main()

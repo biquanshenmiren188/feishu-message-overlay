@@ -74,6 +74,38 @@ def retry_delay(failures, retry_after=None, now=None):
     return max(5, delay)
 
 
+def retain_removed(snapshot, previous, now):
+    """Publish one expiry clock and full 30-second history to every reader."""
+    def stamp(value):
+        return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+    def identity(card):
+        return card.get('pair') or card['id']
+    sampled = stamp(snapshot['sampledAt'])
+    if previous and sampled < stamp(previous['sampledAt']):
+        return previous
+    active = {identity(card): card for card in snapshot['active']}
+    retained = {}
+    for entry in (previous or {}).get('retained', []):
+        retained[identity(entry['card'])] = entry
+    for card in (previous or {}).get('active', []):
+        key = identity(card)
+        if key in active:
+            continue
+        if not snapshot['complete'] and now < stamp(card['validUntil']):
+            active[key] = card
+        else:
+            expired = min(sampled, stamp(card['validUntil']))
+            retained.setdefault(key, {'card': card, 'expiredAt': datetime.fromtimestamp(expired, timezone.utc).isoformat()})
+    retained = [entry for key, entry in retained.items()
+                if key not in active and now < min(stamp(entry['expiredAt']), stamp(entry['card']['validUntil'])) + 30]
+    retained.sort(key=lambda entry: stamp(entry['expiredAt']), reverse=True)
+    result = dict(snapshot, active=list(active.values())[:1000], retained=retained[:1000], retentionSeconds=30)
+    # Existing readers have a 4 MiB cache limit. Drop oldest history first.
+    while result['retained'] and len(json.dumps(result, ensure_ascii=False).encode()) > MAX_BYTES - 1024:
+        result['retained'].pop()
+    return result
+
+
 def write_cache(path, data):
     encoded = json.dumps(data, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode()
     temporary = path.with_suffix('.tmp')
@@ -96,8 +128,15 @@ def main():
         opener = build_opener(NoRedirect())
         snapshot = None
         received = None
+        try:
+            existing = json.loads(path.read_text())
+            if isinstance(existing.get('snapshot'), dict):
+                snapshot = existing['snapshot']
+                received = existing.get('receivedAt')
+        except (OSError, ValueError, TypeError):
+            pass
         failures = 0
-        write_cache(path, {'status': 'connecting', 'receivedAt': None, 'snapshot': None})
+        write_cache(path, {'status': 'connecting', 'receivedAt': received, 'snapshot': snapshot})
         while True:
             status, delay = 'connected', INTERVAL
             try:
@@ -105,7 +144,8 @@ def main():
                     body = response.read(MAX_BYTES + 1)
                     if len(body) > MAX_BYTES:
                         raise ValueError('body_limit')
-                    snapshot = normalize(json.loads(body, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite'))))
+                    next_snapshot = normalize(json.loads(body, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite'))))
+                    snapshot = retain_removed(next_snapshot, snapshot, time.time())
                 if snapshot.get('invalidCards'):
                     print('source invalid timestamps:', snapshot['invalidCards'], flush=True)
                 received = datetime.now(timezone.utc).isoformat()

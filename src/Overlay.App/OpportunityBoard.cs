@@ -46,7 +46,15 @@ internal sealed class OpportunityModel
             if(Cards.TryGetValue(key,out var existing)&&existing.Content==data.GetRawText())existing.Missing=null;
             else Cards[key]=new(data.Clone());
         }
-        if(Complete)foreach(var pair in Cards)if(!present.Contains(pair.Key))pair.Value.Missing??=now;
+        foreach(var retained in Array(snapshot,"retained",1000))
+        {
+            var data=Get(retained,"card");var id=Text(data,"id");var expired=Date(retained,"expiredAt");
+            if(id.Length is 0 or >512||expired==DateTimeOffset.MinValue||Date(data,"validUntil")==DateTimeOffset.MinValue)continue;
+            var pair=Text(data,"pair");var key=pair.Length>0?pair:id;if(!present.Add(key))continue;
+            if(!Cards.TryGetValue(key,out var existing)||existing.Content!=data.GetRawText())Cards[key]=existing=new(data.Clone());
+            existing.Missing=expired;
+        }
+        if(Complete)foreach(var pair in Cards)if(!present.Contains(pair.Key))pair.Value.Missing??=sample;
         Prune(now);
     }
     internal void Prune(DateTimeOffset now)

@@ -20,6 +20,13 @@ public partial class MainWindow
         model.Ingest(Envelope([],now.AddSeconds(1),false),true,now.AddSeconds(1));Check(model.Cards.Count==2&&model.Cards.Values.All(c=>c.Missing is null),"partial snapshot keeps unconfirmed cards");
         model.Ingest(Envelope([],now.AddSeconds(2)),true,now.AddSeconds(2));Check(model.Cards.Values.All(c=>model.State(c,now.AddSeconds(2))=="已失效"),"complete missing marks expired");
         model.Prune(now.AddSeconds(33));Check(model.Cards.Count==0,"expired retained thirty seconds");
+        var sharedRetained=JsonSerializer.SerializeToElement(new{status="connected",receivedAt=now.AddSeconds(2),snapshot=new{sampledAt=now.AddSeconds(2),complete=true,active=System.Array.Empty<object>(),retained=new[]{new{card=Card("retained"),expiredAt=now.AddSeconds(2)}}}});
+        var late=new OpportunityBoard();late.Update(sharedRetained,true,now.AddSeconds(29),true);
+        Check(late.VisibleCount==1&&late.ActiveCount==0,"new reader loads server retained card without counting it active");
+        late.Update(sharedRetained,true,now.AddSeconds(31.999),true);Check(late.VisibleCount==1,"retained card remains until shared deadline");
+        late.Update(sharedRetained,true,now.AddSeconds(32),true);Check(late.VisibleCount==0,"retained card disappears at shared thirty second deadline");
+        var blockedRetained=new OpportunityBoard{Rules=DesktopRuleDecisions.Parse(JsonSerializer.SerializeToElement(new{revision=1,desktopEnabled=true,cardsEnabled=true,messages=new{},cards=new Dictionary<string,string>{{"retained","hide"}}}))};
+        blockedRetained.Update(sharedRetained,true,now.AddSeconds(3),true);Check(blockedRetained.VisibleCount==0,"shared retained history still obeys card blocking");
         var raw=JsonSerializer.SerializeToElement(Card("copy"));var copied=OpportunityModel.CopyStrategy(raw);
         Check(copied is not null&&copied.Contains("\"sellEx\": \"hl\"",StringComparison.Ordinal),"HL strategy copy");
         JsonElement CopyFixture(string buy,string buySymbol,string sell,string sellSymbol)=>JsonSerializer.SerializeToElement(new{strategy="FF",details=new{legs=new[]{new{exchange=buy,symbol=buySymbol,spot=false},new{exchange=sell,symbol=sellSymbol,spot=false}}}});

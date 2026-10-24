@@ -18,10 +18,20 @@ export class Opportunities {
       const key = data.pair || (data.longMarketKey && data.shortMarketKey ? `${data.longMarketKey}>${data.shortMarketKey}` : data.id);
       present.add(key);
       const old = this.cards.get(key), level = data.v2Residual?.level;
-      this.cards.set(key, { data, missingAt: null, level, levelSince: old?.level === level ? old.levelSince : now, stableLevel: old?.stableLevel ?? level });
+      this.cards.set(key, { data, missingAt: null, level, levelSince: old && old.level === level ? old.levelSince : now, stableLevel: old?.stableLevel ?? level });
       if (!old) this.order.push(key);
     }
-    if (s.complete === true) for (const [id, c] of this.cards) if (!present.has(id)) c.missingAt ??= now;
+    for (const entry of (Array.isArray(s.retained) ? s.retained : []).slice(0,1000)) {
+      const data=entry?.card, expired=Date.parse(entry?.expiredAt);
+      if(!data || typeof data.id!=='string' || !Number.isFinite(expired) || !Number.isFinite(Date.parse(data.validUntil)))continue;
+      const key=data.pair||(data.longMarketKey && data.shortMarketKey ? `${data.longMarketKey}>${data.shortMarketKey}` : data.id);
+      if(present.has(key))continue;
+      present.add(key);
+      const old=this.cards.get(key), level=data.v2Residual?.level;
+      this.cards.set(key,{data,missingAt:expired,level,levelSince:old?.levelSince??now,stableLevel:old?.stableLevel??level});
+      if(!old)this.order.push(key);
+    }
+    if (s.complete === true) for (const [id, c] of this.cards) if (!present.has(id)) c.missingAt ??= stamp;
     this.tick(now);
   }
   tick(now = Date.now()) {

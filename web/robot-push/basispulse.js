@@ -1,7 +1,7 @@
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate} from './mobile-scroll.js';
 import {createCardPolicy} from './card-policy.js?v=20261024-clarity1';
-import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261005fill1';
+import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261025-retention1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
 import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
 document.body.classList.add('basis-mode');
@@ -45,8 +45,8 @@ function render() {
     const desired=board.children[shown-1]; if(!deferStructure && desired!==node.card)board.insertBefore(node.card,desired || null);
   }
   for(const [id,node]of nodes)if(!keep.has(id)){
-    if(deferStructure){node.card.classList.add('bp-expired');node.card.dataset.state='expired';node.age.textContent='已失效';}
-    else{node.card.remove();nodes.delete(id);}
+    // The shared expiry deadline also applies while the user is scrolling.
+    node.card.remove();nodes.delete(id);
   }
   count.textContent=`${active} ACTIVE`; if(!deferStructure)empty.hidden=shown>0;
   empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
