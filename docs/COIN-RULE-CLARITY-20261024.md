@@ -25,3 +25,13 @@
 `scripts/deploy-rule-clarity.py` 从锁内实际 current 克隆，替换七个管理相关静态文件，核对目标文件及 BOT/PWA 基线；仅修改现有内容哈希 bundle 的 policy 导入，不覆盖同期 card-scroll 补丁。缓存统一为 `20261024-clarity1`。保留非目标文件、规则、订阅、方案注册和运行中服务 PID，失败只回滚代码。
 
 源码持续同步 PR #46，未授权合并。GitHub Windows build 曾因账户付款/支出限制未启动，本地通过不等同于远端 CI 通过。
+
+## 发布验收
+
+- 功能源码与桌面候选构建内容：`1ec4d49ca4c84ed7e25e8a92de4e5d66895a29c1`。
+- 静态版本：`/opt/funding-radar-web/releases/20261024-rule-clarity-1792853333-e5b3b5`。
+- 前版为 `20261024-card-scroll-1792852214`；同名备份保存在 `/opt/funding-radar-web/backups/`。
+- BOT/PWA 同步使用 `performance-20261017/bot-cards-78bcfbca815a.js`，保留同期卡片滚动改动。
+- 3295 个非目标文件、真实规则、手机订阅/方案绑定与全部运行服务 PID 保持。部署后再次核对九项资产哈希、PWA fallback、源码标识，publisher 与 Web Push 回环健康均通过。
+- 本轮未做正式浏览器视觉复核：用户已按 Esc 停止界面操作，公网命令行访问被既有 Cloudflare Access 登录保护拦截；未规避访问控制。布局证据来自 393px/1280px 隔离 Chromium 测试。
+- 桌面已安装清单仍为 `v2026.10.24.1`，程序哈希未改变；`v2026.10.24.2` 候选 ZIP 已交付，尚未安装或发布为正式 Release。
