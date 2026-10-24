@@ -41,6 +41,11 @@
   </Grid>
   <StackPanel x:Name="SettingsPanel" Visibility="Collapsed" Margin="16">
    <TextBlock Foreground="#111111" x:Name="Status" Text="未连接" TextWrapping="Wrap" Margin="0,0,0,12"/>
+   <TextBlock Text="个人推送码（8 位数字，可选）" FontWeight="SemiBold"/>
+   <TextBlock Text="绑定后使用自己的电脑、卡片和手机规则；不绑定默认全部接收。不会改变手机通知绑定。" TextWrapping="Wrap" Foreground="#555555" FontSize="12" Margin="0,5,0,6"/>
+   <PasswordBox x:Name="PushCodeInput" MaxLength="8" Height="32" Padding="6,4" AutomationProperties.Name="8 位数字推送码"/>
+   <WrapPanel Margin="0,8,0,0"><Button x:Name="BindPushCode" Content="验证并绑定" Click="BindPushCodeClick"/><Button x:Name="UnbindPushCode" Content="解绑 · 全部接收" Click="UnbindPushCodeClick"/></WrapPanel>
+   <TextBlock x:Name="PushBindingStatus" Text="未绑定 · 接收全部消息与行情卡片。" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"/>
    <CheckBox x:Name="SettingsReading" Content="自动逐条停留（手动滚动暂停）" Click="AutoScrollClick" Margin="0,0,0,12"/>
    <TextBlock Foreground="#111111" Text="连接与运行" FontWeight="SemiBold"/><WrapPanel Margin="0,8,0,0"><Button Content="连接飞书" Click="ConnectClick"/><Button Content="已有扫码应用" Click="LoadSavedClick"/><Button Content="扫码创建应用" Click="RegistrationClick"/></WrapPanel>
    <WrapPanel><Button Content="模拟演示" Click="DemoClick"/><Button Content="暂停" Click="PauseClick"/><Button Content="清空" Click="ClearClick"/></WrapPanel>

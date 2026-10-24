@@ -73,6 +73,7 @@ class Profiles:
         self.vapid_lock = threading.RLock()
         self.sender = sender
         self.pair_attempts = {}
+        self.desktop_code_attempts = {}
         # No renaming/copying the old state: token, subscription, sequence, queues,
         # settings, receipts and VAPID cache keep their exact original locations.
         self.accounts = {'legacy': Profile(self, 'legacy', self.directory, self.config, sender)}
@@ -187,6 +188,26 @@ class Profiles:
             return None
         with self.lock:
             return next((a for a in self.accounts.values() if a.authenticate(token)), None)
+
+    def desktop_account(self, code, client):
+        """Read-only code authentication for signed desktop polling.
+
+        Only failed attempts consume the budget. A valid polling client never
+        calls pair(), creates tokens, moves a subscription or changes a plan.
+        """
+        with self.lock:
+            now = time.time()
+            self.desktop_code_attempts = {k:v for k,v in self.desktop_code_attempts.items() if v[-1] > now-300}
+            attempts = [at for at in self.desktop_code_attempts.get(client, []) if at > now-300]
+            if len(attempts) >= 10 or client not in self.desktop_code_attempts and len(self.desktop_code_attempts) >= 10000:
+                raise ValueError('推送码验证过于频繁，请五分钟后重试')
+            account = None
+            if isinstance(code, str) and re.fullmatch('[0-9]{8}', code):
+                account = next((a for a in self.accounts.values() if hmac.compare_digest(a.config['pairCode'], code)), None)
+            if account is None:
+                self.desktop_code_attempts[client] = attempts+[now]
+                raise ValueError('推送码无效，请检查后重试')
+            return account
 
     def pair(self, code, client='local'):
         with self.lock:

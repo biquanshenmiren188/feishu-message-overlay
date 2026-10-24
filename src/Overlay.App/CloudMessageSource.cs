@@ -12,6 +12,8 @@ internal sealed class CloudMessageSource : IMessageSource
     private Dictionary<string,string>? known;
     private readonly Dictionary<string,JsonElement> cached=new(StringComparer.Ordinal);
     private readonly TimeSpan pollInterval;
+    private readonly string pushCode;
+    internal bool CanManage=>RulesConnected&&pushCode.Length>0;
     internal event Action? Activity;
     internal LinkState State{get;private set;}=LinkState.Connecting;
     internal bool StateLoaded{get;private set;}
@@ -20,12 +22,14 @@ internal sealed class CloudMessageSource : IMessageSource
     internal IncomingMessage? Pinned{get;private set;}
     internal string PinnedGroupId{get;private set;}="";
     internal JsonElement? Opportunities{get;private set;}
+    internal DesktopRuleDecisions Rules{get;private set;}=DesktopRuleDecisions.Empty;
+    internal bool RulesConnected{get;private set;}
     internal bool TransportConnected{get;private set;}
     internal DateTimeOffset StartedAt{get;}=DateTimeOffset.UtcNow;
     public bool IsRealConnection=>State==LinkState.Connected;
-    public string Mode=>State==LinkState.Connected?"已连接 · 云端唯一接收源":State==LinkState.Connecting?"连接云端中":"云端暂不可用 · 不会启动本地飞书连接";
-    internal CloudMessageSource(Func<object,Task<JsonDocument>>? transport=null,TimeSpan? interval=null,Func<object,CancellationToken,Task<JsonDocument>>? cancellableTransport=null)
-    {request=cancellableTransport??(transport is null?(payload,token)=>PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",payload,token):(payload,_)=>transport(payload));pollInterval=interval??TimeSpan.FromSeconds(3);worker=Task.Run(PollAsync);}
+    public string Mode=>pushCode.Length>0&&!RulesConnected&&State!=LinkState.Connecting?"推送码规则暂不可用 · 已暂停接收，请检查绑定或稍后重试":State==LinkState.Connected?"已连接 · 云端唯一接收源":State==LinkState.Connecting?"连接云端中":"云端暂不可用 · 不会启动本地飞书连接";
+    internal CloudMessageSource(Func<object,Task<JsonDocument>>? transport=null,TimeSpan? interval=null,Func<object,CancellationToken,Task<JsonDocument>>? cancellableTransport=null,string pushCode="")
+    {if(pushCode.Length!=0&&!DesktopPushBinding.Valid(pushCode))throw new ArgumentException("Invalid push code");this.pushCode=pushCode;Rules=pushCode.Length>0?DesktopRuleDecisions.Blocked:DesktopRuleDecisions.Empty;request=cancellableTransport??(transport is null?(payload,token)=>PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",payload,token):(payload,_)=>transport(payload));pollInterval=interval??TimeSpan.FromSeconds(3);worker=Task.Run(PollAsync);}
     internal static string GroupHash(string id)=>id.Length==64 && id.All(Uri.IsHexDigit)?id.ToLowerInvariant():PublicWebPublisher.Digest(id);
     internal static IncomingMessage ParseMessage(JsonElement raw,IReadOnlyDictionary<string,string> mapping)
     {
@@ -46,9 +50,10 @@ internal sealed class CloudMessageSource : IMessageSource
         {
             try
             {
-                object payload=known is null?new{action="state"}:(object)new{action="state",known};
+                object payload=known is null?new{action="state",desktopRules=1,pushCode}:(object)new{action="state",known,desktopRules=1,pushCode};
                 using var result=await request(payload,stop.Token);
                 var root=result.RootElement;if(!root.GetProperty("cloudMode").GetBoolean())throw new JsonException();
+                var nextRules=DesktopPushBinding.ValidateState(root,pushCode);
                 var conditional=root.TryGetProperty("protocol",out var protocol)&&protocol.ValueKind==JsonValueKind.Number&&protocol.GetInt32()==1;
                 Dictionary<string,string>? nextKnown=null;
                 if(conditional)
@@ -80,6 +85,7 @@ internal sealed class CloudMessageSource : IMessageSource
                 if(pinned is not null&&pinned.SourceId!=selected)throw new JsonException();
                 lock(gate)
                 {
+                    RulesConnected=true;Rules=nextRules;
                     Groups=groups;Pinned=pinned;PinnedGroupId=selected;StateLoaded=true;
                     Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():conditional?Opportunities:null;
                     TransportConnected=true;
@@ -101,7 +107,7 @@ internal sealed class CloudMessageSource : IMessageSource
                 delay=3;Activity?.Invoke();
             }
             catch(OperationCanceledException) when(stop.IsCancellationRequested){break;}
-            catch{known=null;cached.Clear();TransportConnected=false;State=LinkState.Reconnecting;Activity?.Invoke();delay=Math.Min(30,delay*2);}
+            catch{known=null;cached.Clear();lock(gate){RulesConnected=false;if(pushCode.Length>0)Rules=DesktopRuleDecisions.Blocked;pending.Clear();seen.Clear();TransportConnected=false;State=LinkState.Reconnecting;}Activity?.Invoke();delay=Math.Min(30,delay*2);}
             try{await Task.Delay(delay==3?pollInterval:TimeSpan.FromSeconds(delay),stop.Token);}catch(OperationCanceledException){break;}
         }
     }

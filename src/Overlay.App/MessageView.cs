@@ -13,6 +13,30 @@ namespace Overlay.App;
 // No media fetch, scripting, timers, or automatic link navigation.
 public sealed class MessageView : Grid
 {
+    public static readonly DependencyProperty MutedIdsProperty=DependencyProperty.RegisterAttached("MutedIds",typeof(IReadOnlySet<string>),typeof(MessageView),new FrameworkPropertyMetadata(null,FrameworkPropertyMetadataOptions.Inherits,(o,e)=>{if(o is MessageView view)view.UpdateMuteBadge();}));
+    private TextBlock? badgeHost;
+    private InlineUIContainer? muteInline;
+    internal bool HasMuteBadge=>muteInline is not null;
+    internal static int CountMuteBadges(DependencyObject root)
+    {
+        if(root is MessageView view)return view.HasMuteBadge?1:0;
+        var count=0;for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++)count+=CountMuteBadges(VisualTreeHelper.GetChild(root,i));return count;
+    }
+    private void UpdateMuteBadge()
+    {
+        if(badgeHost is null)return;
+        var muted=Message is {} message&&GetValue(MutedIdsProperty) is IReadOnlySet<string> ids&&ids.Contains(message.Id);
+        if(muted&&muteInline is null)
+        {
+            var red=new SolidColorBrush(Color.FromRgb(223,69,69));
+            var badge=new Border{BorderBrush=red,BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(2),Background=new SolidColorBrush(Color.FromRgb(255,248,248)),Padding=new Thickness(2,0,2,0),Margin=new Thickness(0,0,5,0),ToolTip="仅屏蔽声音，消息照常显示",Child=new TextBlock{Text="屏",Foreground=red,FontWeight=FontWeights.SemiBold}};
+            AutomationProperties.SetName(badge,"仅静音");
+            muteInline=new InlineUIContainer(badge){BaselineAlignment=BaselineAlignment.Center};
+            if(badgeHost.Inlines.FirstInline is {} first)badgeHost.Inlines.InsertBefore(first,muteInline);else badgeHost.Inlines.Add(muteInline);
+        }
+        else if(!muted&&muteInline is not null){badgeHost.Inlines.Remove(muteInline);muteInline=null;}
+    }
+    private void MarkTitle(TextBlock title){badgeHost=title;UpdateMuteBadge();}
     public static readonly DependencyProperty MessageProperty=DependencyProperty.Register(nameof(Message),typeof(IncomingMessage),typeof(MessageView),new PropertyMetadata(null,(o,e)=>((MessageView)o).Rebuild()));
     public IncomingMessage? Message {get=>(IncomingMessage?)GetValue(MessageProperty);set=>SetValue(MessageProperty,value);}
     internal TextBlock? FullBody {get;private set;}
@@ -59,8 +83,8 @@ public sealed class MessageView : Grid
     }
     private void Rebuild()
     {
-        FullBody=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
-        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(216,216,216)),BorderThickness=new Thickness(0,0,0,.5),Padding=new Thickness(1,1,1,3)};Children.Add(outer);
+        FullBody=null;badgeHost=null;muteInline=null;Children.Clear();ColumnDefinitions.Clear();RowDefinitions.Clear();if(Message is not {} message)return;
+        var outer=new Border{BorderBrush=new SolidColorBrush(Color.FromRgb(144,160,174)),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Background=Brushes.White,Padding=new Thickness(3,3,3,4),Margin=new Thickness(0,0,0,3),SnapsToDevicePixels=true};Children.Add(outer);
         var card=message.Card;
         if(TopicSpreadMessage.Summary(card?.Title,card?.Body??message.Text) is not null)
         {
@@ -75,7 +99,7 @@ public sealed class MessageView : Grid
         if(card is null)
         {
             var row=new Grid();row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-            var body=Block(message.Text,2);body.Margin=new Thickness(0,0,3,0);row.Children.Add(body);var clock=Clock(message);SetColumn(clock,1);row.Children.Add(clock);outer.Child=row;return;
+            var body=Block(message.Text,2);MarkTitle(body);body.Margin=new Thickness(0,0,3,0);row.Children.Add(body);var clock=Clock(message);SetColumn(clock,1);row.Children.Add(clock);outer.Child=row;return;
         }
         var stack=new StackPanel();outer.Child=stack;
         var displayTitle=RankFirstTitle(compact?summary.Title:card.Title);
@@ -86,7 +110,7 @@ public sealed class MessageView : Grid
             var header=new Border{Background=new SolidColorBrush(light),CornerRadius=new CornerRadius(2),Padding=new Thickness(5,3,4,3),Margin=new Thickness(0,0,0,3)};
             var row=new Grid();row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var titleColor=MessageCard.SafeTone(card.HeaderTone)=="grey"?Color.FromRgb(17,17,17):color;
-            var title=new TextBlock{Text=displayTitle,Foreground=new SolidColorBrush(titleColor),FontWeight=FontWeights.ExtraBold,TextWrapping=TextWrapping.Wrap};row.Children.Add(title);var clock=Clock(message);clock.Foreground=new SolidColorBrush(Color.FromRgb(112,112,112));SetColumn(clock,1);row.Children.Add(clock);header.Child=row;stack.Children.Add(header);
+            var title=new TextBlock{Text=displayTitle,Foreground=new SolidColorBrush(titleColor),FontWeight=FontWeights.ExtraBold,TextWrapping=TextWrapping.Wrap};MarkTitle(title);row.Children.Add(title);var clock=Clock(message);clock.Foreground=new SolidColorBrush(Color.FromRgb(112,112,112));SetColumn(clock,1);row.Children.Add(clock);header.Child=row;stack.Children.Add(header);
         }
         else {var clock=Clock(message);clock.HorizontalAlignment=HorizontalAlignment.Right;stack.Children.Add(clock);}
         if(compact)
@@ -105,7 +129,7 @@ public sealed class MessageView : Grid
             if(card.Body.Length>0)
             {
                 FullBody=Block(card.Body,markdown:card.IsMarkdown);FullBody.Visibility=Visibility.Collapsed;FullBody.Margin=new Thickness(0,6,0,3);stack.Children.Add(FullBody);
-                outer.Focusable=true;outer.Background=Brushes.Transparent;outer.ToolTip="点击消息展开或收起原文";
+                outer.Focusable=true;outer.ToolTip="点击消息展开或收起原文";
                 AutomationProperties.SetName(outer,displayTitle);AutomationProperties.SetHelpText(outer,"点击或按回车展开、收起原文");
                 outer.MouseLeftButtonUp+=(_,e)=>{if(IsAction(e.OriginalSource as DependencyObject,outer))return;outer.Focus();ToggleFullBody();e.Handled=true;};
                 outer.KeyDown+=(_,e)=>{if(e.OriginalSource==outer && e.Key is Key.Enter or Key.Space){ToggleFullBody();e.Handled=true;}};

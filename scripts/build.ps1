@@ -62,6 +62,12 @@ foreach($contract in @('cloud-source','cloud-window','bottom-alignment')){
 $summaryReport=Join-Path $root 'artifacts/verification/compact-summary'
 $summary=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @('--compact-summary-contract',('"'+$summaryReport+'"')) -WindowStyle Hidden -PassThru -Wait
 if($summary.ExitCode -ne 0 -or !(Get-Content -LiteralPath (Join-Path $summaryReport 'desktop-summary-contract.json') -Raw | ConvertFrom-Json).passed){throw 'Compact summary contract failed'}
+foreach($contract in @('coin-rules','push-code')){
+ $folder=Join-Path $root ('artifacts/verification/'+$contract+'-'+[guid]::NewGuid().ToString('N'))
+ $check=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @("--$contract-contract",('"'+$folder+'"')) -WindowStyle Hidden -PassThru -Wait
+ $report=Join-Path $folder "$contract-contract.json"
+ if($check.ExitCode -ne 0 -or !(Test-Path -LiteralPath $report) -or !(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).passed){throw "$contract contract failed: $folder"}
+}
 & (Join-Path $PSScriptRoot 'test-update-process.ps1') -AppDirectory (Join-Path $root $OutputDirectory)
 $recoveryReport=Join-Path $root ('artifacts/verification/recovery-'+[guid]::NewGuid().ToString('N'))
 $recovery=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @('--recovery-contract',('"'+$recoveryReport+'"')) -WindowStyle Hidden -PassThru -Wait

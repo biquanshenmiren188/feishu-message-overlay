@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const R=require('../web/robot-push/settings/rules.js');
+const sample={coin:'MITO',left:{exchange:'gate',market:'perp',oi:120},right:{exchange:'binance',market:'perp',oi:320},rank:'R1',percent:.6};
+let checks=0;
+function check(name,s,msg,expected){assert.equal(R.evaluate(s,msg).allowed,expected,name);checks++;}
+check('default receive',R.defaults(),sample,true);
+let s=R.defaults();s.legRules=[{exchange:'gate',side:'right',market:'all',enabled:true}];check('right block preserves left',s,sample,true);s.legRules[0].side='left';check('left block hits left',s,sample,false);s.legRules[0].market='spot';check('spot block preserves perp',s,sample,true);check('left spot combination',s,{...sample,left:{...sample.left,market:'spot'}},false);s.legRules[0].enabled=false;check('paused rule',s,{...sample,left:{...sample.left,market:'spot'}},true);
+s=R.defaults();s.globalOI=200;check('FF must pass both legs',s,sample,false);check('SF skips spot OI',s,{...sample,left:{...sample.left,market:'spot'}},true);s.globalOI=120;check('equality passes',s,sample,true);check('missing OI blocks',s,{...sample,left:{...sample.left,oi:null}},false);s.missing='allow';check('missing allow',s,{...sample,left:{...sample.left,oi:null}},true);s.missing='block';check('stale OI blocks',s,{...sample,left:{...sample.left,stale:true}},false);s.globalOI=null;check('no gate skips missing',s,{...sample,left:{...sample.left,oi:null}},true);
+s.globalOI=500;s.exchangeOI.gate={mode:'none',value:null};s.exchangeOI.binance={mode:'custom',value:300};check('exchange overrides global',s,sample,true);s.coinOI=[{coin:'MITO',exchange:'binance',value:800,enabled:true}];check('coin overrides exchange',s,sample,false);s.coinOI[0].value=null;check('coin unlimited overrides exchange',s,sample,true);
+s=R.defaults();s.coins=[{coin:'MITO',exchange:'okx',enabled:true}];check('coin exchange exact',s,sample,true);s.coins[0].exchange='all';check('global coin',s,sample,false);s=R.defaults();s.ranks=['R5'];check('rank base contains plus',s,{...sample,rank:'R5+'},false);check('rank not range',s,{...sample,rank:'R6'},true);s.ranks=['R5+'];check('plus preserves base',s,{...sample,rank:'R5'},true);
+s=R.defaults();s.blockedExchanges=['binance'];check('either side exchange block',s,sample,false);s=R.defaults();s.modes=['FS'];check('FS mode',s,{...sample,right:{...sample.right,market:'spot'}},false);s=R.defaults();s.enabled=false;check('master pause',s,sample,false);
+console.log(`${checks} meaningful filtering checks passed.`);

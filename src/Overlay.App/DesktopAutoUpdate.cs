@@ -48,7 +48,7 @@ internal sealed class DesktopAutoUpdate : IDisposable
             state=state with{Status="正在检查更新"};Save();
             var metadata=await transport.LatestAsync(stop.Token);
             available=DesktopUpdates.SelectRelease(metadata.Json,CurrentVersion);privateRelease=metadata.Private;
-            state=state with{Status=available is null?"已是最新版本":$"发现 {available.Tag}，请点击下载并安装"};Save();
+            state=state with{Status=available is null?"已是最新正式版（"+CurrentVersion+"）":$"发现 {available.Tag}，请点击下载并安装"};Save();
         }
         catch(OperationCanceledException){if(!stop.IsCancellationRequested){state=state with{Status="更新检查超时，请手动重试"};try{Save();}catch{}}}
         catch{state=state with{Status="更新检查或校验失败；请检查网络及 GitHub 登录，当前版本继续运行"};try{Save();}catch{}}

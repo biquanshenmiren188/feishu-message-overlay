@@ -1,5 +1,6 @@
 """Receive all levels by default, with explicit exclusions."""
 import copy,math,re
+import advanced_rules
 from decimal import Decimal
 
 DEFAULTS = dict(rows=4, excluded_ranks=[], excluded_modes=[], min_percent=None,
@@ -16,9 +17,10 @@ def normalize_rank(value):
 
 
 def validate(raw):
-    if not isinstance(raw, dict) or set(raw) != set(DEFAULTS):
+    if not isinstance(raw, dict) or set(raw) not in (set(DEFAULTS), set(DEFAULTS)|{'advanced'}):
         raise ValueError('设置字段不完整，请重新打开设置')
     out = copy.deepcopy(raw)
+    if 'advanced' in out:out['advanced']=advanced_rules.validate(out['advanced'])
     if type(out['rows']) is not int or not 1 <= out['rows'] <= 4:
         raise ValueError('显示条数必须在 1–4 条之间')
     if type(out['notify_enabled']) is not bool:
@@ -45,7 +47,14 @@ def validate(raw):
 
 
 def matches(row, settings):
-    return (row['rank'] not in settings['excluded_ranks'] and row['rank'].rstrip('+') not in settings['excluded_ranks'] and row['mode'] not in settings['excluded_modes']
-            and row['coin'] not in settings['excluded_coins']
-            and row['buy'] not in settings['excluded_exchanges'] and row['sell'] not in settings['excluded_exchanges']
-            and (settings['min_percent'] is None or Decimal(row['value'].rstrip('%')) >= Decimal(str(settings['min_percent']))))
+    return not exclusion_reasons(row,settings)
+
+def exclusion_reasons(row,settings):
+    reasons=[]
+    if row['rank'] in settings['excluded_ranks'] or row['rank'].rstrip('+') in settings['excluded_ranks']:reasons.append(row['rank']+' 等级屏蔽')
+    if row['mode'] in settings['excluded_modes']:reasons.append(row['mode']+' 类型屏蔽')
+    if row['coin'] in settings['excluded_coins']:reasons.append(row['coin']+' 币种屏蔽')
+    for ex in set((row['buy'],row['sell'])):
+        if ex in settings['excluded_exchanges']:reasons.append(ex+' 整所屏蔽')
+    if settings['min_percent'] is not None and Decimal(row['value'].rstrip('%')) < Decimal(str(settings['min_percent'])):reasons.append('R 百分比低于 '+str(settings['min_percent'])+'%')
+    return reasons+advanced_rules.reasons(row,settings.get('advanced'))

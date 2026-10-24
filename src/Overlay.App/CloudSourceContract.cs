@@ -7,7 +7,7 @@ internal static class CloudSourceContract
     {
         var checks=new List<string>();var group=CloudMessageSource.GroupHash("oc_fixture");var stamp=DateTimeOffset.UtcNow.AddSeconds(-1);
         object Message(string id)=>new{id=PublicWebPublisher.Digest(id),groupId=group,senderType="bot",sentAt=stamp,title="Synthetic title",headerTone="blue",body="First\nSecond",actions=new[]{new{label="Example",url="https://example.invalid/?x=1&y=2"}}};
-        string State(object[] messages,object? pinned=null,bool connected=true)=>JsonSerializer.Serialize(new{cloudMode=true,sourceConnected=connected,groups=new[]{new{id="oc_fixture",groupId=group,name="Synthetic group"}},messages,pinned,pinnedGroupId=pinned is null?"":group});
+        string State(object[] messages,object? pinned=null,bool connected=true)=>JsonSerializer.Serialize(new{cloudMode=true,pushBinding=new{protocol=1,bound=false,canManage=false},desktopRules=new{revision=0,messages=new{},cards=new{},desktopEnabled=true,cardsEnabled=true},sourceConnected=connected,groups=new[]{new{id="oc_fixture",groupId=group,name="Synthetic group"}},messages,pinned,pinnedGroupId=pinned is null?"":group});
         var state=State([Message("a")]);var polls=0;var pinCalled=false;
         Task<JsonDocument> Transport(object payload)
         {

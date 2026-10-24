@@ -83,7 +83,7 @@ public partial class MainWindow
         idle.Update(Envelope([],now.AddSeconds(94)),true,now.AddSeconds(94),true);
         Check(idle.VisibleCount==0,"expired cards disappear without forced periodic render");
         var group=PublicWebPublisher.Digest("oc_fixture");
-        var snapshot=JsonSerializer.Serialize(new{cloudMode=true,sourceConnected=true,groups=new[]{new{id="oc_fixture",groupId=group,name="Synthetic group"}},messages=new[]{new{id=PublicWebPublisher.Digest("fixture-message"),groupId=group,senderType="bot",sentAt=now.AddSeconds(-20),title="飞书机器人消息 · 合成验收",headerTone="blue",body="文字消息与左侧卡片同时显示。\n原有消息接收、阅读和置顶功能保留。\n此图仅使用合成数据。",actions=System.Array.Empty<object>()}},pinned=(object?)null,pinnedGroupId="",opportunities=envelope});
+        var snapshot=JsonSerializer.Serialize(new{cloudMode=true,pushBinding=new{protocol=1,bound=false,canManage=false},desktopRules=new{revision=0,messages=new{},cards=new{},desktopEnabled=true,cardsEnabled=true},sourceConnected=true,groups=new[]{new{id="oc_fixture",groupId=group,name="Synthetic group"}},messages=new[]{new{id=PublicWebPublisher.Digest("fixture-message"),groupId=group,senderType="bot",sentAt=now.AddSeconds(-20),title="飞书机器人消息 · 合成验收",headerTone="blue",body="文字消息与左侧卡片同时显示。\n原有消息接收、阅读和置顶功能保留。\n此图仅使用合成数据。",actions=System.Array.Empty<object>()}},pinned=(object?)null,pinnedGroupId="",opportunities=envelope});
         var cloud=new CloudMessageSource(_=>Task.FromResult(JsonDocument.Parse(snapshot)),TimeSpan.FromMilliseconds(100));source=cloud;cloud.Activity+=ScheduleRead;store.Start(now.AddMinutes(-30));EnableOpportunityBoard();Width=960;Height=680;Left=-12000;Top=-12000;
         for(var i=0;i<100&&(displayed.Count!=1||opportunityBoard.ActiveCount!=2);i++){await Task.Delay(20);await ReadAsync();}
         Check(displayed.Count==1&&opportunityBoard.ActiveCount==2,"signed response displays messages and cards together");
@@ -211,6 +211,16 @@ public partial class MainWindow
         Capture(this,"-combined-150.png",1.5);
         var savedMessageWidth=Width-CardsColumn.Width.Value;
         Check(Math.Abs(new Preferences{Width=Width,MessagePaneWidth=savedMessageWidth}.CloudTextWidth(Width,320)-savedMessageWidth)<.1,"restart reads separate message width without accumulating card columns");
+        var filtered=opportunityBoard.Model.Cards.Keys.First();
+        opportunityBoard.Rules=DesktopRuleDecisions.Parse(JsonSerializer.SerializeToElement(new{revision=1,desktopEnabled=true,cardsEnabled=true,messages=new{},cards=new Dictionary<string,string>{{filtered,"hide"}}}));
+        opportunityBoard.Update(null,true,now.AddSeconds(2),true);
+        Check(opportunityBoard.VisibleCount==7&&opportunityBoard.Model.Cards.Count==8,"card rule hides only target while retaining original data");
+        Check(opportunityBoard.Rules.ShowMessage("ordinary-message")&&opportunityBoard.Rules.SoundMessage("ordinary-message"),"card rule leaves message visibility and sound unchanged");
+        opportunityBoard.Update(Envelope(Enumerable.Range(0,8).Select(DenseCard).Where(c=>OpportunityModel.Text(JsonSerializer.SerializeToElement(c),"pair")!=filtered).ToArray(),now.AddSeconds(3)),true,now.AddSeconds(3),true);
+        Check(opportunityBoard.VisibleCount==7&&opportunityBoard.Model.Cards.Count==8,"retained expired card remains hidden with server decision");
+        opportunityBoard.Rules=DesktopRuleDecisions.Empty;
+        opportunityBoard.Update(null,true,now.AddSeconds(3),true);
+        Check(opportunityBoard.VisibleCount==8,"removing card rule restores retained card immediately");
         await File.WriteAllTextAsync(output,JsonSerializer.Serialize(new{passed=true,checks,syntheticOnly=true,realCredentialUsed=false}));
     }
 }

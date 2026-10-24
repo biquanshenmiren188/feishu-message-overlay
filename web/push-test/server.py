@@ -253,6 +253,10 @@ class Trial:
             if isinstance(x, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', x):
                 safe[key] = x
         safe['enumerationError'] = value.get('enumerationError') is True
+        for key in ('bodyHash', 'shownHash'):
+            x = value.get(key)
+            if isinstance(x, str) and re.fullmatch(r'[a-f0-9]{64}', x):
+                safe[key] = x
         with self.lock:
             self.state['receipts'].append(safe)
             self.state['receipts'] = self.state['receipts'][-2000:]
@@ -260,6 +264,12 @@ class Trial:
 
 
 def handler(trial):
+    desktop = None
+    if hasattr(trial, 'accounts'):
+        from desktop_rules import DesktopRules
+        from desktop_binding import DesktopProfiles
+        desktop = DesktopRules(trial.directory)
+        desktops = DesktopProfiles(trial, desktop)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -274,11 +284,22 @@ def handler(trial):
             self.wfile.write(raw)
 
         def do_GET(self):
+            # This path is deliberately outside every public /radar proxy route.
+            if self.path == '/internal/desktop-state' and self.client_address[0] == '127.0.0.1' and desktop:
+                try:return self.reply(200, desktop.evaluate())
+                except Exception:return self.reply(503, {'error':'desktop_rules_unavailable'})
             if self.path == BASE + 'api/health':
                 return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') or hasattr(trial, 'resolve') else 'synthetic-only'})
             account = self.authorized_account()
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})
+            if self.path == BASE + 'api/desktop-settings' and desktop:
+                return self.reply(200, desktops.policy(account).status())
+            if self.path == BASE + 'api/coin-blocks' and desktop:
+                return self.reply(200, desktops.policy(account).coin_state(account))
+            if self.path == BASE + 'api/card-decisions' and desktop:
+                try:return self.reply(200, desktops.policy(account).web_cards())
+                except Exception:return self.reply(503, {'error':'行情卡片规则暂时无法同步'})
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
             if self.path == BASE + 'api/binding':
@@ -303,6 +324,15 @@ def handler(trial):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError('请求格式错误')
+                # Only the existing authenticated publisher can bridge here.
+                # This loopback path is outside all public /radar proxy routes.
+                if self.path == '/internal/desktop-binding' and self.client_address[0] == '127.0.0.1' and desktop:
+                    return self.reply(200, desktops.state(data))
+                if self.path == '/internal/coin-rules' and self.client_address[0] == '127.0.0.1' and desktop:
+                    if 'pushCode' in data:
+                        return self.reply(200, desktops.coins(data))
+                    from coin_control import dispatch
+                    return self.reply(200, dispatch(desktop, trial.accounts['legacy'], data))
                 if not self.path.startswith(BASE + 'api/'):
                     return self.reply(404, {'error': '不存在'})
                 route = self.path.removeprefix(BASE + 'api/')
@@ -316,6 +346,12 @@ def handler(trial):
                 account = self.authorized_account()
                 if account is None:
                     return self.reply(401, {'error': '请先用测试码连接'})
+                if route == 'desktop-settings' and desktop:
+                    return self.reply(200, desktops.policy(account).configure(data))
+                if route == 'edit-coins' and desktop:
+                    return self.reply(200, desktops.policy(account).edit_coins(data,account))
+                if route == 'block-coins' and desktop:
+                    return self.reply(200, desktops.policy(account).block_coins(data,account))
                 if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
                     return self.reply(200, trial.transfer_subscription(account, data))
                 if route == 'settings' and hasattr(account, 'configure'):

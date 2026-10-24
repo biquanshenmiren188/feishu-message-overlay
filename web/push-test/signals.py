@@ -1,4 +1,4 @@
-"""Normalize authorized BOT opportunities; percentages come only from R ranks."""
+"""Normalize BOT rank percentages and explicit per-route strong-signal values."""
 import hashlib,json,re,unicodedata
 from datetime import datetime
 
@@ -27,7 +27,7 @@ def clean(value):
     return unicodedata.normalize('NFKC', value).replace('**', '').replace('`', '')
 
 
-def parse_message(message, now):
+def message_fields(message, now):
     if not isinstance(message, dict) or message.get('senderType') != 'bot':
         return None
     mid, title, body = (message.get(k) for k in ('id', 'title', 'body'))
@@ -38,7 +38,14 @@ def parse_message(message, now):
         return None
     if sent is None or sent > now + 30 or now - sent > 1800:
         return None
-    title, body = clean(title), clean(body)
+    return mid, clean(title), clean(body), sent
+
+
+def parse_message(message, now):
+    source = message_fields(message, now)
+    if source is None:
+        return None
+    mid, title, body, sent = source
     head, ranks, directions = TITLE.search(title), RANK.findall(title), DIRECTION.findall(body)
     # The percentage must follow the R rank in the title. Never substitute net/funding rates.
     if not head or len(ranks) != 1 or len(directions) != 1:
@@ -58,4 +65,41 @@ def parse_message(message, now):
         value = '+' + value
     fields = dict(coin=coin, mode=mode, buy=buy, sell=sell, rank='R'+str(int(rank))+suffix, value=value+'%')
     return dict(fields, id=mid, at=int(sent), fingerprint=digest(fields))
+
+
+def parse_messages(message, now):
+    """Ordinary rank percentage, or explicit per-route strong-signal blocks."""
+    single = parse_message(message, now)
+    if single is not None:
+        return [single]
+    source = message_fields(message, now)
+    if source is None:
+        return []
+    mid, title, body, sent = source
+    header = re.fullmatch(r'\s*(?:🚨\s*)*强信号聚集\s*[|·]\s*([A-Z0-9][A-Z0-9._-]{0,23})\s*[|·]\s*(\d{1,2})\s*组同时\s+ACTIVE\s*', title, re.I)
+    if not header or not 1 <= int(header[2]) <= 50:
+        return []
+    blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
+    if len(blocks) != int(header[2]):
+        return []
+    result = []
+    for rank, suffix, mode, route, value in blocks:
+        direction = DIRECTION.fullmatch(route.strip())
+        if not direction or len(value) > 12:
+            return []
+        buy, buy_kind, sell, sell_kind = direction.groups()
+        buy, sell, mode = EXCHANGES.get(buy.upper()), EXCHANGES.get(sell.upper()), mode.upper()
+        if not buy or not sell or (buy == sell and mode == 'FF'):
+            return []
+        if any(actual and ('S' if actual == '现货' else 'F') != expected
+               for actual, expected in zip((buy_kind, sell_kind), mode)):
+            return []
+        if not value.startswith(('+', '-')):
+            value = '+' + value
+        fields = dict(coin=header[1].upper(), mode=mode, buy=buy, sell=sell,
+                      rank='R'+str(int(rank))+suffix, value=value+'%')
+        # Each route has its own identity and still deduplicates with normal
+        # signals through the existing content fingerprint.
+        result.append(dict(fields, id=digest([mid, fields]), at=int(sent), fingerprint=digest(fields)))
+    return result
 
