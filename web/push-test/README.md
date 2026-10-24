@@ -83,6 +83,31 @@ campaign endpoints. Its authenticated `verify` route sends one explicitly marked
 four-row diagnostic, at most once per five minutes, after phone subscription
 identity has been checked.
 
+## Desktop push-code binding (2026-10-24)
+
+The signed desktop state protocol explicitly sends `pushCode` (an eight-digit
+code, or an empty string) together with `desktopRules: 1`. Empty means all
+messages and cards are allowed; it does not read or apply the legacy owner's
+rules. A valid code selects that profile's independent desktop, card and mobile
+settings. The legacy code retains the existing root `desktop-rules.json`;
+additional codes store desktop rules and journals beside their own `state.json`.
+Existing mobile filters remain independent of the desktop and card channels.
+
+Desktop code validation is read-only: it never pairs a phone, creates an access
+token, moves a subscription, or changes the profile settings. Invalid codes and
+service failures do not fall back to another profile or unrestricted delivery.
+Successful repeated polling does not consume the failed-code attempt budget.
+
+Bearer-authenticated desktop settings, card decisions and three-channel edits
+now always use the token's own profile. Signed `coin-rules` with an explicit code
+is likewise limited to that code's profile. The historical code-less management
+operation still requires its existing explicit desktop capability. Merely
+registering a reader does not give it global management or publisher privileges.
+`pushBinding` responses report protocol/bound/canManage only, never the code or a
+token. The new internal POST `/internal/desktop-binding` is loopback-only and
+outside all public proxy routes; publisher forwards only after signature,
+timestamp, replay and rate checks.
+
 ## Settings and ownership
 
 2026-10-17 update: switching inside Android Chrome/Firefox or the installed

@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private Preferences? pendingPreferences;
     private Task preferenceSave=Task.CompletedTask;
     private long renderedRevision=-1;
+    private string? renderedRuleSignature;
     private int readScheduled;
     private ScrollViewer? scrollView;
     private ScrollViewer MessageScroll {get{MessageList.ApplyTemplate();return scrollView??=(ScrollViewer)MessageList.Template.FindName("PART_MessageScroll",MessageList);}}
@@ -68,10 +69,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        InitializePushBinding();
         OpportunityArea.Child=opportunityBoard;
         opportunityBoard.ColumnsChanged+=ResizeOpportunityColumns;
         opportunityBoard.ContentHeightChanged+=()=>RequestContentLayout();
-        opportunityTimer.Tick+=(_,_)=>{if(source is CloudMessageSource cloud)opportunityBoard.Update(cloud.Opportunities,cloud.TransportConnected,DateTimeOffset.UtcNow,IsVisible);};
+        opportunityTimer.Tick+=(_,_)=>{if(source is CloudMessageSource cloud){opportunityBoard.Rules=cloud.Rules;opportunityBoard.Update(cloud.Opportunities,cloud.TransportConnected,DateTimeOffset.UtcNow,IsVisible);}};
         var prefs = Preferences.Load();lastPersisted=prefs;reader.Configure(prefs.DwellSeconds,DateTimeOffset.UtcNow);DwellLabel.Text=reader.Seconds+"s";
         Width = double.IsFinite(prefs.Width) ? Math.Clamp(prefs.Width, 300, 1200) : 360;
         Height = double.IsFinite(prefs.Height) ? Math.Clamp(prefs.Height, 120, 1200) : 460;
@@ -110,7 +112,7 @@ public partial class MainWindow : Window
     private async Task StopAsync(string status)
     {
         generation++; timer.Stop(); opportunityTimer.Stop(); var old = source; source = null;
-        opportunityBoard.Update(null,false,DateTimeOffset.UtcNow,IsVisible);
+        opportunityBoard.ResetIdentity();pinnedLatest=null;renderedRevision=-1;
         pinnedHoldChats=!exiting && old is OfficialBotSource {State:LinkState.Connected or LinkState.Reconnecting}?new(selectedChats,StringComparer.Ordinal):[];
         selectedChats.Clear(); previousLinkState = null;
         store.Clear(DateTimeOffset.UtcNow); Render(); SetStatus(status);
@@ -118,7 +120,9 @@ public partial class MainWindow : Window
     }
     private async void DemoClick(object sender, RoutedEventArgs e)
     {
+        var version=generation+1;
         await StopAsync("模拟演示 · 非真实飞书消息");
+        if(version!=generation||exiting)return;
         source = new DemoSource(); selectedChats.Add("demo"); nextDemo = DateTimeOffset.MinValue; store.Start(DateTimeOffset.UtcNow); timer.Start(); await ReadAsync();
     }
     private async Task ReadAsync()
@@ -148,7 +152,10 @@ public partial class MainWindow : Window
             {
                 if(opportunityBoard.Rules.Signature!=opportunitySource.Rules.Signature)renderedRevision=-1;
                 opportunityBoard.Rules=opportunitySource.Rules;
+                var code=pushBinding?.Code;
+                opportunityBoard.ManageRules=opportunitySource.CanManage&&code is {Length:8}?request=>SendScopedCoinRulesAsync(code,request):null;
                 opportunityBoard.Update(opportunitySource.Opportunities,opportunitySource.TransportConnected,DateTimeOffset.UtcNow,IsVisible);
+                SetStatus(opportunitySource.Mode);
             }
             var cloudPinAdded=false;
             if(current is CloudMessageSource {StateLoaded:true} cloud)
@@ -164,7 +171,6 @@ public partial class MainWindow : Window
                     cloudPinAdded=cloud.Pinned is { } newPin && newPin.SentAt>cloud.StartedAt && cloud.Rules.SoundMessage(newPin.Id);
                     pinnedChatId=cloud.PinnedGroupId;pinnedLatest=cloud.Pinned;renderedRevision=-1;UpdatePinnedChoices();
                 }
-                SetStatus(cloud.Mode);
             }
             var added = cloudPinAdded;var acceptedGroups=new HashSet<string>(StringComparer.Ordinal);
             foreach (var message in messages)
@@ -201,7 +207,9 @@ public partial class MainWindow : Window
     }
     private void Render()
     {
-        if(renderedRevision==store.Revision)return;renderedRevision=store.Revision;
+        var ruleSignature=(source as CloudMessageSource)?.Rules.Signature??"";
+        if(renderedRevision==store.Revision&&renderedRuleSignature==ruleSignature)return;
+        renderedRevision=store.Revision;renderedRuleSignature=ruleSignature;
         SetValue(MessageView.MutedIdsProperty,source is CloudMessageSource badgeSource?badgeSource.Rules.MutedMessageIds():new HashSet<string>(StringComparer.Ordinal));
         var items=store.Items.Where(m=>source is not CloudMessageSource cloudRules || cloudRules.Rules.ShowMessage(m.Id)).ToArray();
         var pinnedAuthorized=selectedChats.Contains(pinnedChatId) || source is null && pinnedHoldChats.Contains(pinnedChatId);
@@ -305,17 +313,21 @@ public partial class MainWindow : Window
     }
     private async Task ConnectSettingsAsync(ConnectionSettings settings)
     {
+        var version=generation+1;
         try
         {
             await StopAsync("连接中 · 正在启动官方连接器");
+            if(version!=generation||exiting)return;
             var bridge = Path.Combine(AppContext.BaseDirectory, "bridge", "main.mjs");
             if (!File.Exists(bridge)) throw new FileNotFoundException();
             selectedChats = new(settings.ChatIds, StringComparer.Ordinal);reception.Select(settings.ChatIds);UpdatePinnedChoices(); store.Start(DateTimeOffset.UtcNow);
-            source = await OfficialBotSource.StartAsync(ConnectionSettings.FindNode(), bridge, settings.AppId, settings.Secret, settings.ChatIds, settings.BotIds, shutdown.Token,autoJoined:AutoJoined.IsChecked==true);
+            var connected = await OfficialBotSource.StartAsync(ConnectionSettings.FindNode(), bridge, settings.AppId, settings.Secret, settings.ChatIds, settings.BotIds, shutdown.Token,autoJoined:AutoJoined.IsChecked==true);
+            if(version!=generation||exiting){await connected.DisposeAsync();return;}
+            source=connected;
             if(!ConnectionSelection.Save(settings))SetStatus("连接已启动 · 群选择保存失败，重启需重新配置");
             ((OfficialBotSource)source).Activity+=ScheduleRead;await ReadAsync();
         }
-        catch (Exception) { await StopAsync("连接错误 · 请检查 Node运行时、桥接文件、应用配置及权限后重试"); }
+        catch (Exception) { if(version==generation)await StopAsync("连接错误 · 请检查 Node运行时、桥接文件、应用配置及权限后重试"); }
         finally { settings.Secret = ""; }
     }
     private async void AutoJoinedClick(object sender,RoutedEventArgs e)
@@ -639,12 +651,16 @@ public partial class MainWindow : Window
     }
     private async Task StartCloudAsync()
     {
+        var version=generation+1;
         await StopAsync("Connecting to cloud source");
+        if(version!=generation||exiting)return;
+        if(pushBinding is {Readable:false}){SetStatus("推送码无法读取 · 请在设置中重新绑定或解绑");return;}
         cloudConnectionRevision=0;focusCloudLatest=false;
         AutoJoined.IsChecked=true;AutoJoined.IsEnabled=false;
         EnableOpportunityBoard();
         store.Start(DateTimeOffset.UtcNow.AddMinutes(-30));
-        var cloud=new CloudMessageSource();source=cloud;cloud.Activity+=ScheduleRead;opportunityTimer.Start();await ReadAsync();
+        var code=pushBinding?.Code??"";
+        var cloud=App.SmokeMode&&bindingSourceFactory is not null?bindingSourceFactory(code):new CloudMessageSource(pushCode:code);source=cloud;cloud.Activity+=ScheduleRead;opportunityTimer.Start();await ReadAsync();
     }
     private void EnableOpportunityBoard()
     {

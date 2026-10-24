@@ -69,13 +69,17 @@ function applyDesktop(data,channel=null,action=null){
  }
  savedSnapshot=JSON.stringify(snapshot);state=profiles[active];initialize();
 }
+document.addEventListener('radar-profile-changing',()=>{
+ desktopLoaded=false;mobileLoaded=false;desktopRevision=0;desktopHistory=[];mobileHistory=[];desktopConnected=false;desktopError='正在载入当前推送码的规则…';
+ desktopSets={mute:{...R.defaults(),desktopAction:'mute'},hide:{...R.defaults(),desktopAction:'hide'}};desktopSaved=JSON.parse(JSON.stringify(desktopSets));profiles={desktop:desktopSets[desktopAction],cards:R.defaults(),mobile:R.defaults()};savedSnapshot=JSON.stringify(profiles);state=profiles[active];$('#mobile-status').textContent='正在载入本方案…';initialize();
+});
 document.addEventListener('radar-desktop-loaded',e=>applyDesktop(e.detail));
 document.addEventListener('radar-desktop-error',e=>{desktopLoaded=false;desktopError=e.detail;initialize();});
 function updateChannelUI(){
  const mobile=active==='mobile',label=mobile?'手机推送':active==='cards'?'行情卡片':'电脑消息';
- const overview=!$('#panel-coins').hidden;$('.settings').classList.toggle('coin-overview',overview);$('#tab-coins').setAttribute('aria-pressed',overview);$('h1').textContent=overview?'已屏蔽币种':label+'设置';$('.title-row p').textContent=overview?'统一查看三端规则，按币种与交易所范围管理。':'屏蔽币种 / '+label+' · 独立保存';$('#tab-other').textContent=mobile?'推送与预览':'其他设置';$('#refresh-history').hidden=false;$('#refresh-history').disabled=mobile?!mobileLoaded:!desktopLoaded;
+ const overview=!$('#panel-coins').hidden;$('.settings').classList.toggle('coin-overview',overview);$('#tab-coins').setAttribute('aria-pressed',overview);$('h1').textContent=overview?'已屏蔽币种':label+'设置';$('.title-row p').textContent=overview?'查看当前推送码的三端规则，按币种与交易所范围管理。':'屏蔽币种 / '+label+' · 独立保存';$('#tab-other').textContent=mobile?'推送与预览':'其他设置';$('#refresh-history').hidden=false;$('#refresh-history').disabled=mobile?!mobileLoaded:!desktopLoaded;
  $$('[data-channel]').forEach(b=>b.setAttribute('aria-pressed',!overview&&b.dataset.channel===active));
- $('#channel-hint').textContent=overview?'选择下方币种可一键屏蔽三端；单独设置请进入上方子菜单。':mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'同时控制桌面行情卡片和已连接管理码的网页卡片推送，保存后约 3 秒同步。':'静音与屏蔽消息分别配置、同时生效；同时命中时优先屏蔽消息。'):desktopError;
+ $('#channel-hint').textContent=overview?'选择下方币种可屏蔽当前推送码的三端；不影响其他推送码。':mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'控制绑定同一推送码的桌面和网页卡片，保存后约 3 秒同步。':'静音与屏蔽消息分别配置、同时生效；同时命中时优先屏蔽消息。'):desktopError;
  $('#mobile-cadence').hidden=!mobile;$('#mobile-account').hidden=false;$('#desktop-action').hidden=active!=='desktop';
  $$('[name=desktop-action]').forEach(x=>x.checked=x.value===desktopAction);$('#desktop-editing').textContent=desktopAction==='mute'?'正在编辑：仅屏蔽声音。下方币种、交易所、左右腿、OI 和等级条件只用于静音，消息照常显示。':'正在编辑：屏蔽消息。下方条件命中后不显示消息，也不响铃。';
  const editable=mobile?mobileLoaded:desktopLoaded;
@@ -86,12 +90,12 @@ function updateChannelUI(){
  $('#reset-filters').textContent=active==='desktop'?'恢复本套规则全部接收':'恢复本渠道全部接收';
  $('#discard-draft').disabled=mobileBusy;
  $('#connect-owner').hidden=mobile||desktopLoaded;
- $('#recovery-help').textContent=editable?(active==='desktop'?'清除当前选中这套规则的筛选并开启电脑接收；另一套筛选条件保持。点击保存才生效。':'恢复只修改当前渠道草稿；清除币种、交易所、左右腿、OI、等级等限制并开启接收，点击保存才生效。手机绑定和通知节奏保持。'):'当前没有此渠道的管理权限或规则尚未载入，已禁用编辑；公共卡片仍可正常浏览。手机推送规则请进入手机推送子菜单。';
+ $('#recovery-help').textContent=editable?(active==='desktop'?'清除当前选中这套规则的筛选并开启电脑接收；另一套筛选条件保持。点击保存才生效。':'恢复只修改当前渠道草稿；清除币种、交易所、左右腿、OI、等级等限制并开启接收，点击保存才生效。手机绑定和通知节奏保持。'):'当前方案规则尚未载入，已暂停编辑。请连接自己的推送码并重试。';
  if(!editable)$('#save-status').textContent=mobile?'等待连接推送码':desktopError;
- $('#save').disabled=mobileBusy||(mobile?!mobileLoaded:!desktopLoaded);$('#save-help').textContent=mobile?'保存到当前推送码':'保存到云端 · 约 3 秒同步';
+ $('#save').disabled=mobileBusy||(mobile?!mobileLoaded:!desktopLoaded);$('#save-help').textContent=mobile?'保存到当前推送码':'保存到当前推送码 · 约 3 秒同步';
  $('#history-note').textContent=mobile?'最近 200 条云端手机屏蔽记录。':'仅记录真实桌面请求中的命中，标明静音或隐藏；重复同步不重复记。电脑两类记录合计保留最近 200 条。';
  $('#save').textContent=active==='desktop'?'保存'+(desktopAction==='mute'?'仅静音':'屏蔽消息')+'规则':'保存'+label+'规则';$('#history-caption').textContent=label+'被屏蔽的原因、时间和处理方式。';
- $('#desktop-status').textContent=desktopLoaded?(desktopConnected?'小窗在线 · 规则已接入':'等待小窗连接'):'等待原始管理码连接';renderHistory();
+ $('#desktop-status').textContent=desktopLoaded?(desktopConnected?'小窗在线 · 规则已接入':'等待小窗连接'):'等待本推送码规则连接';renderHistory();
 }
 function renderPhone(){
   const mobile=profiles.mobile;

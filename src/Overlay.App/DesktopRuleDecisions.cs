@@ -5,6 +5,7 @@ namespace Overlay.App;
 internal sealed class DesktopRuleDecisions
 {
     internal static readonly DesktopRuleDecisions Empty=new();
+    internal static readonly DesktopRuleDecisions Blocked=new(){Signature="unverified",DesktopEnabled=false,CardsEnabled=false};
     internal string Signature {get;private init;}="";
     internal long Revision {get;private init;}
     internal bool DesktopEnabled {get;private init;}=true;

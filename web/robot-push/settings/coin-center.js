@@ -10,7 +10,7 @@ function snapshot(){const s=B.snapshot(),map=new Map();for(const c of channels)f
 function decode(k,value){const [channel,coin,exchange]=k.split('|');return {channel,coin,exchange,before:value};}
 function rowMarkup(exchange,states={}){return `<div class="matrix-row"><label class="matrix-scope"><span>交易所范围</span><select data-matrix-scope>${[['all','全部交易所'],...R.exchanges.map(e=>[e[0],e[1]])].map(([v,n])=>`<option value="${v}" ${v===exchange?'selected':''}>${esc(n)}</option>`).join('')}</select></label>${channels.map(c=>`<label><span>${names[c]}</span><select data-matrix-channel="${c}" aria-label="${names[c]}状态"><option value="none" ${states[c]==null?'selected':''}>未设置</option><option value="on" ${states[c]===true?'selected':''}>已启用</option><option value="off" ${states[c]===false?'selected':''}>已停用</option></select></label>`).join('')}<button type="button" data-center-remove class="danger-text">删除本行</button></div>`;}
 function setup(title){
- if(saving)return false;queue=null;changes=[];$('#center-fields').disabled=false;$('#center-save').hidden=false;$('#center-retry').hidden=true;$('#center-cancel').textContent='取消';$('#center-error').textContent='';$('#center-results').textContent='';$('#coin-manager-title').textContent=title;$('#center-context').textContent=(window.RadarCoinAPI?.planLabel()||'当前手机方案')+' · 保存后同步生效';
+ if(saving)return false;queue=null;changes=[];$('#center-fields').disabled=false;$('#center-save').hidden=false;$('#center-retry').hidden=true;$('#center-cancel').textContent='取消';$('#center-error').textContent='';$('#center-results').textContent='';$('#coin-manager-title').textContent=title;$('#center-context').textContent=(window.RadarCoinAPI?.planLabel()||'当前推送码方案')+' · 保存后同步生效';
  if(!$('#coin-manager').open)$('#coin-manager').showModal();return true;
 }
 function matrix(coin){
@@ -21,7 +21,7 @@ function matrix(coin){
 function batch(rows,kind){
  if(!rows.length)return;const label={block:'屏蔽三端',mute:'仅静音',pause:'停用规则',delete:'删除规则'}[kind];if(!setup(label+' · '+rows.length+' 项'))return;
  mode='batch';targets=rows.map(r=>({...r}));action=kind;base=snapshot();
- $('#coin-manager-body').innerHTML=`<div class="batch-targets">${targets.map(r=>`<span>${esc(r.coin)} / ${esc(scope(r.exchange))}</span>`).join('')}</div><p class="helper">仅处理上面列出的币种与交易所范围。${kind==='mute'?'只启用电脑静音，现有电脑屏蔽保持；若命中屏蔽规则，消息仍会隐藏。':kind==='delete'?'删除后可从操作记录撤销；其他范围的规则仍可能生效。':kind==='pause'?'停用后保留规则，之后可重新启用。':'启用电脑屏蔽、行情卡片和当前手机方案屏蔽，静音规则保持。'}</p>${['delete','pause'].includes(kind)?'<div class="center-channel-options">'+channels.map(c=>`<label><input type="checkbox" data-center-target="${c}" checked>${names[c]}</label>`).join('')+'</div>':''}`;review();
+ $('#coin-manager-body').innerHTML=`<div class="batch-targets">${targets.map(r=>`<span>${esc(r.coin)} / ${esc(scope(r.exchange))}</span>`).join('')}</div><p class="helper">仅处理上面列出的币种与交易所范围。${kind==='mute'?'只启用电脑静音，现有电脑屏蔽保持；若命中屏蔽规则，消息仍会隐藏。':kind==='delete'?'删除后可从操作记录撤销；其他范围的规则仍可能生效。':kind==='pause'?'停用后保留规则，之后可重新启用。':'启用电脑屏蔽、行情卡片和当前推送码方案屏蔽，静音规则保持。'}</p>${['delete','pause'].includes(kind)?'<div class="center-channel-options">'+channels.map(c=>`<label><input type="checkbox" data-center-target="${c}" checked>${names[c]}</label>`).join('')+'</div>':''}`;review();
 }
 function compile(){
  const next=new Map(base);
@@ -40,7 +40,7 @@ function describe(c){return `${c.coin} / ${scope(c.exchange)} / ${names[c.channe
 function review(){
  if(queue||saving)return;let error='';try{changes=compile();}catch(e){changes=[];error=e.message;}
  $('#center-change-count').textContent=changes.length;$('#center-changes').innerHTML=changes.length?'<ul>'+changes.map(c=>'<li>'+esc(describe(c))+'</li>').join('')+'</ul>':'<p class="helper">尚无改动</p>';
- const loaded=B.snapshot();$('#center-error').textContent=error||(!loaded.desktopLoaded||!loaded.mobileLoaded?'请先连接原始管理推送码并加载三端规则':'');$('#center-save').disabled=!!error||!changes.length||!loaded.desktopLoaded||!loaded.mobileLoaded;$('#center-save').textContent='保存 '+changes.length+' 项修改';
+ const loaded=B.snapshot();$('#center-error').textContent=error||(!loaded.desktopLoaded||!loaded.mobileLoaded?'请先连接自己的推送码并加载本方案三端规则':'');$('#center-save').disabled=!!error||!changes.length||!loaded.desktopLoaded||!loaded.mobileLoaded;$('#center-save').textContent='保存 '+changes.length+' 项修改';
 }
 function resultUpdate(data){B.receive(data);document.dispatchEvent(new CustomEvent('radar-coin-center-updated',{detail:data}));}
 async function execute(){
@@ -51,7 +51,7 @@ async function execute(){
    if(failed.length){completed=false;$('#center-error').textContent='部分规则未保存。其他页面修改引起的冲突，请关闭后重新打开管理；临时失败可重试。';break;}
   }
   if(completed){const newCoin=mode==='matrix'?$('#center-coin').value.trim().toUpperCase():null;queue=null;$('#center-fields').disabled=true;$('#center-save').hidden=true;$('#center-cancel').textContent='完成';$('#center-results').textContent='本次修改已全部保存。电脑小窗下次同步后生效，手机应用于后续新消息。';$('#center-change-count').textContent=0;$('#center-changes').innerHTML='<p class="helper">保存完成，可关闭后继续管理。</p>';B.toast('规则已保存');if(newCoin)$('#coin-manager-title').textContent=newCoin+' · 已保存';}
- }catch(e){completed=false;$('#center-error').textContent=e.message+'。结果尚未确认，可使用原操作重试核对。';}
+ }catch(e){if(epoch!==generation)return;completed=false;$('#center-error').textContent=e.message+'。结果尚未确认，可使用原操作重试核对。';}
  finally{if(!completed)$('#center-cancel').textContent='关闭';saving=false;$('.settings').inert=false;$('#center-cancel').disabled=false;$('#coin-manager-close').disabled=false;$('#center-retry').hidden=completed||!queue;}
 }
 function retryOperation(op){
@@ -65,7 +65,7 @@ $('#center-form').addEventListener('submit',e=>{e.preventDefault();if(!queue){re
 $('#center-fields').addEventListener('input',review);$('#center-fields').addEventListener('change',review);
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='center-add-scope'){const used=[...document.querySelectorAll('[data-matrix-scope]')].map(s=>s.value),next=['all',...R.exchanges.map(e=>e[0])].find(x=>!used.includes(x));if(!next)return B.toast('所有交易所范围都已列出');$('#matrix-rows').insertAdjacentHTML('beforeend',rowMarkup(next));review();}if(b.hasAttribute('data-center-remove')){b.closest('.matrix-row').remove();review();}if(['coin-manager-close','center-cancel'].includes(b.id)&&!saving)$('#coin-manager').close();if(b.id==='center-retry')execute();});
 $('#coin-manager').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
-document.addEventListener('radar-mobile-loaded',()=>{generation++;if($('#coin-manager').open)$('#coin-manager').close();queue=null;});
+for(const event of ['radar-profile-changing','radar-mobile-loaded'])document.addEventListener(event,()=>{generation++;if($('#coin-manager').open)$('#coin-manager').close();queue=null;});
 window.RadarCoinCenter={matrix,batch,retryOperation,undo,describe};
 // Card-page links open a fully loaded matrix; a URL never writes a rule.
 const entry=new URLSearchParams(location.search),entryCoin=(entry.get('coin')||'').trim().toUpperCase();

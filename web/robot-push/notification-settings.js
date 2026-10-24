@@ -29,7 +29,10 @@ for(const [id,values] of [['ns-modes',[['SF','SF'],['FS','FS'],['FF','FF']]],['n
  for(const [value,label] of values){const el=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;el.append(input,document.createTextNode(label));$(id).append(el)}
 }
 let deviceToken=localStorage.getItem('radar-test-token')||'';
-let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false;
+let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
+function selectIdentity(next){if(next===token)return;token=next;identityRevision++;if(integrated)document.dispatchEvent(new CustomEvent('radar-profile-changing'));}
+function currentIdentity(auth,epoch){return auth===token&&epoch===identityRevision;}
+async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');return result;}
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 if(standalone)for(const a of document.querySelectorAll('a[href="/radar/robot-push/settings/"]'))a.href=BASE+'settings/';
@@ -43,7 +46,7 @@ let registrationError='';
 const pendingSwitch=()=>JSON.parse(localStorage.getItem('radar-phone-switch')||'null');
 $('ns-switch-help').textContent=phoneApp?'切换后，本机接收新码的推送，并载入该码已保存的设置。当前未保存内容不会带过去。':'切换后载入该码已保存的设置，不改变手机绑定。要切换手机推送，请在安卓浏览器或 iPhone 主屏幕雷达中操作。';
 function message(text,error=false){$('ns-message').textContent=text;$('ns-message').classList.toggle('ns-error',error)}
-async function api(route,data,auth=token,clearSession=true){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401&&clearSession&&auth===token){token='';localStorage.removeItem('radar-settings-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok){const error=Error(body.error||'请求失败');error.status=r.status;throw error}return body}
+async function api(route,data,auth=token,clearSession=true){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401&&clearSession&&auth===token){selectIdentity('');localStorage.removeItem('radar-settings-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok){const error=Error(body.error||'请求失败');error.status=r.status;throw error}return body}
 function renderNotification(){
  const otherPlan=!!(token&&deviceToken&&token!==deviceToken);
  notificationReady=!!(!otherPlan&&token&&phoneApp&&pushSupported&&phone?.permission==='granted'&&phone.subscriptionFingerprint&&phone.subscriptionFingerprint===serverFingerprint);
@@ -60,10 +63,10 @@ function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.s
  message(!s.subscribed?'手机订阅未连接，请在手机上点击“开启通知”。':!p.notify_enabled?'手机推送已关闭。':s.source?.connected?'推送已开启，消息源在线。':'推送已开启，等待消息源恢复。');
  if(needsRepair)message(phone.permission==='denied'?deniedHelp:'手机订阅未连接或与服务器不一致，请点“开启通知”重新连接。',true);
 }
-async function task(fn,propagate=false){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=true;try{return await fn()}catch(e){message(e.message,true);if(!$('ns-switch').hidden)$('ns-switch-error').textContent=e.message;if(propagate)throw e}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=!!pendingSwitch();$('ns-save').disabled=!!pendingSwitch();for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=false;renderNotification()}}
+async function task(fn,propagate=false){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=true;try{return await fn()}catch(e){message(e.message,true);if(!$('ns-switch').hidden)$('ns-switch-error').textContent=e.message;if(propagate)throw e}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=!!pendingSwitch();$('ns-save').disabled=!!pendingSwitch();for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=false;renderNotification();if(reloadRequested){reloadRequested=false;queueMicrotask(()=>task(load));}}}
 async function readPlan(auth){const [status,binding]=await Promise.all([api('status',undefined,auth,false),api('binding',undefined,auth,false)]);return {status,binding}}
 function showPlan(plan){fill(plan.status);$('ns-bound-code').textContent=plan.binding.pushCode;$('ns-binding').hidden=false}
-async function load(){if(phoneApp&&pendingSwitch())await finishPhoneSwitch();if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}const plan=await readPlan(token);await syncPhone().catch(()=>{});showPlan(plan)}
+async function load(){if(phoneApp&&pendingSwitch())await finishPhoneSwitch();if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}const auth=token,epoch=identityRevision,plan=await readPlan(auth);await syncPhone().catch(()=>{});if(currentIdentity(auth,epoch))showPlan(plan)}
 function closeSwitch(){ $('ns-switch').hidden=true;$('ns-switch-open').setAttribute('aria-expanded','false');$('ns-switch-code').value='';$('ns-switch-error').textContent='' }
 async function activatePlan(result,movePhone=false){
  // Verify both responses before changing the current identity or form. A failed
@@ -71,7 +74,7 @@ async function activatePlan(result,movePhone=false){
  let plan=await readPlan(result.token);
  if(movePhone&&phoneApp){const moved=await switchPhone(result.token,plan);if(moved)plan=moved}
  if(!deviceToken){localStorage.setItem('radar-test-token',result.token);deviceToken=result.token}
- localStorage.setItem('radar-settings-token',result.token);token=result.token;
+ localStorage.setItem('radar-settings-token',result.token);selectIdentity(result.token);
  showPlan(plan);closeSwitch();$('ns-created').hidden=true;
  dialog.querySelector('.ns-body').scrollTop=0;
 }
@@ -127,7 +130,7 @@ async function finishPhoneSwitch(){
  // Keep the recovery record until the server, worker and device report agree.
  localStorage.setItem('radar-test-token',operation.targetToken);
  localStorage.setItem('radar-settings-token',operation.targetToken);
- deviceToken=token=operation.targetToken;
+ deviceToken=operation.targetToken;selectIdentity(operation.targetToken);
  await workerConfigure(deviceToken,operation.profile);
  if(workerVersion!=='radar-delivery-v6')throw Error('通知组件正在更新，请重新打开雷达完成切换。');
  await syncPhone();const plan=await readPlan(operation.targetToken);showPlan(plan);localStorage.removeItem('radar-phone-switch');return plan;
@@ -210,13 +213,15 @@ if(integrated){
  if(standalone){for(const a of document.querySelectorAll('a[href="/radar/robot-push/"]'))a.href=BASE;for(const a of document.querySelectorAll('a[href="/radar/robot-push/settings/"]'))a.href=BASE+'settings/';}
  window.RadarMobileSettings={
   reload:()=>task(load),
-  history:async()=>{const status=await api('status');return status.blockedHistory||[];},
-  save:async(settings)=>{if(new TextEncoder().encode(JSON.stringify({revision,settings})).length>8192)throw Error('规则总量过多，请精简后保存');if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后保存');if(!token)throw Error('请先连接推送码');return task(async()=>{const result=await api('settings',{revision,settings});fill(result);message('已保存，后续新消息按此设置推送。');return result;},true);}
+  history:async()=>{const status=await scopedApi('status');return status.blockedHistory||[];},
+  save:async(settings)=>{if(new TextEncoder().encode(JSON.stringify({revision,settings})).length>8192)throw Error('规则总量过多，请精简后保存');if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后保存');if(!token)throw Error('请先连接推送码');return task(async()=>{const result=await scopedApi('settings',{revision,settings});fill(result);message('已保存，后续新消息按此设置推送。');return result;},true);}
  };
- window.RadarDesktopSettings={status:()=>api('desktop-settings'),save:async(data)=>{if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('规则总量过多，请精简后保存');return api('desktop-settings',data);}};
- window.RadarCoinAPI={planLabel:()=>{const code=$('ns-bound-code').textContent;return code?'当前方案 · 尾号 '+code.slice(-2):'未连接方案';},edit:async(data)=>{if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后再试');if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('本次修改过多，请分批保存');const auth=token;const result=await api('edit-coins',data,auth);if(auth!==token)throw Error('推送码已切换，请重新载入');revision=result.mobile.revision;return result;},load:()=>api('coin-blocks'),block:async(data)=>{if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后再试');const auth=token;const result=await api('block-coins',data,auth);if(auth!==token)throw Error('推送码已切换，请重新载入');revision=result.mobile.revision;return result;},adopt:s=>{revision=s.revision;}};
+ window.RadarDesktopSettings={status:()=>scopedApi('desktop-settings'),save:async(data)=>{if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后保存');if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('规则总量过多，请精简后保存');return scopedApi('desktop-settings',data);}};
+ window.RadarCoinAPI={planLabel:()=>{const code=$('ns-bound-code').textContent;return code?'当前方案 · 尾号 '+code.slice(-2):'未连接方案';},edit:async(data)=>{if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后再试');if(new TextEncoder().encode(JSON.stringify(data)).length>8192)throw Error('本次修改过多，请分批保存');const result=await scopedApi('edit-coins',data);revision=result.mobile.revision;return result;},load:()=>scopedApi('coin-blocks'),block:async(data)=>{if(busy||pendingSwitch())throw Error('正在处理推送码，请稍后再试');const result=await scopedApi('block-coins',data);revision=result.mobile.revision;return result;},adopt:s=>{revision=s.revision;}};
  let desktopToken='';
- async function loadDesktop(){if(desktopToken===token)return;const auth=token;document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:'正在连接电脑规则…'}));try{const data=await api('desktop-settings',undefined,auth);if(auth!==token)return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(auth===token){desktopToken='';document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.status===403?'当前推送码仅管理手机通知；电脑消息与行情卡片需要原始管理码。公共卡片浏览不受影响。':e.message}));}}}
+ async function loadDesktop(){if(desktopToken===token||!token)return;const auth=token,epoch=identityRevision;document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:'正在连接本推送码的电脑规则…'}));try{const data=await scopedApi('desktop-settings');if(!currentIdentity(auth,epoch))return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(currentIdentity(auth,epoch)){desktopToken='';document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.status===403?'当前推送码无法读取本方案规则，请重新连接。':e.message}));}}}
+ document.addEventListener('radar-profile-changing',()=>{desktopToken='';});
+ window.addEventListener('storage',e=>{if(!['radar-settings-token','radar-test-token',null].includes(e.key))return;const next=localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';if(next===token)return;selectIdentity(next);if(busy)reloadRequested=true;else task(load);});
  document.addEventListener('radar-mobile-loaded',loadDesktop);
  task(load);
 }

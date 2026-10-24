@@ -16,7 +16,7 @@ function render(){
  const query=$('#blocked-search').value.trim().toUpperCase(),filter=$('#blocked-filter').value;
  for(const k of selected)if(!rows.some(r=>key(r)===k))selected.delete(k);
  const visible=visibleRows=rows.filter(r=>{const count=channels.filter(c=>(c==='mobile'?s.mobileLoaded:s.desktopLoaded)&&covered(s.profiles[c],r)).length;return r.coin.includes(query)&&(filter==='all'||filter==='all-blocked'&&count===3||filter==='partial'&&count>0&&count<3||filter==='mute'&&s.desktopLoaded&&covered(s.profiles.mute,r)&&!covered(s.profiles.desktop,r));});$('#blocked-count').textContent=rows.length;
- $('#selected-count').textContent='已选 '+selected.size+' 项';$('.batch-tools').hidden=!selected.size;$('#coin-plan-label').textContent='手机推送：'+(window.RadarCoinAPI?.planLabel()||'正在连接');for(const id of ['batch-mute','batch-pause','batch-delete'])$('#'+id).disabled=!selected.size||busy||!s.desktopLoaded||!s.mobileLoaded;$('#batch-block').disabled=!selected.size||busy||batchBusy||!s.desktopLoaded||!s.mobileLoaded;$('#clear-selected').hidden=!selected.size;
+ $('#selected-count').textContent='已选 '+selected.size+' 项';$('.batch-tools').hidden=!selected.size;$('#coin-plan-label').textContent='三端方案：'+(window.RadarCoinAPI?.planLabel()||'正在连接');for(const id of ['batch-mute','batch-pause','batch-delete'])$('#'+id).disabled=!selected.size||busy||!s.desktopLoaded||!s.mobileLoaded;$('#batch-block').disabled=!selected.size||busy||batchBusy||!s.desktopLoaded||!s.mobileLoaded;$('#clear-selected').hidden=!selected.size;
  const chosen=visible.filter(r=>selected.has(key(r))).length;$('#select-visible').checked=!!visible.length&&chosen===visible.length;$('#select-visible').indeterminate=chosen>0&&chosen<visible.length;$('#select-visible').disabled=!visible.length||busy||batchBusy;
  $('#blocked-list').innerHTML=visible.length?visible.map(r=>{
   const index=rows.indexOf(r),done=s.desktopLoaded&&s.mobileLoaded&&channels.every(c=>covered(s.profiles[c],r));
@@ -49,7 +49,7 @@ async function block(coins,exchange,requestId){
   $('#coin-operation-result').innerHTML=`<div class="operation-result ${failed.length?'has-error':''}"><b>${failed.length?'部分渠道未完成':'已屏蔽三端'}</b><p>${channels.map(c=>`${names[c]}：${data.operation.results[c].state==='saved'?'已保存':esc(data.operation.results[c].error||'未完成')}`).join(' · ')}</p>${failed.length?'<button id="retry-coin-block">重试未完成渠道</button>':''}</div>`;
   if(!failed.length){for(const coin of coins)selected.delete(key({coin,exchange}));attempt=null;$('#editor').close();bridge.toast('三端规则已保存，小窗下次同步后生效');}else bridge.toast('部分渠道保存失败，请查看结果并重试');
   $('#coin-sync-status').textContent='已同步云端 · 其他未保存修改仍保留为草稿';return !failed.length;
- }catch(e){$('#coin-operation-result').innerHTML=`<div class="operation-result has-error">${esc(e.message)}<p>结果尚未确认，重试会复用同一次操作，不重复添加。</p><button id="retry-coin-block">重试并核对结果</button></div>`;$('#editor-error').textContent=e.message;}
+ }catch(e){if(generation!==epoch)return;$('#coin-operation-result').innerHTML=`<div class="operation-result has-error">${esc(e.message)}<p>结果尚未确认，重试会复用同一次操作，不重复添加。</p><button id="retry-coin-block">重试并核对结果</button></div>`;$('#editor-error').textContent=e.message;}
  finally{busy=false;$('.settings').inert=batchBusy;$('#editor-form').inert=batchBusy;render();}
 }
 document.addEventListener('click',e=>{
@@ -80,6 +80,7 @@ $('#blocked-list').addEventListener('change',e=>{const i=e.target.dataset.select
 document.addEventListener('radar-coins-changed',render);
 document.addEventListener('radar-coin-center-updated',e=>{operations=e.detail.operations||[];renderOperations();render();});
 document.addEventListener('radar-desktop-loaded',()=>{render();refresh();});
+document.addEventListener('radar-profile-changing',()=>{epoch++;selected.clear();attempt=null;operations=[];$('#coin-operation-result').textContent='';renderOperations();render();});
 document.addEventListener('radar-mobile-loaded',()=>{epoch++;selected.clear();attempt=null;operations=[];$('#coin-operation-result').textContent='';renderOperations();render();if(bridge.snapshot().desktopLoaded)refresh();});
 document.addEventListener('radar-desktop-error',()=>{epoch++;operations=[];renderOperations();render();});
 render();

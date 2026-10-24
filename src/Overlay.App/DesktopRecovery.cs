@@ -81,21 +81,58 @@ internal static class DesktopRecovery
         catch(WaitHandleCannotBeOpenedException) { return false; }
     }
 
-    private static Process? VerifiedProcess(int pid, long ticks)
+    private enum ProcessVerification { Ready, Starting, Rejected }
+
+    private static ProcessVerification ProbeProcess(int pid, long ticks, out Process? verified, Func<Process,string?>? imagePath=null)
     {
-        if(pid <= 0) return null;
+        verified=null;
+        if(pid <= 0 || ticks <= 0) return ProcessVerification.Rejected;
         Process? process = null;
+        var result=ProcessVerification.Starting;
         try
         {
             process = Process.GetProcessById(pid);
             using var self = Process.GetCurrentProcess();
-            if(!process.HasExited && process.StartTime.ToUniversalTime().Ticks == ticks && process.SessionId == self.SessionId &&
-                string.Equals(process.MainModule?.FileName, Executable, StringComparison.OrdinalIgnoreCase)) return process;
+            if(process.HasExited || process.StartTime.ToUniversalTime().Ticks != ticks || process.SessionId != self.SessionId)
+                result=ProcessVerification.Rejected;
+            else
+            {
+                // WMI may return before the Windows loader exposes MainModule.
+                // Missing/temporarily unreadable image data is not an identity match.
+                var path=imagePath is null?process.MainModule?.FileName:imagePath(process);
+                if(!string.IsNullOrEmpty(path))
+                {
+                    result=ProcessVerification.Rejected;
+                    if(string.Equals(path,Executable,StringComparison.OrdinalIgnoreCase) && !process.HasExited)
+                    {verified=process;return ProcessVerification.Ready;}
+                }
+            }
         }
-        catch(ArgumentException) { }
+        catch(ArgumentException) { result=ProcessVerification.Rejected; }
         catch(InvalidOperationException) { }
         catch(System.ComponentModel.Win32Exception) { }
-        process?.Dispose(); return null;
+        process?.Dispose(); return result;
+    }
+
+    private static Process? VerifiedProcess(int pid,long ticks)
+    {
+        _=ProbeProcess(pid,ticks,out var process);return process;
+    }
+
+    private static async Task<Process?> WaitForVerifiedProcessAsync(int pid,long ticks,Func<Process,string?>? imagePath=null)
+    {
+        // Retry only the same PID/start-time/session/path assertion, bounded to
+        // two seconds. An observed identity mismatch is rejected immediately.
+        for(var attempt=0;attempt<40;attempt++)
+        {
+            if(watchingCancellation.IsCancellationRequested)return null;
+            var result=ProbeProcess(pid,ticks,out var process,imagePath);
+            if(result==ProcessVerification.Ready)return process;
+            if(result==ProcessVerification.Rejected)return null;
+            try{await Task.Delay(50,watchingCancellation.Token);}
+            catch(OperationCanceledException){return null;}
+        }
+        return null;
     }
 
     // WMI creates a local process independently of the launching terminal's lifetime.
@@ -150,7 +187,8 @@ internal static class DesktopRecovery
             while(true)
             {
                 if(watchingCancellation.IsCancellationRequested)return 0;
-                using var watched = VerifiedProcess(pid, ticks);
+                using var watched = await WaitForVerifiedProcessAsync(pid, ticks);
+                if(watchingCancellation.IsCancellationRequested)return 0;
                 if(watched is null) { Log("target_unavailable", pid); return 1; }
                 using var exitSignal = new EventWaitHandle(false, EventResetMode.ManualReset, StopName(pid, ticks));
                 using(var ready = new EventWaitHandle(false, EventResetMode.ManualReset, ReadyName(pid, ticks), out var created))
@@ -203,6 +241,27 @@ internal static class DesktopRecovery
     internal static async Task ContractAsync(string directory)
     {
         Directory.CreateDirectory(directory);
+        using(var self=Process.GetCurrentProcess())
+        {
+            var ticks=self.StartTime.ToUniversalTime().Ticks;var probes=0;
+            using var retried=await WaitForVerifiedProcessAsync(self.Id,ticks,process=>
+            {
+                probes++;
+                if(probes==1)throw new System.ComponentModel.Win32Exception(299);
+                if(probes==2)return null;
+                return process.MainModule?.FileName;
+            });
+            if(retried?.Id!=self.Id || probes!=3)throw new InvalidOperationException("Transient process image lookup was not retried safely");
+            var identityImageReads=0;
+            using var changedIdentity=await WaitForVerifiedProcessAsync(self.Id,ticks+1,process=>{identityImageReads++;return process.MainModule?.FileName;});
+            if(changedIdentity is not null || identityImageReads!=0)throw new InvalidOperationException("Mismatched process start time was accepted or retried");
+            probes=0;
+            using var wrongImage=await WaitForVerifiedProcessAsync(self.Id,ticks,_=>{probes++;return Executable+".other";});
+            if(wrongImage is not null || probes!=1)throw new InvalidOperationException("Mismatched process image was retried or accepted");
+            probes=0;
+            using var unavailable=await WaitForVerifiedProcessAsync(self.Id,ticks,_=>{probes++;return null;});
+            if(unavailable is not null || probes!=40)throw new InvalidOperationException("Unavailable process image retry was not bounded");
+        }
         var now = DateTimeOffset.UtcNow;
         if(!RetryAllowed([], now) || RetryAllowed([now, now, now], now) || !RetryAllowed([now.AddMinutes(-11), now, now], now))
             throw new InvalidOperationException("Retry policy failed");
@@ -287,6 +346,6 @@ internal static class DesktopRecovery
         var loopLog=File.ReadAllLines(Path.Combine(loopRoot,"recovery.jsonl"));
         if(loopLog.Count(line=>line.Contains("\"kind\":\"restarted\""))!=3 || !loopLog.Any(line=>line.Contains("\"kind\":\"retry_limit\"")))
             throw new InvalidOperationException("Actual crash loop cap failed");
-        await File.WriteAllTextAsync(Path.Combine(directory, "recovery-contract.json"), JsonSerializer.Serialize(new { passed = true, abnormalExitRestarts = true, manualExitStaysClosed = true, disablingLeavesAppRunning=true,boundedRetries = true, realCrashLoopCappedAt=3,visibleStartup=true,legacyStartupRecognized=true,otherInstallPreserved=true,realAppInterrupted = false }));
+        await File.WriteAllTextAsync(Path.Combine(directory, "recovery-contract.json"), JsonSerializer.Serialize(new { passed = true, startupImageRetryVerified=true, mismatchedIdentityRejected=true, startupImageRetryBounded=true, abnormalExitRestarts = true, manualExitStaysClosed = true, disablingLeavesAppRunning=true,boundedRetries = true, realCrashLoopCappedAt=3,visibleStartup=true,legacyStartupRecognized=true,otherInstallPreserved=true,realAppInterrupted = false }));
     }
 }

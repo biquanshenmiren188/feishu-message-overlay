@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
 
 const source=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
-function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false}={}){
- const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={},actions=[];
+function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false,integratedAccount=false,responseHook=null}={}){
+ const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={},actions=[],emitted=[],windowEvents={};
  if(savedSelection)storage.set('radar-settings-token',savedSelection);
  class Element{
   constructor(){this.children=[];this.value='';this.textContent='';this.hidden=false;this.classList={toggle(){}};this.attrs={}}
@@ -18,24 +18,26 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
   focus(){} showModal(){} close(){}
  }
  const body=new Element(),toolbar=new Element();
- const document={createElement:()=>new Element(),createTextNode:text=>({text}),querySelector:selector=>['#live-mobile-account','.site-nav','.tabs'].includes(selector)?null:toolbar,querySelectorAll:()=>[],head:new Element(),body:new Element(),addEventListener:(name,fn)=>events[name]=fn,visibilityState:'visible'};
+ const document={createElement:()=>new Element(),createTextNode:text=>({text}),querySelector:selector=>selector==='#live-mobile-account'?(integratedAccount?toolbar:null):['.site-nav','.tabs'].includes(selector)?null:toolbar,querySelectorAll:()=>[],head:new Element(),body:new Element(),addEventListener:(name,fn)=>(events[name]??=[]).push(fn),dispatchEvent:event=>{emitted.push(event);for(const fn of events[event.type]||[])fn(event);},visibilityState:'visible'};
  const plan=auth=>({profileId:auth==='owner-token'?'legacy':'a'.repeat(32),revision:auth==='owner-token'?7:2,publicKey:'AQID',subscribed:true,subscriptionFingerprint:null,source:{connected:true},settings:{notify_enabled:true,rows:auth==='owner-token'?4:1,notify_interval_seconds:60,min_percent:null,excluded_ranks:[],excluded_coins:auth==='owner-token'?['BTC']:['ETH'],excluded_modes:[],excluded_exchanges:[]}});
  const fetch=async(url,options)=>{
   const route=url.split('/').pop(),auth=options.headers.Authorization.slice(7);requests.push({route,auth,body:options.body&&JSON.parse(options.body)});
+  const hooked=responseHook?.(route,auth,options);if(hooked!==undefined)return hooked;
   if(route==='switch-subscription'&&transferFailure){if(transferFailure==='network')throw Error('offline');return {status:400,ok:false,json:async()=>({error:'目标推送码已绑定另一台手机'})}}
   if(route===failRoute&&auth==='other-token')return {status:401,ok:false,json:async()=>({error:'目标码读取失败'})};
   if(route==='pair')return JSON.parse(options.body).code==='87654321'?{ok:true,status:200,json:async()=>({token:'other-token'})}:{ok:false,status:400,json:async()=>({error:'推送码不正确'})};
-  return {ok:true,status:200,json:async()=>route==='status'||route==='settings'?plan(auth):route==='binding'?{pushCode:auth==='owner-token'?'12345678':'87654321'}:{ok:true}};
+  return {ok:true,status:200,json:async()=>route==='status'||route==='settings'?plan(auth):route==='desktop-settings'?{revision:auth==='owner-token'?17:22,connected:true}:route==='binding'?{pushCode:auth==='owner-token'?'12345678':'87654321'}:{ok:true}};
  };
  const subscription={toJSON:()=>({endpoint:android?'https://fcm.googleapis.com/wp/synthetic':'https://fixture.push.apple.com/local',keys:{p256dh:'test',auth:'test'}})};
  const notification={permission:permission||(subscribed?'granted':'default'),requestPermission:async()=>{actions.push('permission');notification.permission=permission||'granted';return notification.permission}};
  const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
- const context=vm.createContext({document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
- context.AbortSignal=AbortSignal;
+ class CustomEvent{constructor(type,options={}){this.type=type;this.detail=options.detail}}
+ const context=vm.createContext({CustomEvent,document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
+ context.AbortSignal=AbortSignal;context.window=context;context.addEventListener=(name,fn)=>windowEvents[name]=fn;
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
- return {elements,storage,requests,workerTokens,events,actions,run};
+ return {elements,storage,requests,workerTokens,events,actions,emitted,windowEvents,run};
 }
 // WebCrypto completes on native workers; event-loop turns are not a time budget
 // and can all finish before a loaded CI runner delivers its digest result.
@@ -143,4 +145,38 @@ test('unsupported Android, desktop and Safari tab cannot silently subscribe',asy
   assert.equal(f.actions.includes('register'),false);assert.equal(f.actions.includes('permission'),false);
   assert.equal(f.requests.some(r=>r.route==='subscribe'),false);assert.ok(f.elements.get('ns-message').textContent);
  }
+});
+
+
+const response=value=>({ok:true,status:200,json:async()=>value});
+test('integrated settings accept an ordinary profile and save only its desktop scheme',async()=>{
+ const f=fixture({integratedAccount:true,savedSelection:'other-token'});await settle(f);
+ assert.ok(f.requests.some(r=>r.route==='desktop-settings'&&r.auth==='other-token'));
+ assert.equal(f.emitted.filter(e=>e.type==='radar-desktop-loaded').at(-1).detail.revision,22);
+ await f.run("window.RadarDesktopSettings.save({revision:22,channel:'desktop'})");
+ const saved=f.requests.find(r=>r.route==='desktop-settings'&&r.body);
+ assert.equal(saved.auth,'other-token');assert.equal(saved.body.revision,22);
+ assert.equal(f.requests.some(r=>r.route==='subscribe'||r.route==='switch-subscription'),false);
+});
+
+test('late desktop response is discarded after a successful profile switch',async()=>{
+ let resolveOld;const old=new Promise(resolve=>resolveOld=resolve);
+ const f=fixture({integratedAccount:true,responseHook:(route,auth)=>route==='desktop-settings'&&auth==='owner-token'?old:undefined});
+ await settle(f);await switchCode(f,'87654321');resolveOld(response({revision:17,connected:true}));await new Promise(r=>setTimeout(r,20));
+ const loaded=f.emitted.filter(e=>e.type==='radar-desktop-loaded');assert.equal(loaded.length,1);assert.equal(loaded[0].detail.revision,22);
+ assert.equal(f.emitted.filter(e=>e.type==='radar-profile-changing').length,1);
+});
+
+test('returning to the same token cannot accept an earlier request generation',async()=>{
+ let hold=false,resolveRead;const pending=new Promise(resolve=>resolveRead=resolve);
+ const f=fixture({integratedAccount:true,responseHook:route=>hold&&route==='desktop-settings'?pending:undefined});await settle(f);
+ hold=true;const reading=f.run("window.RadarDesktopSettings.status()");const rejected=assert.rejects(reading,/推送码已切换/);
+ f.run("selectIdentity('other-token');selectIdentity('owner-token')");resolveRead(response({revision:99}));await rejected;
+ assert.equal(f.emitted.filter(e=>e.type==='radar-desktop-loaded').at(-1).detail.revision,17);
+});
+
+test('a failed target read keeps the current integrated identity and drafts valid',async()=>{
+ const f=fixture({integratedAccount:true,failRoute:'binding'});await settle(f);const before=f.emitted.filter(e=>e.type==='radar-desktop-loaded').length;
+ await switchCode(f,'87654321');assert.equal(f.run('token'),'owner-token');assert.equal(f.emitted.some(e=>e.type==='radar-profile-changing'),false);
+ assert.equal(f.emitted.filter(e=>e.type==='radar-desktop-loaded').length,before);
 });

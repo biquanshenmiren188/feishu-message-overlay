@@ -96,6 +96,12 @@ internal sealed class OpportunityBoard : DockPanel
 {
     internal readonly OpportunityModel Model=new();
     internal DesktopRuleDecisions Rules=DesktopRuleDecisions.Empty;
+    internal Func<object,Task<JsonElement>>? ManageRules;
+    internal void ResetIdentity()
+    {
+        Model.Cards.Clear();Model.Sample=DateTimeOffset.MinValue;Model.Received=DateTimeOffset.MinValue;Model.Connected=false;Model.Complete=false;
+        Rules=DesktopRuleDecisions.Empty;ManageRules=null;lastRender=null;lastStates=null;lastValues=DateTimeOffset.MinValue;ages.Clear();cards.ItemsSource=System.Array.Empty<object>();ActiveCount=0;VisibleCount=0;
+    }
     private readonly TextBlock heading=new(){FontSize=14,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,6,4,8)};
     private readonly ListBox cards=new(){BorderThickness=new Thickness(0),Background=Brushes.Transparent,HorizontalContentAlignment=HorizontalAlignment.Stretch};
     private string? lastRender;
@@ -159,6 +165,7 @@ internal sealed class OpportunityBoard : DockPanel
         // Values are committed at most once per ten seconds; expiry/connection changes remain immediate.
         var ordered=Model.Cards.Values.Where(Allowed).OrderBy(c=>OpportunityModel.Asset(c.Data),StringComparer.Ordinal).ThenByDescending(c=>OpportunityModel.Number(OpportunityModel.Get(c.Data,"v2Residual"),"level")??-1).ToArray();
         var states=JsonSerializer.Serialize(ordered.Select(c=>new{id=OpportunityModel.Text(c.Data,"id"),state=Model.State(c,now),transfers=Transfers(OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"legs",2),OpportunityModel.Array(OpportunityModel.Get(c.Data,"details"),"transferWallets",20),now)}));
+        states+=(ManageRules is null?"readonly":"manage");
         var signature=string.Join(',',ordered.Select(c=>c.ContentVersion))+states;
         heading.Text=$"卡片推送   {ActiveCount} ACTIVE";
         heading.ToolTip=Model.Connected?$"同步中 · {Model.Sample.ToOffset(TimeSpan.FromHours(8)):HH:mm:ss} UTC+8"+(Model.Complete?"":" · 数据暂不完整"):"正在连接卡片数据源 · 旧数据不计入活跃机会";
@@ -242,7 +249,8 @@ internal sealed class OpportunityBoard : DockPanel
         foreach(var (caption,quick) in new[]{("管理",false),("屏蔽三端",true)})
         {
             var button=FooterButton(caption);button.ToolTip=quick?"打开三端屏蔽草稿，手动保存后生效":"在软件内设置此币种规则";
-            button.Click+=(_,_)=>{var owner=Window.GetWindow(this);var dialog=new CoinRulesWindow(OpportunityModel.Asset(data),quick){Owner=owner,Topmost=owner?.Topmost==true};dialog.ShowDialog();};SetDock(button,Dock.Left);footer.Children.Add(button);
+            button.IsEnabled=ManageRules is not null;button.ToolTip=ManageRules is null?"请先在设置中绑定自己的推送码，并等待规则连接成功。":caption;
+            button.Click+=(_,_)=>{if(ManageRules is not {} send)return;var owner=Window.GetWindow(this);var dialog=new CoinRulesWindow(OpportunityModel.Asset(data),quick,send){Owner=owner,Topmost=owner?.Topmost==true};dialog.ShowDialog();};SetDock(button,Dock.Left);footer.Children.Add(button);
         }
         if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);

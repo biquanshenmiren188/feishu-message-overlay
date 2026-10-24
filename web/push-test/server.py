@@ -267,7 +267,9 @@ def handler(trial):
     desktop = None
     if hasattr(trial, 'accounts'):
         from desktop_rules import DesktopRules
+        from desktop_binding import DesktopProfiles
         desktop = DesktopRules(trial.directory)
+        desktops = DesktopProfiles(trial, desktop)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -292,14 +294,11 @@ def handler(trial):
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})
             if self.path == BASE + 'api/desktop-settings' and desktop:
-                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
-                return self.reply(200, desktop.status())
+                return self.reply(200, desktops.policy(account).status())
             if self.path == BASE + 'api/coin-blocks' and desktop:
-                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能查看和操作三端币种规则'})
-                return self.reply(200, desktop.coin_state(account))
+                return self.reply(200, desktops.policy(account).coin_state(account))
             if self.path == BASE + 'api/card-decisions' and desktop:
-                if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能应用行情卡片规则'})
-                try:return self.reply(200, desktop.web_cards())
+                try:return self.reply(200, desktops.policy(account).web_cards())
                 except Exception:return self.reply(503, {'error':'行情卡片规则暂时无法同步'})
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
@@ -327,7 +326,11 @@ def handler(trial):
                     raise ValueError('请求格式错误')
                 # Only the existing authenticated publisher can bridge here.
                 # This loopback path is outside all public /radar proxy routes.
+                if self.path == '/internal/desktop-binding' and self.client_address[0] == '127.0.0.1' and desktop:
+                    return self.reply(200, desktops.state(data))
                 if self.path == '/internal/coin-rules' and self.client_address[0] == '127.0.0.1' and desktop:
+                    if 'pushCode' in data:
+                        return self.reply(200, desktops.coins(data))
                     from coin_control import dispatch
                     return self.reply(200, dispatch(desktop, trial.accounts['legacy'], data))
                 if not self.path.startswith(BASE + 'api/'):
@@ -344,14 +347,11 @@ def handler(trial):
                 if account is None:
                     return self.reply(401, {'error': '请先用测试码连接'})
                 if route == 'desktop-settings' and desktop:
-                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，其他手机方案不能修改电脑规则'})
-                    return self.reply(200, desktop.configure(data))
+                    return self.reply(200, desktops.policy(account).configure(data))
                 if route == 'edit-coins' and desktop:
-                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能管理三端规则'})
-                    return self.reply(200, desktop.edit_coins(data,account))
+                    return self.reply(200, desktops.policy(account).edit_coins(data,account))
                 if route == 'block-coins' and desktop:
-                    if account is not trial.accounts['legacy']:return self.reply(403, {'error':'请连接原始管理推送码，才能一键屏蔽三端'})
-                    return self.reply(200, desktop.block_coins(data,account))
+                    return self.reply(200, desktops.policy(account).block_coins(data,account))
                 if route == 'switch-subscription' and hasattr(trial, 'transfer_subscription'):
                     return self.reply(200, trial.transfer_subscription(account, data))
                 if route == 'settings' and hasattr(account, 'configure'):

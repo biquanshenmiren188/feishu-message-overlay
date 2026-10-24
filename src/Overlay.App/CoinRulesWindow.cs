@@ -45,7 +45,7 @@ internal sealed class CoinRulesWindow : Window
         coin=symbol.Trim().ToUpperInvariant();quick=quickBlock;transport=send??Request;
         Title=coin+" · 币种规则";Width=Math.Min(640,SystemParameters.WorkArea.Width-30);Height=Math.Min(340,SystemParameters.WorkArea.Height-30);MinWidth=520;MinHeight=280;FontFamily=new FontFamily("Segoe UI");FontSize=12;Background=Brushes.White;WindowStartupLocation=WindowStartupLocation.CenterOwner;ShowInTaskbar=false;
         var root=new DockPanel{Margin=new Thickness(12)};Content=root;
-        var head=new StackPanel();head.Children.Add(new TextBlock{Text=Title,FontSize=18,FontWeight=FontWeights.SemiBold});head.Children.Add(new TextBlock{Text="电脑隐藏、电脑静音、行情卡片和手机推送独立设置。\n手机对应原始管理码方案；隐藏优先于静音。",TextWrapping=TextWrapping.Wrap,Foreground=Brushes.SlateGray,Margin=new Thickness(0,8,0,12)});DockPanel.SetDock(head,Dock.Top);root.Children.Add(head);
+        var head=new StackPanel();head.Children.Add(new TextBlock{Text=Title,FontSize=18,FontWeight=FontWeights.SemiBold});head.Children.Add(new TextBlock{Text="电脑隐藏、电脑静音、行情卡片和手机推送独立设置。\n仅修改当前绑定推送码的方案；隐藏优先于静音。",TextWrapping=TextWrapping.Wrap,Foreground=Brushes.SlateGray,Margin=new Thickness(0,8,0,12)});DockPanel.SetDock(head,Dock.Top);root.Children.Add(head);
         var bottom=new StackPanel();bottom.Children.Add(review);bottom.Children.Add(status);var actions=new WrapPanel{Margin=new Thickness(0,12,0,0)};foreach(var b in new[]{block,close,retry,save})actions.Children.Add(b);bottom.Children.Add(actions);DockPanel.SetDock(bottom,Dock.Bottom);root.Children.Add(bottom);
         var body=new StackPanel();body.Children.Add(rows);add.HorizontalAlignment=HorizontalAlignment.Left;body.Children.Add(add);root.Children.Add(new ScrollViewer{Content=body,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         block.Foreground=Brushes.Firebrick;block.ToolTip="勾选三端屏蔽，点击保存修改后生效；静音规则保留";save.Background=new SolidColorBrush(Color.FromRgb(0,117,233));save.Foreground=Brushes.White;
@@ -55,7 +55,9 @@ internal sealed class CoinRulesWindow : Window
     }
     private static async Task<JsonElement> Request(object request)
     {
-        using var response=await PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",new{action="coin-rules",request});
+        var binding=new DesktopPushBinding(System.IO.Path.Combine(LocalStorage.DirectoryPath,"desktop-push-code.dpapi"));
+        if(binding.Code is not {Length:8} code)throw new InvalidOperationException("请先在设置中绑定自己的推送码。");
+        using var response=await PublicWebPublisher.SendControlAsync("/radar/api/robot-push/control",new{action="coin-rules",pushCode=code,request});
         var root=response.RootElement;if(!root.TryGetProperty("ok",out var ok)||!ok.GetBoolean())throw new InvalidOperationException(root.TryGetProperty("error",out var error)?error.GetString():"规则服务暂不可用");
         return root.GetProperty("data").Clone();
     }

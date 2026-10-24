@@ -69,19 +69,24 @@ class CoinBlocksTest(unittest.TestCase):
   self.assertEqual(result['operation']['results']['cards']['state'],'failed');self.assertEqual(result['desktop']['cards']['settings']['advanced']['coins'],[])
   restored=DesktopRules(self.root/'state');self.assertEqual(restored.status(),self.app.status())
   result=restored.block_coins(self.request,self.phone);self.assertTrue(all(x['state']=='saved' for x in result['operation']['results'].values()))
- def test_owner_only_routes_and_origin(self):
+ def test_profile_scoped_routes_and_origin(self):
   token=self.phone.pair('12345678');profiles=Profiles(self.root/'state',self.config,lambda *a:None)
   other=profiles.create_code('a'*32)['token'];server=ThreadingHTTPServer(('127.0.0.1',0),handler(profiles));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
   def request(route,auth,data=None,origin=ORIGIN):
    conn=HTTPConnection(*server.server_address);conn.request('GET' if data is None else 'POST',BASE+'api/'+route,body=None if data is None else json.dumps(data),headers={'Authorization':'Bearer '+auth,'Origin':origin,'Content-Type':'application/json'});r=conn.getresponse();body=json.loads(r.read());conn.close();return r.status,body
   try:
-   self.assertEqual(request('coin-blocks','wrong')[0],401);self.assertEqual(request('coin-blocks',other)[0],403)
-   self.assertEqual(request('card-decisions','wrong')[0],401);self.assertEqual(request('card-decisions',other)[0],403)
-   with patch.object(DesktopRules,'web_cards',return_value={'decisions':{},'cardsEnabled':True,'revision':0}):self.assertEqual(request('card-decisions',token)[0],200)
-   self.assertEqual(request('block-coins',other,self.request)[0],403);self.assertEqual(request('block-coins',token,self.request,'https://evil.invalid')[0],403)
+   self.assertEqual(request('coin-blocks','wrong')[0],401);self.assertEqual(request('coin-blocks',other)[0],200)
+   self.assertEqual(request('card-decisions','wrong')[0],401)
+   with patch.object(DesktopRules,'web_cards',return_value={'decisions':{},'cardsEnabled':True,'revision':0}):
+    self.assertEqual(request('card-decisions',token)[0],200);self.assertEqual(request('card-decisions',other)[0],200)
+   self.assertEqual(request('block-coins',token,self.request,'https://evil.invalid')[0],403)
    self.assertEqual(request('block-coins',token,self.request)[0],200);self.assertEqual(request('coin-blocks',token)[0],200)
    edit=dict(requestId='owner-edit-001',changes=[dict(channel='mute',coin='TEST',exchange='gate',before=None,after=True)])
-   self.assertEqual(request('edit-coins','wrong',edit)[0],401);self.assertEqual(request('edit-coins',other,edit)[0],403);self.assertEqual(request('edit-coins',token,edit,'https://evil.invalid')[0],403);self.assertEqual(request('edit-coins',token,edit)[0],200)
+   self.assertEqual(request('edit-coins','wrong',edit)[0],401);self.assertEqual(request('edit-coins',token,edit,'https://evil.invalid')[0],403);self.assertEqual(request('edit-coins',token,edit)[0],200)
+   other_state=request('coin-blocks',other)[1]
+   self.assertEqual(other_state['desktop']['revision'],0);self.assertEqual(other_state['desktop']['desktop']['rules']['hide']['advanced']['coins'],[])
+   self.assertEqual(request('edit-coins',other,dict(edit,requestId='other-edit-001'))[0],200)
+   self.assertEqual(request('coin-blocks',other)[1]['desktop']['revision'],1)
    self.assertEqual(profiles.resolve(other).state['live']['revision'],0)
    conn=HTTPConnection(*server.server_address)
    conn.request('POST','/internal/coin-rules',json.dumps({'op':'block','request':dict(requestId='native-control-001',coins=['NATIVE'],exchange='all')}),{'Content-Type':'application/json'})

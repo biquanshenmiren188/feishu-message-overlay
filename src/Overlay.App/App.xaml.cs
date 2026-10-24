@@ -12,6 +12,14 @@ public partial class App : Application
     internal static string SmokeStage { get; set; } = "ui";
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if(e.Args.Length==2&&e.Args[0]=="--push-code-contract")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            Directory.CreateDirectory(e.Args[1]);Preferences.ContractPath=Path.Combine(e.Args[1],"synthetic-preferences.json");
+            var fixture=new MainWindow{ShowActivated=false};MainWindow=fixture;fixture.Loaded+=(_,_)=>{fixture.Left=-12000;fixture.Top=-12000;};fixture.Show();
+            try{await fixture.RunPushCodeContractAsync(e.Args[1]);await fixture.ExitAsync();}
+            catch(Exception error){File.WriteAllText(Path.Combine(e.Args[1],"push-code-contract.json"),System.Text.Json.JsonSerializer.Serialize(new{passed=false,error=error.ToString()}));await fixture.ExitAsync();Shutdown(1);}return;
+        }
         if(e.Args.Length==2 && e.Args[0]=="--recovery-settings-preview")
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);

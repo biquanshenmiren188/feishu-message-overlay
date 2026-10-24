@@ -3,10 +3,12 @@ on:
   push:
     paths:
       - 'web/robot-push/publisher/**'
+      - 'web/push-test/**'
       - '.github/workflows/cloud-reader.yml'
   pull_request:
     paths:
       - 'web/robot-push/publisher/**'
+      - 'web/push-test/**'
       - '.github/workflows/cloud-reader.yml'
 permissions:
   contents: read
@@ -24,3 +26,5 @@ jobs:
       - run: python web/robot-push/publisher/state_delta_test.py
       - run: python web/robot-push/publisher/cloud_config_test.py
       - run: python web/robot-push/publisher/cloud_receiver_test.py
+      - run: python -m unittest discover -s web/push-test -p '*_test.py'
+      - run: python -m unittest discover -s web/robot-push/publisher -p '*_test.py'
