@@ -246,12 +246,8 @@ internal sealed class OpportunityBoard : DockPanel
             var content=new FrameworkElementFactory(typeof(TextBlock));content.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Content"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetBinding(TextBlock.ForegroundProperty,new System.Windows.Data.Binding("Foreground"){RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent});content.SetValue(FrameworkElement.HorizontalAlignmentProperty,HorizontalAlignment.Center);content.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);outline.AppendChild(content);
             gc.Template=new ControlTemplate(typeof(Button)){VisualTree=outline};
         }gc.ToolTip="复制 Gate Crossex 代码";gc.Click+=(_,_)=>{try{Clipboard.SetText(gcPayload);gc.Content="GC 已复制";}catch{gc.Content="复制失败";}};SetDock(gc,Dock.Left);footer.Children.Add(gc);}
-        foreach(var (caption,quick) in new[]{("管理",false),("屏蔽三端",true)})
-        {
-            var button=FooterButton(caption);button.ToolTip=quick?"打开三端屏蔽草稿，手动保存后生效":"在软件内设置此币种规则";
-            button.IsEnabled=ManageRules is not null;button.ToolTip=ManageRules is null?"请先在设置中绑定自己的推送码，并等待规则连接成功。":caption;
-            button.Click+=(_,_)=>{if(ManageRules is not {} send)return;var owner=Window.GetWindow(this);var dialog=new CoinRulesWindow(OpportunityModel.Asset(data),quick,send){Owner=owner,Topmost=owner?.Topmost==true};dialog.ShowDialog();};SetDock(button,Dock.Left);footer.Children.Add(button);
-        }
+        var manage=FooterButton("管理");manage.IsEnabled=ManageRules is not null;manage.ToolTip=ManageRules is null?"请先在设置中绑定自己的推送码，并等待规则连接成功。":"在软件内设置此币种规则，保存后生效";
+        manage.Click+=(_,_)=>{if(ManageRules is not {} send)return;var owner=Window.GetWindow(this);var dialog=new CoinRulesWindow(OpportunityModel.Asset(data),send){Owner=owner,Topmost=owner?.Topmost==true};dialog.ShowDialog();};SetDock(manage,Dock.Left);footer.Children.Add(manage);
         if(OpportunityModel.Radar(data) is {} url){var button=FooterButton("雷达 ↗");button.HorizontalAlignment=HorizontalAlignment.Right;button.Click+=(_,_)=>MessageText.Open(url);footer.Children.Add(button);}stack.Children.Add(footer);
         var rankColor=(Color)ColorConverter.ConvertFromString(rank);
         byte Wash(byte channel)=>(byte)Math.Round(channel*.04+255*.96);

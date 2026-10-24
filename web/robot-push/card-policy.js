@@ -1,5 +1,5 @@
 /* The BOT and desktop share server-side card decisions, including OI/history. */
-import {openCardManager} from './card-manager.js?v=20261024-manualsave1';
+import {openCardManager} from './card-manager.js?v=20261024-clarity1';
 export class CardPolicyState {
   constructor(){this.reset('');}
   reset(token){this.token=token;this.data=null;this.receivedAt=0;this.error='';this.access='unknown';}
@@ -25,7 +25,7 @@ export class CardPolicyState {
 }
 
 export function createCardPolicy(toolbar,render){
-  const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/card-policy.css?v=20261024-manualsave1';document.head.append(css);
+  const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/card-policy.css?v=20261024-clarity1';document.head.append(css);
   const state=new CardPolicyState(),status=document.createElement('span'),group=document.createElement('div'),link=document.createElement('a');
   group.className='bp-policy';status.className='bp-policy-status';status.setAttribute('role','status');
   const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;

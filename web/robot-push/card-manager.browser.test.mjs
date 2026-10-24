@@ -41,6 +41,7 @@ test('card manager uses one management entrance and stages blocking until explic
         const changes=record.body.changes||[];
         const results=Object.fromEntries(channels.map(c=>[c,{state:changes.some(change=>change.channel===c)?'saved':'skipped'}]));
         if(firstPostFailure==='partial'&&postCount===1)results.mobile={state:'failed',error:'测试临时失败'};
+        if(firstPostFailure==='desktop-partial'&&postCount===1)results.mute={state:'failed',error:'测试静音未保存'};
         for(const change of changes){
           if(results[change.channel].state!=='saved')continue;
           const target=policy(state,change.channel);
@@ -105,7 +106,7 @@ test('card manager uses one management entrance and stages blocking until explic
     const data=fixture();rule(data,'mute','all',true);rule(data,'cards','gate',false);
     const {page,posts}=await setup(t,{data});await open(page);
     const gate=page.locator('.bp-rule-row').nth(1);
-    await gate.locator('[data-channel="cards"]').selectOption('on');
+    await gate.locator('[data-block-mode="cards"]').selectOption('on');
     await gate.locator('[data-desktop-mode]').selectOption('mute');
     assert.equal(await page.locator('[data-block]').isEnabled(),true);
     await page.locator('[data-block]').click();await page.locator('[data-block]').click();
@@ -179,18 +180,31 @@ test('card manager uses one management entrance and stages blocking until explic
     const data=fixture();rule(data,'desktop','all',true);rule(data,'cards','gate',true);
     const {page,posts}=await setup(t,{data});await open(page);
     const choice=page.locator('[data-desktop-mode]').first();
-    assert.deepEqual(await choice.locator('option').allTextContents(),['电脑屏蔽','电脑静音','未设置']);
+    assert.deepEqual(await choice.locator('option').allTextContents(),['正常推送','仅静音','屏蔽']);
     assert.equal(await choice.inputValue(),'hide');
     assert.equal(await page.locator('select[data-channel="desktop"],select[data-channel="mute"]').count(),0);
     await choice.selectOption('mute');assert.equal(posts().length,0);
+    assert.match(await page.locator('.bp-rule-review').textContent(),/电脑推送：屏蔽 → 仅静音/);
+    assert.equal((await page.locator('.bp-rule-review').textContent()).match(/电脑推送：/g).length,1);
     await page.locator('[data-save]').click();await saved(page);
     assert.deepEqual(posts()[0].body.changes,[{channel:'desktop',coin:'PTB',exchange:'all',before:true,after:null},{channel:'mute',coin:'PTB',exchange:'all',before:null,after:true}]);
+    assert.equal(await page.locator('.bp-rule-result').textContent(),'全部交易所 · 电脑推送：仅静音（已保存）');
     await page.locator('[data-desktop-mode]').first().selectOption('none');
     await page.locator('[data-save]').click();await saved(page);
     assert.deepEqual(posts()[1].body.changes,[{channel:'mute',coin:'PTB',exchange:'all',before:true,after:null}]);
+    assert.equal(await page.locator('.bp-rule-result').textContent(),'全部交易所 · 电脑推送：正常推送（已保存）');
     await page.locator('[data-desktop-mode]').last().selectOption('hide');
     await page.locator('[data-save]').click();await saved(page);
     assert.deepEqual(posts()[2].body.changes,[{channel:'desktop',coin:'PTB',exchange:'gate',before:null,after:true}]);
+    assert.equal(await page.locator('.bp-rule-result').textContent(),'Gate · 电脑推送：屏蔽（已保存）');
+  });
+
+  await t.test('partial desktop mode save reports the actual merged state and retains retry',async t=>{
+    const data=fixture();rule(data,'desktop','all',true);const {page,posts}=await setup(t,{data,firstPostFailure:'desktop-partial'});await open(page);
+    await page.locator('[data-desktop-mode]').selectOption('mute');await page.locator('[data-save]').click();await page.locator('[data-retry]').waitFor({state:'visible'});
+    await page.waitForFunction(()=>!document.querySelector('[data-retry]').disabled);
+    const text=await page.locator('.bp-rule-result').textContent();assert.equal((text.match(/电脑推送：/g)||[]).length,1);assert.match(text,/电脑推送：正常推送（当前已保存；未完成：仅静音 测试静音未保存）/);assert.doesNotMatch(text,/电脑推送：仅静音（已保存）/);
+    await page.locator('[data-retry]').click();await saved(page);assert.deepEqual(posts()[1],posts()[0]);assert.equal(await page.locator('.bp-rule-result').textContent(),'全部交易所 · 电脑推送：仅静音（已保存）');
   });
 
   for(const original of [{desktop:true,mute:true},{desktop:false,mute:false}])await t.test(`untouched legacy desktop values ${JSON.stringify(original)} are preserved`,async t=>{
@@ -198,9 +212,34 @@ test('card manager uses one management entrance and stages blocking until explic
     const {page,posts}=await setup(t,{data});await open(page);
     assert.equal(await page.locator('[data-save]').isDisabled(),true);
     assert.equal(await page.locator('[data-desktop-mode]').inputValue(),original.desktop?'hide':'none');
-    await page.locator('[data-channel="cards"]').selectOption('on');
+    await page.locator('[data-block-mode="cards"]').selectOption('on');
     await page.locator('[data-save]').click();await saved(page);
     assert.deepEqual(posts()[0].body.changes,[{channel:'cards',coin:'PTB',exchange:'all',before:null,after:true}]);
+  });
+
+  for(const channel of ['cards','mobile'])await t.test(`${channel} uses normal/block labels and changes only on explicit save`,async t=>{
+    const data=fixture();rule(data,channel,'all',true);const {page,posts}=await setup(t,{data});await open(page);
+    const choice=page.locator(`[data-block-mode="${channel}"]`);
+    assert.deepEqual(await choice.locator('option').allTextContents(),['正常推送','屏蔽']);
+    await choice.selectOption('none');assert.equal(posts().length,0);assert.match(await page.locator('.bp-rule-review').textContent(),/本范围草稿/);
+    await page.locator('footer [data-close]').click();await page.locator('dialog').waitFor({state:'detached'});await open(page);
+    assert.equal(await choice.inputValue(),'on');await choice.selectOption('none');await page.locator('[data-save]').click();await saved(page);
+    assert.deepEqual(posts()[0].body.changes,[{channel,coin:'PTB',exchange:'all',before:true,after:null}]);
+    assert.match(await page.locator('.bp-rule-result').textContent(),/正常推送（已保存）/);
+    await choice.selectOption('on');assert.match(await page.locator('.bp-rule-result').textContent(),/草稿尚未保存/);
+    await page.locator('[data-save]').click();await saved(page);
+    assert.deepEqual(posts()[1].body.changes,[{channel,coin:'PTB',exchange:'all',before:null,after:true}]);
+    assert.match(await page.locator('.bp-rule-result').textContent(),/屏蔽（已保存）/);
+    assert.doesNotMatch(await page.locator('dialog').innerText(),/未设置|已启用|已停用|电脑静音/);
+  });
+
+  for(const channel of ['cards','mobile'])await t.test(`legacy inactive ${channel} displays normal and remains untouched until a user choice`,async t=>{
+    const data=fixture();rule(data,channel,'all',false);const {page,posts}=await setup(t,{data});await open(page);
+    assert.equal(await page.locator(`[data-block-mode="${channel}"]`).inputValue(),'none');assert.equal(await page.locator('[data-save]').isDisabled(),true);
+    const other=channel==='cards'?'mobile':'cards';await page.locator(`[data-block-mode="${other}"]`).selectOption('on');await page.locator('[data-save]').click();await saved(page);
+    assert.deepEqual(posts()[0].body.changes,[{channel:other,coin:'PTB',exchange:'all',before:null,after:true}]);
+    await page.locator(`[data-block-mode="${channel}"]`).selectOption('none');await page.locator('[data-save]').click();await saved(page);
+    assert.deepEqual(posts()[1].body.changes,[{channel,coin:'PTB',exchange:'all',before:false,after:null}]);
   });
 
   for(const width of [1280,393])await t.test(`draft dialog fits ${width}px viewport and exposes save`,async t=>{

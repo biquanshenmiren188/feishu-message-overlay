@@ -98,6 +98,8 @@ public partial class MainWindow
         var actions=Buttons(OpportunityArea).Where(b=>b.Content is string text&&text is "复制" or "复制 GC" or "雷达 ↗").ToArray();
         var chineseCard=JsonSerializer.SerializeToElement(new{asset="龙虾",strategy="SF",details=new{legs=new[]{new{exchange="gate",symbol="龙虾_USDT",spot=true},new{exchange="binance",symbol="龙虾USDT",spot=false}}}});
         var chineseView=opportunityBoard.Build(new OpportunityModel.Entry(chineseCard),now);
+        Check(Buttons(chineseView).Count(b=>Equals(b.Content,"管理"))==1,"card offers one management entrance");
+        Check(!Buttons(chineseView).Any(b=>Equals(b.Content,"屏蔽三端")),"card has no duplicate three-channel block shortcut");
         var chineseCopy=Buttons(chineseView).Single(b=>Equals(b.Content,"复制"));
         async Task<T> ReadClipboard<T>(Func<T> read)
         {

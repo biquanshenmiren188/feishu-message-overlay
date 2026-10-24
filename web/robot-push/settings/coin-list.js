@@ -1,11 +1,13 @@
 /* Saved exclusions only. One-click writes use fresh server settings, never whole drafts. */
 (()=>{
 const $=s=>document.querySelector(s),bridge=window.RadarCoinSettings,R=window.RadarRules;
-const names={desktop:'电脑消息',cards:'行情卡片',mobile:'手机推送',mute:'电脑仅静音'},channels=['desktop','cards','mobile'];
+const names={desktop:'电脑消息',cards:'行情卡片',mobile:'手机推送',mute:'仅静音'},channels=['desktop','cards','mobile'];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 let rows=[],visibleRows=[],operations=[],busy=false,batchBusy=false,attempt=null,epoch=0;
 const selected=new Set();
 const key=r=>r.coin+'|'+r.exchange;
+const stateName=(channel,value)=>value===true?(channel==='mute'?'仅静音':'屏蔽'):'正常推送';
+const historyChange=c=>['desktop','mute'].includes(c.channel)?(c.after===true?'设置':c.after===null?'移除':'取消')+(c.channel==='desktop'?'电脑屏蔽规则':'仅静音规则'):names[c.channel]+'：'+stateName(c.channel,c.before)+' → '+stateName(c.channel,c.after)+(c.after===null?'（删除本范围规则）':'');
 const rules=(p,r)=>p.coins.filter(x=>x.coin===r.coin&&(x.exchange==='all'||x.exchange===r.exchange));
 const covered=(p,r)=>rules(p,r).some(x=>x.enabled);
 function render(){
@@ -20,7 +22,7 @@ function render(){
  const chosen=visible.filter(r=>selected.has(key(r))).length;$('#select-visible').checked=!!visible.length&&chosen===visible.length;$('#select-visible').indeterminate=chosen>0&&chosen<visible.length;$('#select-visible').disabled=!visible.length||busy||batchBusy;
  $('#blocked-list').innerHTML=visible.length?visible.map(r=>{
   const index=rows.indexOf(r),done=s.desktopLoaded&&s.mobileLoaded&&channels.every(c=>covered(s.profiles[c],r));
-  return `<article class="blocked-coin-row"><label class="coin-select"><input type="checkbox" data-select-coin="${index}" aria-label="选择 ${esc(r.coin)} ${esc(r.exchange==='all'?'全部交易所':R.name(r.exchange))}" ${selected.has(key(r))?'checked':''} ${busy||batchBusy?'disabled':''}></label><div class="blocked-identity"><b>${esc(r.coin)}</b><small>${esc(r.exchange==='all'?'全部交易所':R.name(r.exchange))}</small></div><div class="coin-channels">${channels.map(c=>{const loaded=c==='mobile'?s.mobileLoaded:s.desktopLoaded,on=loaded&&covered(s.profiles[c],r);return `<span class="coin-chip ${on?'is-blocked':''}">${names[c]} · ${!loaded?'未连接':on?'已屏蔽':c==='desktop'&&covered(s.profiles.mute,r)?'仅静音':rules(s.profiles[c],r).length?'已停用':c==='desktop'&&rules(s.profiles.mute,r).length?'静音已停用':'未设置'}</span>`;}).join('')}${s.desktopLoaded&&covered(s.profiles.desktop,r)&&covered(s.profiles.mute,r)?'<span class="coin-chip is-muted">另有仅静音规则</span>':''}</div><div class="blocked-actions"><button data-manage-coin="${index}" ${busy?'disabled':''}>管理</button><button class="danger-text" data-remove-coin="${index}" ${busy||!s.desktopLoaded||!s.mobileLoaded?'disabled':''}>删除</button></div></article>`;
+  return `<article class="blocked-coin-row"><label class="coin-select"><input type="checkbox" data-select-coin="${index}" aria-label="选择 ${esc(r.coin)} ${esc(r.exchange==='all'?'全部交易所':R.name(r.exchange))}" ${selected.has(key(r))?'checked':''} ${busy||batchBusy?'disabled':''}></label><div class="blocked-identity"><b>${esc(r.coin)}</b><small>${esc(r.exchange==='all'?'全部交易所':R.name(r.exchange))}</small></div><div class="coin-channels">${channels.map(c=>{const loaded=c==='mobile'?s.mobileLoaded:s.desktopLoaded,on=loaded&&covered(s.profiles[c],r);return `<span class="coin-chip ${on?'is-blocked':''}">${names[c]} · ${!loaded?'未连接':on?'屏蔽':c==='desktop'&&covered(s.profiles.mute,r)?'仅静音':'正常推送'}</span>`;}).join('')}${s.desktopLoaded&&covered(s.profiles.desktop,r)&&covered(s.profiles.mute,r)?'<span class="coin-chip is-muted">另有仅静音规则（屏蔽优先）</span>':''}</div><div class="blocked-actions"><button data-manage-coin="${index}" ${busy?'disabled':''}>管理</button><button class="danger-text" data-remove-coin="${index}" ${busy||!s.desktopLoaded||!s.mobileLoaded?'disabled':''}>删除</button></div></article>`;
  }).join(''):`<div class="empty">${query||filter!=='all'?'没有匹配的币种':s.mobileLoaded?'暂无已保存的币种规则，可添加币种并屏蔽三端。':'请先连接推送码。'}</div>`;
  $('#editor-all').disabled=busy||!s.desktopLoaded||!s.mobileLoaded;$('#refresh-coins').disabled=busy;
 }
@@ -28,12 +30,12 @@ function renderOperations(){
  $('#operation-count').textContent=operations.length;
  $('#coin-operations').innerHTML=operations.length?operations.map((x,i)=>{
   const edited=x.kind==='edit',entries=Object.entries(x.results).filter(([,r])=>r.state!=='skipped'),failed=entries.some(([,r])=>r.state!=='saved'),canUndo=edited&&x.changes.some(c=>c.after===null&&x.results[c.channel].state==='saved')&&!operations.some(o=>o.undoOf===x.id);
-  return `<article class="history-record"><b>${esc(x.coins.join('、'))} · ${edited?(x.undoOf?'撤销删除':'规则修改'):esc(x.exchange==='all'?'全部交易所':R.name(x.exchange))}</b><small class="operation-time">${esc(new Date(x.at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))} UTC+8</small><p>${entries.map(([c,r])=>`${names[c]}：${r.state==='saved'?'已保存':esc(r.error||'等待处理')}`).join(' · ')}</p>${edited?`<details><summary>查看 ${x.changes.length} 项变更</summary><ul>${x.changes.map(c=>`<li>${esc(c.coin)} / ${esc(c.exchange==='all'?'全部交易所':R.name(c.exchange))} / ${names[c.channel]}：${c.before===null?'未设置':c.before?'已启用':'已停用'} → ${c.after===null?'删除':c.after?'已启用':'已停用'}</li>`).join('')}</ul></details>`:''}<div class="history-actions">${failed?`<button data-retry-operation="${esc(x.id)}">重试未完成渠道</button>`:''}${canUndo?`<button data-undo-operation="${i}">撤销本次删除</button>`:''}</div></article>`;
+  return `<article class="history-record"><b>${esc(x.coins.join('、'))} · ${edited?(x.undoOf?'撤销删除':'规则修改'):esc(x.exchange==='all'?'全部交易所':R.name(x.exchange))}</b><small class="operation-time">${esc(new Date(x.at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))} UTC+8</small><p>${entries.map(([c,r])=>`${names[c]}：${r.state==='saved'?(edited?'已保存本范围修改':'屏蔽（已保存）'):esc(r.error||'等待处理')}`).join(' · ')}</p>${edited?`<details><summary>查看 ${x.changes.length} 项变更</summary><ul>${x.changes.map(c=>`<li>${esc(c.coin)} / ${esc(c.exchange==='all'?'全部交易所':R.name(c.exchange))} / ${esc(historyChange(c))} · ${x.results[c.channel].state==='saved'?'已保存':esc(x.results[c.channel].error||'未完成')}</li>`).join('')}</ul></details>`:''}<div class="history-actions">${failed?`<button data-retry-operation="${esc(x.id)}">重试未完成渠道</button>`:''}${canUndo?`<button data-undo-operation="${i}">撤销本次删除</button>`:''}</div></article>`;
  }).join(''):'<div class="empty">暂无规则操作记录。</div>';
 }
 async function refresh(){
  if(!window.RadarCoinAPI||busy||batchBusy)return;const generation=epoch;
- try{const data=await window.RadarCoinAPI.load();if(generation!==epoch)return;bridge.receive(data);operations=data.operations||[];renderOperations();$('#coin-sync-status').textContent='已同步云端 · 列表显示已保存规则';}
+ try{const data=await window.RadarCoinAPI.load();if(generation!==epoch)return;bridge.receive(data);operations=data.operations||[];renderOperations();$('#coin-sync-status').textContent='已同步云端 · 列表为本币种所选范围的已保存状态，其他筛选仍按原设置';}
  catch(e){if(generation===epoch)$('#coin-sync-status').textContent=e.message;}
  render();
 }
@@ -46,7 +48,7 @@ async function block(coins,exchange,requestId){
   const data=await window.RadarCoinAPI.block(request);if(generation!==epoch)return;
   bridge.receive(data);operations=data.operations;renderOperations();
   const failed=channels.filter(c=>data.operation.results[c].state!=='saved');
-  $('#coin-operation-result').innerHTML=`<div class="operation-result ${failed.length?'has-error':''}"><b>${failed.length?'部分渠道未完成':'已屏蔽三端'}</b><p>${channels.map(c=>`${names[c]}：${data.operation.results[c].state==='saved'?'已保存':esc(data.operation.results[c].error||'未完成')}`).join(' · ')}</p>${failed.length?'<button id="retry-coin-block">重试未完成渠道</button>':''}</div>`;
+  $('#coin-operation-result').innerHTML=`<div class="operation-result ${failed.length?'has-error':''}"><b>${failed.length?'部分渠道未完成':'已屏蔽三端'}</b><p>${channels.map(c=>`${names[c]}：${data.operation.results[c].state==='saved'?'屏蔽（已保存）':esc(data.operation.results[c].error||'未完成')}`).join(' · ')}</p>${failed.length?'<button id="retry-coin-block">重试未完成渠道</button>':''}</div>`;
   if(!failed.length){for(const coin of coins)selected.delete(key({coin,exchange}));attempt=null;$('#editor').close();bridge.toast('三端规则已保存，小窗下次同步后生效');}else bridge.toast('部分渠道保存失败，请查看结果并重试');
   $('#coin-sync-status').textContent='已同步云端 · 其他未保存修改仍保留为草稿';return !failed.length;
  }catch(e){if(generation!==epoch)return;$('#coin-operation-result').innerHTML=`<div class="operation-result has-error">${esc(e.message)}<p>结果尚未确认，重试会复用同一次操作，不重复添加。</p><button id="retry-coin-block">重试并核对结果</button></div>`;$('#editor-error').textContent=e.message;}
