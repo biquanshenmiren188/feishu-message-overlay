@@ -15,4 +15,6 @@
 - `scripts/prepare-card-scroll.py --baseline <snapshot> --out <candidate>` 校验原 bundle 哈希，修改四个明确位置，输出带内容哈希的新模块和 bundle，同步 BOT 与 PWA fallback 引用。
 - `scripts/deploy-card-scroll.py <server-stage> <source-sha>` 在发布锁内验证实际基线，复制当前整套静态资源，只更改 BOT 入口并新增模块；校验其他文件完整保留、服务 PID 不变，并记录可回滚版本。不重启服务或桌面程序，不读写订阅及用户规则。
 
-部署结果和浏览器验收数据在完成后补记。
+网页单元测试 163 项通过（其中阅读位置/手势 18 项）。Chromium 与 WebKit 的 12 种回放场景均有通过记录，加上 320/414 手机宽度与 1440 电脑历史阅读共 30 条有效场景；最终 helper 增加重复 key 排除后，普通行情刷新、同 pair 换 ID、上方卡过期的双引擎 6 项核心复验通过，最大位移 0.140625px（亚像素取整）。使用本地合成数据，未向线上发送通知，不声称实体 iPhone 已验收。
+
+首次部署前的基线保护检测到另一轮手动保存更新已切换 current，故在任何线上变更之前退出。随后重新抓取 `20261024-card-manual-save-1792851483-014cf6`，确认新 BOT bundle `68efcd61ca2a` 与原 `8d81b8292063` 仅有 card-policy import 版本变化，完整保留新的 card-policy、card-manager 和 CSS；在新基线上重新构建并复验。部署结果在完成后补记。

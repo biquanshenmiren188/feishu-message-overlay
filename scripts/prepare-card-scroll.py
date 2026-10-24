@@ -6,9 +6,9 @@ def digest(raw):return hashlib.sha256(raw).hexdigest()
 def prepare(baseline,out):
     root=pathlib.Path(__file__).resolve().parents[1]
     manifest=json.loads((baseline/'manifest.json').read_text(encoding='utf-8'))
-    original='performance-20261017/bot-cards-8d81b8292063.js'
+    original='performance-20261017/bot-cards-68efcd61ca2a.js'
     raw=(baseline/original).read_bytes()
-    assert digest(raw)==manifest['hashes'][original]=='8d81b8292063538188eef38c9178f4b610e9365d2a139b0aee026dfe7f268fec', 'Inspect changed production bundle first'
+    assert digest(raw)==manifest['hashes'][original]=='68efcd61ca2ad2f4423350cd25d1fb5efd8c9efb5a26e1624e1a51a05c224ea2', 'Inspect changed production bundle first'
     helper=(root/'web/robot-push/mobile-scroll.js').read_bytes()
     module='mobile-reading-20261024/mobile-scroll-'+digest(helper)[:12]+'.js'
     text=raw.decode('utf-8')
