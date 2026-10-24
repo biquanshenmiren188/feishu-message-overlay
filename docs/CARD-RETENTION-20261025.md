@@ -33,5 +33,25 @@ and clipboard patches. Only `basispulse` and `radar-webpush-test` restart; the
 robot publisher and unrelated services remain running. User settings and
 bindings are compared before/after. Rollback restores code, never user data.
 
-Deployment and installed-client verification are recorded after completion.
+Published source: `d2b587beacecec88f78f8b4806e019b5347de8ec`.
+Static release: `20261025-card-retention-1792858266-82769a`, cloned from the
+latest concurrently advanced `20261024-same-period-1792858252` release.
+All 3333 non-target files were preserved. BOT bundle:
+`performance-20261017/bot-cards-70a0144354ee.js`. Both lifecycle services and
+the robot publisher are healthy; rules, subscriptions, bindings and unrelated
+service PIDs were unchanged. The server emits `retentionSeconds: 30`.
+An additional 23 isolated candidate tests passed on the server before switching.
+
+The user exited the previous client through its tray menu. The built-in updater
+installed v2026.10.25.1 and returned a successful health receipt. All 656 files
+match the candidate, both cloud and rules connections are healthy, the window
+is visible in the original interactive session, recovery is watching, and the
+process is outside the launcher job. Private-file hashes, storage pointer and
+all original preference fields are preserved.
+
+Authorized Chrome verified the live card panel and bound-policy status after
+publication. The live snapshot at verification had no recently retired cards;
+the exact 30-second boundaries, delayed refresh and scrolling were verified by
+the isolated source/live-renderer and Windows contracts, not fabricated live
+events or changes to the user's actual rules.
 PR #46 remains open; no merge or formal GitHub Release is implied.
