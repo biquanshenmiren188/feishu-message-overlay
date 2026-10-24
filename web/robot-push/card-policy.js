@@ -1,5 +1,5 @@
 /* The BOT and desktop share server-side card decisions, including OI/history. */
-import {openCardManager} from './card-manager.js?v=20261024-binding1';
+import {openCardManager} from './card-manager.js?v=20261024-manualsave1';
 export class CardPolicyState {
   constructor(){this.reset('');}
   reset(token){this.token=token;this.data=null;this.receivedAt=0;this.error='';this.access='unknown';}
@@ -25,7 +25,7 @@ export class CardPolicyState {
 }
 
 export function createCardPolicy(toolbar,render){
-  const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/card-policy.css?v=20261023-inline1';document.head.append(css);
+  const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/card-policy.css?v=20261024-manualsave1';document.head.append(css);
   const state=new CardPolicyState(),status=document.createElement('span'),group=document.createElement('div'),link=document.createElement('a');
   group.className='bp-policy';status.className='bp-policy-status';status.setAttribute('role','status');
   const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
@@ -58,9 +58,7 @@ export function createCardPolicy(toolbar,render){
   function decorate(card,data){
     if(card.querySelector('[data-action="manage-rules"]'))return;
     const coin=String(data.asset||'').split(':').at(-1).toUpperCase(),footer=card.querySelector('.bp-card-foot');if(!footer)return;
-    for(const [action,label,block] of [['manage-rules','管理',false],['block-all','屏蔽三端',true]]){
-      const b=document.createElement('button');b.type='button';b.textContent=label;b.title=block?'立即屏蔽 '+coin+' 全部交易所的电脑消息、行情卡片和当前手机方案':'管理 '+coin+' 的三端规则';b.setAttribute('aria-label',b.title);b.dataset.action=action;b.className='bp-manage-rules';b.onclick=()=>openCardManager(coin,{block,onSaved:()=>{render();refresh();}});footer.insertBefore(b,footer.querySelector('.bp-radar'));
-    }
+    const b=document.createElement('button');b.type='button';b.textContent='管理';b.title='管理 '+coin+' 的三端规则';b.setAttribute('aria-label',b.title);b.dataset.action='manage-rules';b.className='bp-manage-rules';b.onclick=()=>openCardManager(coin,{onSaved:()=>{render();refresh();}});footer.insertBefore(b,footer.querySelector('.bp-radar'));
   }
   const wake=()=>{syncIdentity();render();refresh();};
   window.addEventListener('storage',wake);window.addEventListener('focus',wake);document.addEventListener('visibilitychange',()=>{if(!document.hidden)wake();});

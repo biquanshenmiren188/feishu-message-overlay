@@ -8,7 +8,10 @@ const scope=e=>e==='all'?'全部交易所':R.name(e),validCoin=c=>/^[\p{L}\p{N}.
 let base=new Map(),mode='matrix',originalCoin='',targets=[],action='',changes=[],queue=null,saving=false,generation=0;
 function snapshot(){const s=B.snapshot(),map=new Map();for(const c of channels)for(const r of s.profiles[c].coins){const k=key(c,r.coin,r.exchange);map.set(k,map.get(k)===true||r.enabled);}return map;}
 function decode(k,value){const [channel,coin,exchange]=k.split('|');return {channel,coin,exchange,before:value};}
-function rowMarkup(exchange,states={}){return `<div class="matrix-row"><label class="matrix-scope"><span>交易所范围</span><select data-matrix-scope>${[['all','全部交易所'],...R.exchanges.map(e=>[e[0],e[1]])].map(([v,n])=>`<option value="${v}" ${v===exchange?'selected':''}>${esc(n)}</option>`).join('')}</select></label>${channels.map(c=>`<label><span>${names[c]}</span><select data-matrix-channel="${c}" aria-label="${names[c]}状态"><option value="none" ${states[c]==null?'selected':''}>未设置</option><option value="on" ${states[c]===true?'selected':''}>已启用</option><option value="off" ${states[c]===false?'selected':''}>已停用</option></select></label>`).join('')}<button type="button" data-center-remove class="danger-text">删除本行</button></div>`;}
+function rowMarkup(exchange,states={}){
+ const desktopMode=states.desktop===true?'hide':states.mute===true?'mute':'none';
+ return `<div class="matrix-row"><label class="matrix-scope"><span>交易所范围</span><select data-matrix-scope>${[['all','全部交易所'],...R.exchanges.map(e=>[e[0],e[1]])].map(([v,n])=>`<option value="${v}" ${v===exchange?'selected':''}>${esc(n)}</option>`).join('')}</select></label><label><span>电脑推送</span><select data-matrix-desktop-mode aria-label="电脑推送">${[['hide','电脑屏蔽'],['mute','电脑静音'],['none','未设置']].map(([v,n])=>`<option value="${v}" ${v===desktopMode?'selected':''}>${n}</option>`).join('')}</select>${['desktop','mute'].map(c=>`<input type="hidden" data-matrix-channel="${c}" value="${states[c]==null?'none':states[c]?'on':'off'}">`).join('')}</label>${['cards','mobile'].map(c=>`<label><span>${names[c]}</span><select data-matrix-channel="${c}" aria-label="${names[c]}状态"><option value="none" ${states[c]==null?'selected':''}>未设置</option><option value="on" ${states[c]===true?'selected':''}>已启用</option><option value="off" ${states[c]===false?'selected':''}>已停用</option></select></label>`).join('')}<button type="button" data-center-remove class="danger-text">删除本行</button></div>`;
+}
 function setup(title){
  if(saving)return false;queue=null;changes=[];$('#center-fields').disabled=false;$('#center-save').hidden=false;$('#center-retry').hidden=true;$('#center-cancel').textContent='取消';$('#center-error').textContent='';$('#center-results').textContent='';$('#coin-manager-title').textContent=title;$('#center-context').textContent=(window.RadarCoinAPI?.planLabel()||'当前推送码方案')+' · 保存后同步生效';
  if(!$('#coin-manager').open)$('#coin-manager').showModal();return true;
@@ -16,7 +19,7 @@ function setup(title){
 function matrix(coin){
  if(!setup(coin?'管理 '+coin+' 的规则':'添加币种规则'))return;
  mode='matrix';originalCoin=coin||'';base=snapshot();const scopes=[...new Set([...base.keys()].map(k=>k.split('|')).filter(x=>x[1]===originalCoin).map(x=>x[2]))];
- $('#coin-manager-body').innerHTML=`<label class="stack-label center-symbol">币种<input id="center-coin" value="${esc(originalCoin)}" placeholder="例如 PTB" autocomplete="off" maxlength="32" required></label><p class="helper">四类规则独立设置；电脑屏蔽优先于静音。未设置的渠道可直接选择“已启用”。</p><div id="matrix-rows">${(scopes.length?scopes:['all']).map(e=>rowMarkup(e,Object.fromEntries(channels.map(c=>[c,base.get(key(c,originalCoin,e))??null])))).join('')}</div><button type="button" id="center-add-scope">＋ 添加交易所范围</button>`;review();
+ $('#coin-manager-body').innerHTML=`<label class="stack-label center-symbol">币种<input id="center-coin" value="${esc(originalCoin)}" placeholder="例如 PTB" autocomplete="off" maxlength="32" required></label><p class="helper">电脑推送可选择电脑屏蔽、电脑静音或未设置；行情卡片和手机推送分别设置，保存后生效。</p><div id="matrix-rows">${(scopes.length?scopes:['all']).map(e=>rowMarkup(e,Object.fromEntries(channels.map(c=>[c,base.get(key(c,originalCoin,e))??null])))).join('')}</div><button type="button" id="center-add-scope">＋ 添加交易所范围</button>`;review();
 }
 function batch(rows,kind){
  if(!rows.length)return;const label={block:'屏蔽三端',mute:'仅静音',pause:'停用规则',delete:'删除规则'}[kind];if(!setup(label+' · '+rows.length+' 项'))return;
@@ -62,7 +65,12 @@ function undo(op){
  queue=[{requestId:crypto.randomUUID(),changes,undoOf:op.id}];$('#coin-manager-body').innerHTML='<p>仅恢复本次已删除的规则。若规则已重新设置，将提示冲突，不覆盖新设置。</p>';$('#center-changes').innerHTML='<ul>'+changes.map(c=>'<li>'+esc(describe(c))+'</li>').join('')+'</ul>';$('#center-change-count').textContent=changes.length;$('#center-save').disabled=!changes.length;$('#center-save').textContent='恢复 '+changes.length+' 项规则';
 }
 $('#center-form').addEventListener('submit',e=>{e.preventDefault();if(!queue){review();if(!changes.length||$('#center-save').disabled)return;queue=[];for(let i=0;i<changes.length;i+=40)queue.push({requestId:crypto.randomUUID(),changes:changes.slice(i,i+40)});}execute();});
-$('#center-fields').addEventListener('input',review);$('#center-fields').addEventListener('change',review);
+function updateDesktopMode(e){
+ const select=e.target.closest('[data-matrix-desktop-mode]');
+ if(select){const row=select.closest('.matrix-row');for(const channel of ['desktop','mute'])row.querySelector(`[data-matrix-channel="${channel}"]`).value=select.value===(channel==='desktop'?'hide':'mute')?'on':'none';}
+ review();
+}
+$('#center-fields').addEventListener('input',updateDesktopMode);$('#center-fields').addEventListener('change',updateDesktopMode);
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='center-add-scope'){const used=[...document.querySelectorAll('[data-matrix-scope]')].map(s=>s.value),next=['all',...R.exchanges.map(e=>e[0])].find(x=>!used.includes(x));if(!next)return B.toast('所有交易所范围都已列出');$('#matrix-rows').insertAdjacentHTML('beforeend',rowMarkup(next));review();}if(b.hasAttribute('data-center-remove')){b.closest('.matrix-row').remove();review();}if(['coin-manager-close','center-cancel'].includes(b.id)&&!saving)$('#coin-manager').close();if(b.id==='center-retry')execute();});
 $('#coin-manager').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
 for(const event of ['radar-profile-changing','radar-mobile-loaded'])document.addEventListener(event,()=>{generation++;if($('#coin-manager').open)$('#coin-manager').close();queue=null;});
