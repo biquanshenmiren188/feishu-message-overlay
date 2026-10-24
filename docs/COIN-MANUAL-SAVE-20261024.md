@@ -8,4 +8,14 @@
 
 运行浏览器检查需可用的 Playwright/Chromium；设置 NODE_PATH 指向已有包目录，并设置 RADAR_BROWSER_TESTS=1，使依赖缺失时失败。RADAR_TEST_SCREENSHOT_DIR 可指定截图输出目录。
 
-发布脚本 scripts/deploy-card-manual-save.py 只替换六项静态资产，从锁内实际 current 克隆，核对目标基线哈希并保留其他文件。刷新 policy/manager/CSS 与设置页缓存引用，更新 BOT 内容哈希 bundle 和独立 PWA fallback。核对所有运行中服务 PID、各码规则及订阅保持；失败只回滚代码，不恢复旧用户数据。部署源码与版本在验收后补记。
+发布脚本 scripts/deploy-card-manual-save.py 只替换六项静态资产，从锁内实际 current 克隆，核对目标基线哈希并保留其他文件。刷新 policy/manager/CSS 与设置页缓存引用，更新 BOT 内容哈希 bundle 和独立 PWA fallback。核对所有运行中服务 PID、各码规则及订阅保持；失败只回滚代码，不恢复旧用户数据。
+
+## 发布验收
+
+- 功能源码：`0bb64505c965dd508eeba411315b19659ed867af`。
+- 当前版本：`/opt/funding-radar-web/releases/20261024-card-manual-save-1792851483-014cf6`。
+- 前版：`20261024-desktop-binding-1792849864`；代码备份在 `/opt/funding-radar-web/backups/20261024-card-manual-save-1792851483-014cf6`。
+- 新 BOT bundle：`performance-20261017/bot-cards-68efcd61ca2a.js`；BOT 与 PWA fallback 引用同步。
+- 发布校验通过：3292 个非目标文件、各码规则/操作日志/手机订阅和全部运行中服务 PID 保持。
+- 正式浏览器刷新确认外部重复按钮消失，卡片管理和设置页管理均显示“电脑推送”三选一；进入已有 BTW 规则显示零改动、保存禁用，没有提交真实规则。
+- GitHub PR #46 待合并。Windows build 未启动，GitHub 注明账户付款/支出限制；182 项本地检查与30个隔离浏览器场景通过，不将其表述为远端 CI 通过。此更新只涉及网页静态资源，未发布桌面安装包。
