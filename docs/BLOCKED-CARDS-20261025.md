@@ -24,5 +24,6 @@
 - 提交后候选与浏览器测试资产逐字节一致；5份候选资产已验证，BOT 与 PWA 均加载 `bot-cards-bad2bcae5dcc.js`，fallback SHA256 `f045508e1d5284de5b5a403c567f29b77bcd40cfd01de585fcd2d399fcc5d291`。
 - 保留3333个非目标文件，所有规则、订阅绑定和运行服务PID核验一致。主站同周期筛选、手机滚动修复和共享30秒截止保留。
 - 正式 Chrome 导航遇到 Cloudflare Access 登录页，会话已失效，未绕过访问保护，未声称正式登录后的视觉验收。实际候选的 Chromium/WebKit 双入口与手机尺寸检查均已通过。
+- PR #48 的 GitHub Windows build 未启动：检查注释明确为账户付款失败或支出额度限制，steps 为空；这不是本地网页测试失败，也未声称托管 CI 通过。
 
 回滚持相同 guard.lock，将 current 原子切回前版并恢复备份 PWA fallback；只恢复代码，不修改业务状态。
