@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达币种屏蔽、电脑消息、行情卡片与手机推送设置"><link rel="stylesheet" href="style.css?v=20261024-github1"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>消息设置 · 资金费雷达</title><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><meta name="theme-color" content="#f5f5f7"><meta name="description" content="资金费雷达币种屏蔽、电脑消息、行情卡片与手机推送设置"><link rel="stylesheet" href="style.css?v=20261024-clarity1"></head>
 <body>
 <header class="masthead"><a class="brand" href="/radar/robot-push/" aria-label="资金费雷达，返回 BOT"><img src="/radar/radar-brand-treasure-v2.svg" width="154" height="46" alt="资金费雷达"></a><a class="preview-pill" href="/radar/robot-push/">返回 BOT</a></header>
 <nav class="site-nav" aria-label="资金费雷达导航"><a href="/radar/?tab=market">全市场费率</a><a href="/radar/?tab=FF&amp;mode=FF">机会筛选</a><a href="/radar/?panel=transfer">充提查询</a><a href="/radar/robot-push/">BOT</a><a href="/radar/position-limits/">HY限额查询</a><a href="/radar/robot-push/settings/" aria-current="page">消息设置</a></nav>
@@ -18,7 +18,7 @@
 <section id="panel-coins" role="region" aria-labelledby="tab-coins"><section class="section">
 <div class="section-heading"><div><h2>已屏蔽币种 <span class="count" id="blocked-count">0</span></h2><p>按币种与交易所范围管理；状态仅表示币种规则。</p></div><button class="text-button" id="add-blocked-coin">＋ 添加屏蔽</button></div>
 <div class="coin-toolbar"><input type="search" id="blocked-search" aria-label="搜索已屏蔽币种" placeholder="搜索币种"><select id="blocked-filter" aria-label="筛选屏蔽状态"><option value="all">全部状态</option><option value="all-blocked">三端已屏蔽</option><option value="partial">部分屏蔽</option><option value="mute">仅静音</option></select><button id="refresh-coins">刷新</button></div>
-<p class="helper" id="coin-sync-status" role="status">正在载入已保存规则…</p><div class="coin-batch"><label><input type="checkbox" id="select-visible">选择当前列表</label><span id="selected-count" role="status">已选 0 项</span><div class="batch-tools"><button id="batch-block" class="text-button" disabled>屏蔽三端</button><button id="batch-mute" disabled>仅静音</button><button id="batch-pause" disabled>停用</button><button id="batch-delete" class="danger-text" disabled>删除所选规则</button><button id="clear-selected" hidden>取消选择</button></div></div><div id="blocked-list"></div>
+<p class="helper" id="coin-sync-status" role="status">正在载入已保存规则…</p><div class="coin-batch"><label><input type="checkbox" id="select-visible">选择当前列表</label><span id="selected-count" role="status">已选 0 项</span><div class="batch-tools"><button id="batch-block" class="text-button" disabled>屏蔽三端</button><button id="batch-mute" disabled>仅静音</button><button id="batch-pause" disabled>正常推送</button><button id="batch-delete" class="danger-text" disabled>删除所选规则</button><button id="clear-selected" hidden>取消选择</button></div></div><div id="blocked-list"></div>
 <p class="helper">仅静音保留消息显示；同时命中电脑屏蔽时优先隐藏消息。<span id="coin-plan-label"></span></p>
 <div id="coin-operation-result" role="status"></div><details class="operation-history"><summary>规则操作记录 <span id="operation-count">0</span></summary><p class="helper">记录保存结果；实际拦截记录请进入对应子菜单查看。保留最近100次操作，可展开查看变更及撤销删除。</p><div id="coin-operations"></div></details>
 </section></section>
@@ -50,6 +50,6 @@
 <dialog id="coin-manager" aria-labelledby="coin-manager-title"><form id="center-form"><div class="dialog-title"><h2 id="coin-manager-title">管理币种规则</h2><button type="button" id="coin-manager-close" aria-label="关闭规则管理">×</button></div><p class="helper" id="center-context"></p><fieldset id="center-fields"><div id="coin-manager-body"></div></fieldset><section class="center-review"><h3>本次修改 <span id="center-change-count">0</span></h3><div id="center-changes"></div><p class="helper">只保存本次改动，其他规则与草稿保留。修改币种或交易所会列为删除原规则、添加新规则。</p></section><p id="center-error" class="error" role="alert"></p><div id="center-results" role="status"></div><div class="dialog-actions"><button type="button" id="center-cancel">取消</button><button type="button" id="center-retry" hidden>重试未完成项</button><button class="primary" type="submit" id="center-save" disabled>保存修改</button></div></form></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="rules.js?v=20261024-binding1"></script><script src="app.js?v=20261024-binding1"></script>
-<script src="coin-list.js?v=20261024-binding1"></script><script src="coin-center.js?v=20261024-binding1"></script>
+<script src="coin-list.js?v=20261024-clarity1"></script><script src="coin-center.js?v=20261024-clarity1"></script>
 <script type="module" src="/radar/robot-push/notification-settings.js?v=20261024-binding1"></script>
 </body></html>

@@ -17,6 +17,15 @@ class DesktopRulesTest(unittest.TestCase):
   return self.app.configure(dict(revision=state['revision'],channel=channel,settings=s,action=action))
  def test_defaults_do_not_change_delivery_or_write_settings(self):
   d=self.app.evaluate();self.assertEqual(d['messages'],{});self.assertEqual(d['cards'],{});self.assertFalse(self.app.path.exists())
+ def test_new_profile_evaluates_shared_retained_history_and_active_pair_wins(self):
+  now=time.time();card=json.loads(self.cards.read_text())['snapshot']['active'][0]
+  self.cards.write_text(json.dumps(dict(snapshot=dict(complete=True,active=[],retained=[dict(card=card,expiredAt=datetime.fromtimestamp(now-5,timezone.utc).isoformat())]))))
+  self.configure('cards',change=lambda s:s['excluded_coins'].append('BTC'))
+  self.assertEqual(self.app.web_cards()['decisions']['pair-one'],'hide')
+  self.assertEqual(self.app.evaluate()['cards'],{'pair-one':'hide'})
+  self.assertAlmostEqual(self.app.card_cache['pair-one']['missing'],now-5,places=3)
+  state=json.loads(self.cards.read_text());state['snapshot']['active']=[card];self.cards.write_text(json.dumps(state))
+  self.app.evaluate();self.assertIsNone(self.app.card_cache['pair-one']['missing'])
  def test_web_cards_only_uses_card_rules_without_desktop_heartbeat(self):
   self.configure(action='mute',change=lambda s:s['excluded_coins'].append('BTC'))
   self.assertEqual(self.app.web_cards()['decisions'],{'pair-one':'allow'})

@@ -160,13 +160,19 @@ class DesktopRules:
         # evaluating those exact cards too, including after edits or a restart.
         before=json.dumps(self.card_cache,sort_keys=True)
         snapshot=envelope.get('snapshot') or {};present=set()
-        for card in snapshot.get('active',[])[:1000]:
+        retained={entry['card'].get('pair') or entry['card'].get('id',''):entry for entry in snapshot.get('retained',[])[:1000]}
+        current=snapshot.get('active',[])[:1000]
+        current_ids={card.get('pair') or card.get('id','') for card in current}
+        candidates=current+[entry['card'] for key,entry in retained.items() if key not in current_ids]
+        for card in candidates:
             identity=card.get('pair') or card.get('id','')
             if not identity or len(identity)>512:continue
             present.add(identity)
             data={k:card.get(k) for k in ('id','pair','asset','strategy','v2Residual','validUntil')}
             data['details']={'legs':[{'exchange':leg.get('exchange')} for leg in card.get('details',{}).get('legs',[])[:2]]}
-            self.card_cache[identity]={'card':data,'missing':None}
+            entry=retained.get(identity) if identity not in current_ids else None
+            missing=datetime.fromisoformat(entry['expiredAt'].replace('Z','+00:00')).timestamp() if entry else None
+            self.card_cache[identity]={'card':data,'missing':missing}
         for identity,entry in list(self.card_cache.items()):
             if identity not in present and snapshot.get('complete') and entry['missing'] is None:entry['missing']=now
             try:expires=datetime.fromisoformat(entry['card']['validUntil'].replace('Z','+00:00')).timestamp()
