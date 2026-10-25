@@ -15,3 +15,14 @@
 - 发布器只更新 card-policy.js/CSS、内容哈希 bundle、BOT/PWA 入口和版本记录；克隆真实 current，守卫相关静态基线、fallback、规则、绑定和所有运行服务 PID。失败仅回滚代码，不恢复用户状态。无桌面安装或服务重启。
 
 脚本：`prepare-blocked-cards.py`、`deploy-blocked-cards.py`、`verify-blocked-cards.cjs`。生产发布记录在验收后追加。
+
+## 正式发布记录
+
+- 功能源码：`9f8a432cee55f584b95110785bab12ed62d949f2`。
+- release：`20261025-blocked-cards-1792912109-f17dd9`。
+- 回滚目标：`20261025-card-retention-1792858266-82769a`；备份：`/opt/funding-radar-web/backups/20261025-blocked-cards-1792912109-f17dd9`，含旧 PWA fallback 和发布清单。
+- 提交后候选与浏览器测试资产逐字节一致；5份候选资产已验证，BOT 与 PWA 均加载 `bot-cards-bad2bcae5dcc.js`，fallback SHA256 `f045508e1d5284de5b5a403c567f29b77bcd40cfd01de585fcd2d399fcc5d291`。
+- 保留3333个非目标文件，所有规则、订阅绑定和运行服务PID核验一致。主站同周期筛选、手机滚动修复和共享30秒截止保留。
+- 正式 Chrome 导航遇到 Cloudflare Access 登录页，会话已失效，未绕过访问保护，未声称正式登录后的视觉验收。实际候选的 Chromium/WebKit 双入口与手机尺寸检查均已通过。
+
+回滚持相同 guard.lock，将 current 原子切回前版并恢复备份 PWA fallback；只恢复代码，不修改业务状态。
