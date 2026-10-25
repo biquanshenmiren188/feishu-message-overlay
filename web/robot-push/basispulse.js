@@ -1,6 +1,6 @@
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,preserveCardViewport} from './mobile-scroll.js';
-import {createCardPolicy} from './card-policy.js?v=20261024-clarity1';
+import {createCardPolicy} from './card-policy.js?v=20261025-blocked1';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261025-retention1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
 import { radarMatrix } from './basispulse-transfers.js?v=push-traffic-20261009';
@@ -55,7 +55,7 @@ function renderCards(deferStructure) {
   empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
   cardPolicy.summary(rows);
 }
-const cardPolicy=createCardPolicy(tools,render);
+const cardPolicy=createCardPolicy(tools,render,{preserveViewport:preserveCardViewport,renderCard:c=>cardNode(c,radarMatrix(c.data.details?.legs||[],()=>null,Date.now(),c.data.details?.transferWallets||[]))});
 subscribePush('basispulse',{
   data(next){
     envelope=next;failed=false;model.ingest(envelope);
