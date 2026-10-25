@@ -25,7 +25,7 @@ for(const [name,compiled] of renderers)test('shared thirty second retention rend
  .replace(/'\.\/basispulse-card\.js[^']*'/,"'/card.js'").replace(/'\.\/basispulse-transfers\.js[^']*'/,"'/transfers.js'")+`\nwindow.tick=render;window.ready=true;`;
  const files={'/harness.js':harness,'/model.js':model,'/card.js':stub,'/policy.js':policy,
  '/subscription.js':`export function subscribePush(name,handler){window.ingest=e=>handler.data(e);}`,
- '/scroll.js':`export const mobileScrollGate={defer:()=>window.defer};`,
+ '/scroll.js':`export const mobileScrollGate={defer:()=>window.defer};export const preserveCardViewport=(board,fn)=>fn();`,
  '/transfers.js':`export const radarMatrix=()=>[];`};
  await context.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin!=='https://retention.test')return route.abort();
   if(files[u.pathname])return route.fulfill({contentType:'text/javascript',body:files[u.pathname]});

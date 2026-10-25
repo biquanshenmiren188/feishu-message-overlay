@@ -1,5 +1,5 @@
 import {subscribePush} from './push-subscription.js';
-import {mobileScrollGate} from './mobile-scroll.js';
+import {mobileScrollGate,preserveCardViewport} from './mobile-scroll.js';
 import {createCardPolicy} from './card-policy.js?v=20261024-clarity1';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261025-retention1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
@@ -21,6 +21,9 @@ const time = value => { const d = new Date(value); return Number.isFinite(+d) ? 
 function duration(value, now) { const n=Math.max(0,Math.floor((now-Date.parse(value))/1000)); return Number.isFinite(n) ? n>=3600?`${Math.floor(n/3600)}h ${Math.floor(n%3600/60)}m`:n>=60?`${Math.floor(n/60)}m ${n%60}s`:`${n}s` : '—'; }
 function render() {
   const deferStructure=mobileScrollGate.defer(render);
+  return preserveCardViewport(board,()=>renderCards(deferStructure));
+}
+function renderCards(deferStructure) {
   const now=Date.now(), rows=model.tick(now),commitValues=now-lastValuesAt>=DISPLAY_REFRESH_MS;
   if(commitValues&&!deferStructure)lastValuesAt=now;
   const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000 && Date.parse(envelope.receivedAt)<=now+30000 && Date.parse(envelope.snapshot?.sampledAt)<=now+30000;
@@ -37,7 +40,7 @@ function render() {
     const matrixStamp=JSON.stringify(matrix);
     if(!deferStructure && (!node || node.matrixStamp!==matrixStamp || commitValues&&node.stamp!==JSON.stringify([c.data,matrix]))) {
       const focus=node?.card.contains(document.activeElement)?document.activeElement.dataset.action:null;
-      const next=cardNode(c,matrix); cardPolicy.decorate(next.card,c.data); if(node)node.card.replaceWith(next.card); node=next;node.matrixStamp=matrixStamp; nodes.set(id,node);
+      const next=cardNode(c,matrix); next.card.dataset.pair=c.data.pair||''; cardPolicy.decorate(next.card,c.data); if(node)node.card.replaceWith(next.card); node=next;node.matrixStamp=matrixStamp; nodes.set(id,node);
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
     if(!node)continue;
