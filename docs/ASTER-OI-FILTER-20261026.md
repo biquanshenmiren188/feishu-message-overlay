@@ -19,4 +19,8 @@
 - 仅发布 `advanced_rules.py`，部署脚本 `scripts/deploy-aster-oi.py` 在 guard.lock 内验证旧/新哈希并备份；只重启 `radar-webpush-test`。静态 current、PWA、客户端、其他服务保持。
 - 发布前后校验各码规则、绑定和配置摘要；失败仅回滚代码，不回滚用户数据。部署记录保存在服务端备份目录的 result.json。
 
-实际发布提交、线上验收结果与回滚位置在发布完成后补充。
+实际部署源码 `76f21cad03324c12ee24bb54f8d769d149b89ae6`，安装文件 SHA256 `dec3312fff2f2d0f728b6720a4a91c069a81871035931a1813040f8283a09776`。
+
+回滚备份 `/opt/funding-radar-web/backups/20261026-aster-oi-1793013039/advanced_rules.py`；仅停止 radar-webpush-test、按现有权限原子恢复该文件并启动服务、检查 health，不恢复状态数据。静态版本仍为 `20261026-empty-combination-1792994284`。发布前后各码规则/绑定摘要一致，其他运行服务 PID 一致。
+
+服务器候选 102 项再次通过；已安装正式模块的隔离真实缓存检查确认 BULLA 两组 allow、桌面无阻挡、模拟过期 hide、恢复 fresh 后 allow。正式 Chrome 已刷新用户原 BOT 页并确认两张 BULLA 卡片回到正常列表、卡片入口显示「已屏蔽 0 张」。卡片当时仍为源站「待确认」，没有将其声称为活跃信号或可执行报价；这是行情源状态，与本次规则误屏蔽修复独立。没有发送测试通知、修改门槛或发布客户端安装包。
