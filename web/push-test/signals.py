@@ -6,7 +6,10 @@ EXCHANGES = {'BINANCE': 'BINANCE', 'BITGET': 'BITGET', 'BYBIT': 'BYBIT',
              'OKX': 'OKX', 'OKEX': 'OKX', 'GATE': 'GATE', 'GATE.IO': 'GATE',
              'ASTER': 'ASTER', 'HYPERLIQUID': 'HL', 'HL': 'HL', 'HYPER': 'HL', 'HY': 'HL'}
 RANK = re.compile(r'(?<![A-Z0-9])R([0-9]{1,24})(?=\s|[+-])(\+(?=\s))?\s*([+-]?\d+(?:\.\d+)?)\s*%(?![\d.])', re.I)
-TITLE = re.compile(r'^\s*([A-Z0-9][A-Z0-9._-]{0,23})\s*[|·]\s*(SF|FS|FF)\b', re.I)
+# Accept Unicode symbols up to the coin rules' 32-character limit. A namespace
+# remains part of the identity; never turn xyz:ABC into the unrelated ABC coin.
+COIN = r'\w[\w.:-]{0,31}'
+TITLE = re.compile(r'^\s*('+COIN+r')\s*[|·]\s*(SF|FS|FF)\b', re.I)
 DIRECTION = re.compile(r'(?:买入|买|做多)\s*([A-Z][A-Z0-9.]*)\s*(现货|永续|合约)?\s*(?:→|->|⇒)\s*(?:卖出|卖|做空)\s*([A-Z][A-Z0-9.]*)\s*(现货|永续|合约)?', re.I)
 
 
@@ -27,7 +30,7 @@ def clean(value):
     return unicodedata.normalize('NFKC', value).replace('**', '').replace('`', '')
 
 
-def message_fields(message, now):
+def message_fields(message, now, *, max_age=1800):
     if not isinstance(message, dict) or message.get('senderType') != 'bot':
         return None
     mid, title, body = (message.get(k) for k in ('id', 'title', 'body'))
@@ -36,13 +39,13 @@ def message_fields(message, now):
         return None
     if not isinstance(title, str) or not isinstance(body, str) or len(title) > 1024 or len(body) > 16000:
         return None
-    if sent is None or sent > now + 30 or now - sent > 1800:
+    if sent is None or sent > now + 30 or (max_age is not None and now - sent > max_age):
         return None
     return mid, clean(title), clean(body), sent
 
 
-def parse_message(message, now):
-    source = message_fields(message, now)
+def parse_message(message, now, *, max_age=1800):
+    source = message_fields(message, now, max_age=max_age)
     if source is None:
         return None
     mid, title, body, sent = source
@@ -67,19 +70,23 @@ def parse_message(message, now):
     return dict(fields, id=mid, at=int(sent), fingerprint=digest(fields))
 
 
-def parse_messages(message, now):
+def parse_messages(message, now, *, max_age=1800):
     """Ordinary rank percentage, or explicit per-route strong-signal blocks."""
-    single = parse_message(message, now)
+    single = parse_message(message, now, max_age=max_age)
     if single is not None:
         return [single]
-    source = message_fields(message, now)
+    source = message_fields(message, now, max_age=max_age)
     if source is None:
         return []
     mid, title, body, sent = source
-    header = re.fullmatch(r'\s*(?:🚨\s*)*强信号聚集\s*[|·]\s*([A-Z0-9][A-Z0-9._-]{0,23})\s*[|·]\s*(\d{1,2})\s*组同时\s+ACTIVE\s*', title, re.I)
+    header = re.fullmatch(r'\s*(?:🚨\s*)*强信号聚集\s*[|·]\s*('+COIN+r')\s*[|·]\s*(\d{1,2})\s*组同时\s+ACTIVE\s*', title, re.I)
     if not header or not 1 <= int(header[2]) <= 50:
         return []
-    blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
+    # The observed V2 source adds this fixed window before each route's net
+    # value. Keep the value on the immediately following line and require all
+    # declared groups; headline percentages and adjacent routes are not values.
+    net_prefix = r'(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?'
+    blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*'+net_prefix+r'净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
     if len(blocks) != int(header[2]):
         return []
     result = []
@@ -101,5 +108,63 @@ def parse_messages(message, now):
         # Each route has its own identity and still deduplicates with normal
         # signals through the existing content fingerprint.
         result.append(dict(fields, id=digest([mid, fields]), at=int(sent), fingerprint=digest(fields)))
+    return result
+
+
+def desktop_rows(message, now):
+    """Filter retained desktop history, independently of the mobile send window.
+
+    Only explicit source formats produce rows. P-priority and topic take prices
+    are not R ranks or R percentages, so they keep coin/route/OI checks only.
+    """
+    rows=parse_messages(message,now,max_age=None)
+    if rows:return rows
+    fields=message_fields(message,now,max_age=None)
+    if not fields:return []
+    mid,title,body,sent=fields
+    result=[]
+
+    def add(coin,mode,buy,sell,buy_kind='',sell_kind='',**extra):
+        buy,sell=EXCHANGES.get(buy.upper()),EXCHANGES.get(sell.upper())
+        invalid=not buy or not sell or (buy==sell and mode=='FF') or any(
+            kind and ('S' if kind=='现货' else 'F')!=expected
+            for kind,expected in zip((buy_kind,sell_kind),mode))
+        row=dict(id=mid,coin=coin.upper(),mode=mode,buy=buy or '',sell=sell or '',
+                 rank='',value='0%',at=sent,unranked=True)
+        row.update(extra)
+        if invalid:row['invalidSignal']=True
+        result.append(row)
+
+    # Actual source envelope and numbered entries, as used by the native and
+    # webpage summary parsers. Do not infer a topic from arbitrary prose.
+    topic=re.search(r'^\s*\[Binance\s*/\s*Aster\s+专题价差\]',title+'\n'+body,re.M|re.I)
+    if topic:
+        pattern=r'^\s*\d+[.、)]\s*('+COIN+r')\s*[|·]\s*多\s+([A-Z][A-Z0-9.]*)\s*/\s*空\s+([A-Z][A-Z0-9.]*)\s*$'
+        for coin,buy,sell in re.findall(pattern,body,re.M|re.I):
+            add(coin,'FF',buy,sell,invalidSignal=buy.upper() not in ('BINANCE','ASTER') or sell.upper() not in ('BINANCE','ASTER'))
+        return result
+
+    dex=r'^\s*\d+[.、)]\s*\[P\d+\+?\]\s*\[(期期|现期|期现|FF|SF|FS)\]\s*('+COIN+r')\s*[|·]\s*多\s+([A-Z][A-Z0-9.]*)(?:\s+(现货|合约|永续))?\s*/\s*(?:空|借卖)\s+([A-Z][A-Z0-9.]*)(?:\s+(现货|合约|永续))?\s*$'
+    for mode,coin,buy,bk,sell,sk in re.findall(dex,body,re.M|re.I):
+        add(coin,{'期期':'FF','现期':'SF','期现':'FS'}.get(mode,mode.upper()),buy,sell,bk,sk)
+    if result:return result
+
+    # Legacy topic titles can carry a normal R value. Preserve it if present;
+    # a malformed R signal must not masquerade as an intentionally unranked one.
+    head=re.search(r'(?:^|[|·])\s*('+COIN+r')\s*[|·]\s*(SF|FS|FF)\b',title,re.I)
+    if not head:return []
+    ranks=RANK.findall(title)
+    has_rank=re.search(r'(?<![\w])R\d',title,re.I) is not None
+    extra={}
+    if has_rank:
+        if len(ranks)==1 and len(ranks[0][2])<=12:
+            rank,suffix,value=ranks[0]
+            extra=dict(rank='R'+str(int(rank))+suffix,value=(value if value.startswith(('+','-')) else '+'+value)+'%',unranked=False)
+        else:extra=dict(invalidSignal=True,unranked=False)
+    directions=DIRECTION.findall(body)
+    for buy,bk,sell,sk in directions:
+        add(head[1],head[2].upper(),buy,sell,bk,sk,**extra)
+    if has_rank and not directions:
+        add(head[1],head[2].upper(),'','',**extra)
     return result
 

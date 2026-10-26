@@ -41,7 +41,10 @@ export function mobileSummary(message) {
       const signal=line.match(/^(R\d+\+?)\s*[｜|]\s*(SF|FS|FF)\s*[｜|]\s*买\s+(\S+)\s*→\s*卖\s+(\S+)/iu);
       if(!signal)continue;
       const next=lines[index+1]??'';
-      const value=(line+'\n'+(/^净均/u.test(next)?next:'')).match(/净均\s*([+−-]?\d+(?:\.\d+)?%)/u)?.[1];
+      // Only this route's inline value or its immediate, known-format detail
+      // line is eligible. Never borrow a headline maximum or another route.
+      const value=line.match(/净均\s*([+−-]?\d+(?:\.\d+)?%)/u)?.[1]
+        ??next.match(/^(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?净均[ \t]*([+−-]?\d+(?:\.\d+)?%)/u)?.[1];
       signals.push(`${signal[1]}｜${signal[2]}｜${abbreviation(signal[3])}→${abbreviation(signal[4])}${value?'｜'+value:''}`);
     }
     if(signals.length){

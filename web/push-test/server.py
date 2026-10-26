@@ -276,12 +276,17 @@ def handler(trial):
 
         def reply(self, status, value):
             raw = json.dumps(value, ensure_ascii=False).encode()
-            self.send_response(status)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('Content-Length', str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
+            try:
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Content-Length', str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # A closed peer cannot receive another error response. The
+                # operation may already be committed; never run it again here.
+                self.close_connection = True
 
         def do_GET(self):
             # This path is deliberately outside every public /radar proxy route.

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
 
 const source=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
-function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false,integratedAccount=false,responseHook=null}={}){
+function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false,workerVersion='radar-delivery-v6',integratedAccount=false,responseHook=null}={}){
  const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={},actions=[],emitted=[],windowEvents={};
  if(savedSelection)storage.set('radar-settings-token',savedSelection);
  class Element{
@@ -30,7 +30,7 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
  };
  const subscription={toJSON:()=>({endpoint:android?'https://fcm.googleapis.com/wp/synthetic':'https://fixture.push.apple.com/local',keys:{p256dh:'test',auth:'test'}})};
  const notification={permission:permission||(subscribed?'granted':'default'),requestPermission:async()=>{actions.push('permission');notification.permission=permission||'granted';return notification.permission}};
- const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:'radar-delivery-v6'})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
+ const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:typeof workerVersion==='function'?workerVersion(data.token):workerVersion})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
  class CustomEvent{constructor(type,options={}){this.type=type;this.detail=options.detail}}
  const context=vm.createContext({CustomEvent,document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
@@ -91,6 +91,45 @@ test('phone switch moves only its subscription then configures target worker and
  const moved=f.requests.find(r=>r.route==='switch-subscription');assert.equal(moved.auth,'owner-token');assert.equal(moved.body.targetToken,'other-token');
  assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.storage.get('radar-settings-token'),'other-token');
  assert.equal(f.workerTokens.at(-1),'other-token');assert.equal(f.requests.filter(r=>r.route==='device').at(-1).auth,'other-token');
+ assert.equal(f.storage.has('radar-phone-switch'),false);assert.equal(f.elements.get('ns-coins').value,'ETH');
+});
+
+test('dated v6 cache builds can switch iPhone and Android profiles without changing protocol',async()=>{
+ for(const workerVersion of ['radar-delivery-v6-20261018-treasure1','radar-delivery-v6-20261019-startup1'])for(const phone of [{ios:true},{android:true}]){
+  const f=fixture({...phone,subscribed:true,workerVersion});await settle(f);await f.run('load()');await switchCode(f,'87654321');
+  const moved=f.requests.filter(r=>r.route==='switch-subscription');assert.equal(moved.length,1);assert.equal(moved[0].auth,'owner-token');
+  assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.workerTokens.at(-1),'other-token');
+  assert.equal(f.requests.filter(r=>r.route==='device').at(-1).body.version,workerVersion);
+  assert.equal(f.storage.has('radar-phone-switch'),false);assert.equal(f.elements.get('ns-coins').value,'ETH');
+ }
+});
+
+test('other protocols and malformed v6 versions stay blocked before transferring a subscription',async()=>{
+ for(const workerVersion of ['radar-delivery-v5','radar-delivery-v7','radar-delivery-v60','radar-delivery-v5-20261019-startup1','radar-delivery-v7-20261019-startup1','radar-delivery-v6evil','radar-delivery-v6-','radar-delivery-v6-20261019-','radar-delivery-v6-startup1','radar-delivery-v6-20261019-STARTUP1','radar-delivery-v6-20261019-startup1/unknown','radar-delivery-v6-20261019-'+('x'.repeat(96)),null,6]){
+  const f=fixture({ios:true,subscribed:true,workerVersion});await settle(f);await f.run('load()');await switchCode(f,'87654321');
+  assert.equal(f.requests.some(r=>r.route==='switch-subscription'),false,`${workerVersion} must not transfer`);
+  assert.equal(f.storage.get('radar-test-token'),'owner-token');assert.equal(f.storage.has('radar-phone-switch'),false);
+  assert.match(f.elements.get('ns-message').textContent,/通知组件正在更新/);
+ }
+});
+
+test('pending switch recovery accepts a dated v6 build and reuses its original transfer request',async()=>{
+ let targetVersion='radar-delivery-v7';
+ const f=fixture({ios:true,subscribed:true,workerVersion:auth=>auth==='owner-token'?'radar-delivery-v6':targetVersion});
+ await settle(f);await f.run('load()');await switchCode(f,'87654321');
+ assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.storage.has('radar-phone-switch'),true);
+ assert.equal(f.elements.get('ns-save').disabled,true);const first=f.requests.find(r=>r.route==='switch-subscription');
+ targetVersion='radar-delivery-v6-20261019-startup1';await f.run('task(load)');
+ const attempts=f.requests.filter(r=>r.route==='switch-subscription');assert.equal(attempts.length,2);assert.deepEqual(attempts[1],first);
+ assert.equal(f.storage.has('radar-phone-switch'),false);assert.equal(f.elements.get('ns-save').disabled,false);
+ assert.equal(f.elements.get('ns-coins').value,'ETH');assert.equal(f.workerTokens.at(-1),'other-token');
+});
+
+test('dated v6 builds also switch a phone with no existing subscription',async()=>{
+ const f=fixture({ios:true,subscribed:false,workerVersion:'radar-delivery-v6-20261019-startup1'});
+ await settle(f);await f.run('load()');await switchCode(f,'87654321');
+ assert.equal(f.requests.some(r=>r.route==='switch-subscription'),false);
+ assert.equal(f.storage.get('radar-test-token'),'other-token');assert.equal(f.workerTokens.at(-1),'other-token');
  assert.equal(f.storage.has('radar-phone-switch'),false);assert.equal(f.elements.get('ns-coins').value,'ETH');
 });
 

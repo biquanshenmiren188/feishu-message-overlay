@@ -34,6 +34,9 @@ function selectIdentity(next){if(next===token)return;token=next;identityRevision
 function currentIdentity(auth,epoch){return auth===token&&epoch===identityRevision;}
 async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');return result;}
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
+// V6 adds profile-scoped delivery. Deployment cache versions may append a dated
+// build suffix; that does not change the worker protocol or require a rebind.
+const supportsProfileSwitch=version=>typeof version==='string'&&version.length<=96&&/^radar-delivery-v6(?:-\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(version);
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 if(standalone)for(const a of document.querySelectorAll('a[href="/radar/robot-push/settings/"]'))a.href=BASE+'settings/';
 const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -132,7 +135,7 @@ async function finishPhoneSwitch(){
  localStorage.setItem('radar-settings-token',operation.targetToken);
  deviceToken=operation.targetToken;selectIdentity(operation.targetToken);
  await workerConfigure(deviceToken,operation.profile);
- if(workerVersion!=='radar-delivery-v6')throw Error('通知组件正在更新，请重新打开雷达完成切换。');
+ if(!supportsProfileSwitch(workerVersion))throw Error('通知组件正在更新，请重新打开雷达完成切换。');
  await syncPhone();const plan=await readPlan(operation.targetToken);showPlan(plan);localStorage.removeItem('radar-phone-switch');return plan;
 }
 async function switchPhone(targetToken,plan){
@@ -144,7 +147,7 @@ async function switchPhone(targetToken,plan){
  const sub=await registration.pushManager.getSubscription();
  // Verify the new worker before changing any server binding.
  if(deviceToken)await configureWorker();
- if(workerVersion!=='radar-delivery-v6'){registration.update().catch(()=>{});throw Error('通知组件正在更新，请重新打开雷达后再切换。')}
+ if(!supportsProfileSwitch(workerVersion)){registration.update().catch(()=>{});throw Error('通知组件正在更新，请重新打开雷达后再切换。')}
  if(!sub){
   await workerConfigure(targetToken,plan.status.profileId);
   localStorage.setItem('radar-test-token',targetToken);deviceToken=targetToken;phone=null;

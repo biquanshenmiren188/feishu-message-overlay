@@ -2,6 +2,7 @@ import copy,json,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
 from advanced_rules import DEFAULT,validate,reasons,OISnapshot
+from oi_source_cache import OISourceCache
 from preferences import DEFAULTS,matches
 from live import Live
 from live_test import message
@@ -45,7 +46,7 @@ class AdvancedTests(unittest.TestCase):
   self.a=copy.deepcopy(DEFAULT);self.a['exchangeOI']['binance']=dict(mode='custom',value=None)
   with self.assertRaises(ValueError):validate(self.a)
  def test_cache_exact_symbol_and_no_unconfigured_fetch(self):
-  snap=OISnapshot()
+  sources=OISourceCache();self.addCleanup(sources.close);snap=OISnapshot(source_cache=sources)
   with patch.object(snap,'_read') as read:
    snap.enrich([self.row],self.a,self.now);read.assert_not_called()
   self.a['globalOI']=100

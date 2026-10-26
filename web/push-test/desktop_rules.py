@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import preferences
 from advanced_rules import DEFAULT as ADVANCED, OISnapshot, VENUES, symbol
-from signals import parse_messages, message_fields, DIRECTION, EXCHANGES
+from signals import desktop_rows, EXCHANGES
 
 def defaults():
     return dict(settings=dict(copy.deepcopy(preferences.DEFAULTS), advanced=copy.deepcopy(ADVANCED)), action='hide')
@@ -118,20 +118,7 @@ class DesktopRules:
 
     @staticmethod
     def rows(message, now):
-        rows=parse_messages(message,now)
-        if rows:return rows
-        # Topic cards can omit an R value. Still enforce coin / route / OI.
-        fields=message_fields(message,now)
-        if not fields:return []
-        mid,title,body,sent=fields
-        head=re.search(r'(?:^|[|｜·])\s*([\w.-]{1,32})\s*[|｜·]\s*(SF|FS|FF)\b',title,re.I)
-        directions=DIRECTION.findall(body)
-        if not head:return []
-        out=[]
-        for buy,bk,sell,sk in directions:
-            buy,sell=EXCHANGES.get(buy.upper()),EXCHANGES.get(sell.upper())
-            if buy and sell:out.append(dict(id=mid,coin=head[1].upper(),mode=head[2].upper(),buy=buy,sell=sell,rank='',value='0%',at=sent,unranked=True))
-        return out
+        return desktop_rows(message,now)
 
     def decision(self, channel, identity, rows, now):
         policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide'
@@ -142,6 +129,18 @@ class DesktopRules:
                 checked=copy.deepcopy(rows)
                 self.oi.enrich(checked,rule.get('advanced',ADVANCED),now)
                 for row in checked:
+                    if row.get('invalidSignal'):
+                        # Default receive-all still includes malformed source
+                        # messages. With filters, an explicit trading signal
+                        # cannot bypass checks by pretending to be unranked.
+                        advanced=rule.get('advanced',{})
+                        filtered=(rule.get('min_percent') is not None or any(rule.get(k) for k in
+                                  ('excluded_ranks','excluded_modes','excluded_coins','excluded_exchanges'))
+                                  or advanced.get('globalOI') is not None
+                                  or any(r.get('enabled') for k in ('coins','legRules','coinOI') for r in advanced.get(k,[]))
+                                  or any(r.get('mode')=='custom' for r in advanced.get('exchangeOI',{}).values()))
+                        if filtered:reasons.append('信号等级或方向数据无效')
+                        continue
                     check=rule if not row.get('unranked') else dict(rule,min_percent=None,excluded_ranks=[])
                     reasons.extend(preferences.exclusion_reasons(row,check))
                 if reasons:action=candidate;break
@@ -169,7 +168,7 @@ class DesktopRules:
             if not identity or len(identity)>512:continue
             present.add(identity)
             data={k:card.get(k) for k in ('id','pair','asset','strategy','v2Residual','validUntil')}
-            data['details']={'legs':[{'exchange':leg.get('exchange')} for leg in card.get('details',{}).get('legs',[])[:2]]}
+            data['details']={'legs':[{'exchange':leg.get('exchange'),'symbol':leg.get('symbol')} for leg in card.get('details',{}).get('legs',[])[:2]]}
             entry=retained.get(identity) if identity not in current_ids else None
             missing=datetime.fromisoformat(entry['expiredAt'].replace('Z','+00:00')).timestamp() if entry else None
             self.card_cache[identity]={'card':data,'missing':missing}
@@ -200,6 +199,7 @@ class DesktopRules:
             if len(legs)==2 and mode in ('SF','FS','FF'):
                 residual=card.get('v2Residual') or {};level=residual.get('level');bps=residual.get('bps')
                 rows=[dict(coin=card.get('asset','').split(':')[-1].upper(),mode=mode,buy=EXCHANGES.get(legs[0].get('exchange','').upper(),''),sell=EXCHANGES.get(legs[1].get('exchange','').upper(),''),rank='R'+str(level) if level is not None else '',value=str(bps/100 if type(bps) in (int,float) else 0)+'%',at=now,unranked=level is None or bps is None)]
+                rows[0]['oiContracts']={side:leg.get('symbol') for side,leg in zip(('left','right'),legs)}
             identity=card.get('pair') or card.get('id','')
             decisions[identity]=self.decision('cards',identity,rows,now) or 'allow'
         return decisions
