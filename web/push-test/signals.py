@@ -82,7 +82,11 @@ def parse_messages(message, now, *, max_age=1800):
     header = re.fullmatch(r'\s*(?:🚨\s*)*强信号聚集\s*[|·]\s*('+COIN+r')\s*[|·]\s*(\d{1,2})\s*组同时\s+ACTIVE\s*', title, re.I)
     if not header or not 1 <= int(header[2]) <= 50:
         return []
-    blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
+    # The observed V2 source adds this fixed window before each route's net
+    # value. Keep the value on the immediately following line and require all
+    # declared groups; headline percentages and adjacent routes are not values.
+    net_prefix = r'(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?'
+    blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*'+net_prefix+r'净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
     if len(blocks) != int(header[2]):
         return []
     result = []

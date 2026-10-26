@@ -57,6 +57,49 @@ class UnicodeHistoryTests(unittest.TestCase):
         self.assertNotEqual(rows[0]['id'],rows[1]['id'])
         self.assertEqual(rows,self.app.rows(message,self.now))
 
+    def strong_v2_message(self,**change):
+        # Synthetic values/coin, with the six-group envelope and per-route
+        # metadata prefix observed in the live source. No private feed fixture.
+        groups=[('R1','FF','BITGET','ASTER','+0.61'),('R1','SF','GATE','ASTER','+0.52'),
+                ('R2','FF','BINANCE','ASTER','+0.43'),('R3','SF','BINANCE','ASTER','+0.34'),
+                ('R6+','FF','BYBIT','ASTER','-0.25'),('R0','FF','OKX','ASTER','+0.16')]
+        body='最近180秒净收益均值最高 +9.99%\n'+'\n'.join(
+            f'{rank}｜{mode}｜买 {buy} → 卖 {sell}\nV2收敛 · 180秒 · 净均 {value}% · ACTIVE 2s'
+            for rank,mode,buy,sell,value in groups)
+        return self.message(title='🚨🚨 强信号聚集｜TOKEN｜6 组同时 ACTIVE',body=body,**change)
+
+    def test_strong_v2_metadata_keeps_per_route_values_rules_and_identity(self):
+        message=self.strong_v2_message();rows=parse_messages(message,self.now)
+        self.assertEqual([r['value'] for r in rows],['+0.61%','+0.52%','+0.43%','+0.34%','-0.25%','+0.16%'])
+        self.assertEqual([r['rank'] for r in rows],['R1','R1','R2','R3','R6+','R0'])
+        self.assertEqual(rows,self.app.rows(message,self.now))
+        legacy=dict(message,body=message['body'].replace('V2收敛 · 180秒 · ',''))
+        self.assertEqual(rows,parse_messages(legacy,self.now))
+        self.app.data['desktop']['rules']['hide']['excluded_ranks']=['R6+']
+        self.assertEqual(self.decision(message),'hide')
+
+    def test_strong_v2_rejects_incomplete_groups_and_unconfirmed_prefixes(self):
+        message=self.strong_v2_message();body=message['body']
+        variants=[body.replace('V2收敛 · 180秒 · 净均 +0.43% · ACTIVE 2s',''),
+                  body.replace('V2收敛 · 180秒 · ', '其他说明 · 180秒 · ',1),
+                  body.replace('V2收敛 · 180秒 · ', 'V3收敛 · 180秒 · ',1),
+                  body.replace('V2收敛 · 180秒 · ', 'V2收敛 · 181秒 · ',1),
+                  body.replace('净均 +0.43%', '资金费 +0.43%',1),
+                  body.replace('净均 +0.43%', '净均 +0.43',1),
+                  body.replace('买 OKX → 卖 ASTER','买 OKX → 卖 UNKNOWN',1),
+                  body+'\nR0｜FF｜买 OKX → 卖 ASTER\nV2收敛 · 180秒 · 净均 +0.99% · ACTIVE 1s']
+        for changed in variants:
+            with self.subTest(body=changed):
+                self.assertEqual(parse_messages(dict(message,body=changed),self.now),[])
+        self.assertEqual(parse_messages(dict(message,title=message['title'].replace('6 组','7 组')),self.now),[])
+
+    def test_strong_v2_history_still_obeys_mobile_freshness(self):
+        message=self.strong_v2_message(age=1801)
+        self.assertEqual(parse_messages(message,self.now),[])
+        self.assertEqual(len(self.app.rows(message,self.now)),6)
+        self.app.data['desktop']['rules']['hide']['excluded_coins']=['TOKEN']
+        self.assertEqual(self.decision(message),'hide')
+
     def test_old_retained_messages_keep_hide_and_mute(self):
         self.app.data['desktop']['rules']['hide']['excluded_coins']=['BULLA']
         for age in (1799,1801,86400,30*86400):

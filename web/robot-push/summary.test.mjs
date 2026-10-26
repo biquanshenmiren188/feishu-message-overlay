@@ -111,6 +111,24 @@ test('strong signals accept inline yields and do not borrow another route yield'
  const x=mobileSummary({title:'强信号｜TOKEN',body:'R6+｜FF｜买 OKX → 卖 BINANCE 净均 -0.12% · ACTIVE 7s\nR1｜SF｜买 GATE → 卖 BITGET\nR0｜FF｜买 BYBIT → 卖 BINANCE 净均 +0.24%'});
  assert.equal(x.signals,'R6+｜FF｜OK→BN｜-0.12%\nR1｜SF｜GT→BG\nR0｜FF｜BY→BN｜+0.24%');
 });
+test('strong signals retain each V2 convergence routes own 180-second net mean',()=>{
+ const values=['+0.1234%','-0.0200%','0.0000%','−0.0300%','+0.1400%','+0.2500%'];
+ const message={title:'强信号聚集｜TOKEN｜6 组同时 ACTIVE',body:'最近180秒净收益均值最高 +9.99%\n'+values.map((value,index)=>`R${index}｜FF｜买 ASTER → 卖 BINANCE\nV2收敛 · 180秒 · 净均 ${value} · ACTIVE 7s`).join('\n')};
+ const before=JSON.stringify(message),x=mobileSummary(message);
+ assert.equal(x.title,'强信号｜TOKEN｜6组');
+ assert.equal(x.signals,values.map((value,index)=>`R${index}｜FF｜AS→BN｜${value}`).join('\n'));
+ assert.equal(JSON.stringify(message),before);
+});
+test('strong signals reject unverified detail prefixes and never borrow a later yield',()=>{
+ for(const detail of ['V3收敛 · 180秒 · 净均 +9.99%','V2收敛 · 181秒 · 净均 +9.99%','其他说明 · 净均 +9.99%','V2收敛 · 180秒 · 净均 未知','V2收敛 · 180秒 · 盘口差 +9.99%']){
+  const x=mobileSummary({title:'强信号聚集｜TOKEN｜2 组同时 ACTIVE',body:`最高净均 +9.99%\nR1｜SF｜买 GATE → 卖 BITGET\n${detail}\n净均 +8.88%\nR2｜FF｜买 ASTER → 卖 BINANCE\nV2收敛 · 180秒 · 净均 -0.12% · ACTIVE 7s`});
+  assert.equal(x.signals,'R1｜SF｜GT→BG\nR2｜FF｜AS→BN｜-0.12%');
+ }
+});
+test('strong signals keep inline priority and accept horizontal spacing in verified details',()=>{
+ const x=mobileSummary({title:'强信号｜TOKEN',body:'R6+｜FF｜买 OKX → 卖 BINANCE 净均 -0.12%\nV2收敛 · 180秒 · 净均 +9.99%\nR1｜SF｜买 GATE → 卖 BITGET\nV2收敛\t·\t180秒\t·\t净均\t+0.0010% · ACTIVE 7s'});
+ assert.equal(x.signals,'R6+｜FF｜OK→BN｜-0.12%\nR1｜SF｜GT→BG｜+0.0010%');
+});
 test('never invents a route for announcements or a missing buy/sell direction',()=>{
  assert.equal(mobileSummary({title:'公告风险',body:'BITGET 暂停提现'}).title,'公告风险');
  assert.equal(mobileSummary({title:'EPIC｜V2收敛',body:''}).title,'EPIC｜V2收敛');
