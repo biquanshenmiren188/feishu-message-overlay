@@ -45,3 +45,12 @@ scripts/deploy-rule-audit.py 在guard锁内校验实际文件hash，备份并克
 - 正式Chrome刷新后消息源已连接，卡片显示“本方案规则已接入”“已屏蔽0张”；BULLA ASTER→BINANCE/GATE 正常显示。DOM确认加载 `notification-settings.js?v=20261026-audit-c83d888c`。没有修改真实方案或手机绑定。
 - 服务器请求公网静态文件被403拒绝，未以此宣称公网hash验证通过；安装hash由发布脚本核对，实际浏览器成功加载新版入口与页面。
 - 主站独立PR：`biquanshenmiren188/funding-radar#149`。本仓PR #50已更新，尚未合并。
+
+### V2强聚集后续正式补丁
+
+- 功能部署提交：`5d27ed73af210b107394f0ba09fd584f7b685596`。当前静态版本为 `/opt/funding-radar-web/releases/20261026-strong-v2-1793017112`，直接前版为 `20261026-hyperliquid-oi-1793016369`；备份位于 `/opt/funding-radar-web/backups/20261026-strong-v2-1793017112`。
+- 实际BOT摘要内联在生产bundle，独立summary.js并非正式入口。候选只改已锁hash的bundle内一个表达式，以及BOT/PWA入口的该bundle URL；后台仅替换signals.py。3384个无关静态文件保留，包括刚发布的主站OI修复；仅重启radar-webpush-test，规则/绑定摘要与其他服务PID不变。
+- 候选自身包含源码、测试及脚本hash；实际生产Xt函数运行28项摘要测试通过，精确候选signals运行140项后端测试通过。服务器用现行模块加候选signals再跑140项通过后发布。
+- 正式Chrome确认加载 `bot-cards-strong-v2-9696fea4a310b9ff.js`，消息源连接、方案规则接入正常。验收时之前的强聚集已移出保留队列，因此不把候选函数测试写成真实页面看到该历史6组；此前真实feed候选回算的6组恢复证据与最终脚本hash验证分别保留。
+- 安装后只读七所来源全部通过，当前保留消息31/31能被桌面规则解析，手机仍受新鲜度限制。服务active/running，日志自首批审计发布后未见Traceback/BrokenPipe/ConnectionReset；这是本次观察窗口的结果。
+- 主站发布提交为 `0a3fa7591aa7db4e7911f7399ec7c66ff514b911`；桌面原生摘要只提交源码与通过598 checks，未发布安装包。两仓PR均待合并。
