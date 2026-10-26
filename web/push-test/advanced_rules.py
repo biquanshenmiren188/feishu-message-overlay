@@ -88,16 +88,23 @@ class OISnapshot:
     """Read the site's existing normalized OI cache, never a different venue's OI.
 
     The shared relay reports double-v1 USD notional, matching the radar UI.
+    Aster is collected separately by market-stats, just as on the main site;
+    the relay's open-interest route does not support it. Its official website
+    value is already double-sided USDT. Preserve its observation timestamp and
+    basis: reading the cache must neither double the amount nor renew its age.
     Exact USDT symbols only; ambiguous aliases remain missing.
     """
     def __init__(self):self.cache={};self.at={}
     def _read(self,ex,now):
         try:
-            url='http://127.0.0.1:8787/api/open-interest?exchange='+ex+'&basis=double-v1'
+            url=('http://127.0.0.1:8792/api/market-stats' if ex=='aster' else
+                 'http://127.0.0.1:8787/api/open-interest?exchange='+ex+'&basis=double-v1')
             with urlopen(url,timeout=2) as response:
                 raw=response.read(8*1024*1024+1)
             if len(raw)>8*1024*1024:raise ValueError('oversize')
             data=json.loads(raw)
+            if ex=='aster':
+                return ex,data['asterOI'] if isinstance(data,dict) and isinstance(data.get('asterOI'),dict) else {}
             return ex,data['data'] if isinstance(data,dict) and data.get('basis')=='double-v1' and isinstance(data.get('data'),dict) else {}
         except (OSError,ValueError,TypeError):return ex,{}
     def enrich(self,rows,a,now):
