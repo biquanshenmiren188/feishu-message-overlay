@@ -60,7 +60,11 @@ class Live(Trial):
         with self.lock:
             self.state['device'] = dict(at=time.time(), permission=value['permission'],
                 subscribed=bool(fp), matches=fp == fingerprint(self.state.get('subscription')) and bool(fp),
-                version=value.get('version') if value.get('version') in ('radar-delivery-v4', 'radar-delivery-v5', 'radar-delivery-v6') else 'unknown')
+                # V6 production workers include a bounded build suffix. Keep
+                # it for diagnostics; v5's payload compatibility stays exact.
+                version=value['version'] if isinstance(value.get('version'),str) and len(value['version'])<=96 and (
+                    value['version'] in ('radar-delivery-v4','radar-delivery-v5') or
+                    re.fullmatch(r'radar-delivery-v6(?:-\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)?',value['version'])) else 'unknown')
             self.save()
             return self.state['device'].copy()
 

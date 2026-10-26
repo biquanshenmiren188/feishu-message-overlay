@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import datetime,timezone,timedelta
 from unittest.mock import patch
 from desktop_rules import DesktopRules
+from advanced_rules import OISnapshot
+from oi_source_cache import OISourceCache
 
 class DesktopRulesTest(unittest.TestCase):
  def setUp(self):
@@ -11,6 +13,7 @@ class DesktopRulesTest(unittest.TestCase):
   self.feed.write_text(json.dumps(dict(messages=[self.message])))
   self.cards.write_text(json.dumps(dict(snapshot=dict(complete=True,active=[dict(id='one',pair='pair-one',asset='BTC',strategy='FF',validUntil=(datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat(),v2Residual=dict(level=2,bps=113),details=dict(legs=[dict(exchange='binance'),dict(exchange='gate')]))]))))
   self.app=DesktopRules(self.root,self.feed,self.cards)
+  sources=OISourceCache();self.addCleanup(sources.close);self.app.oi=OISnapshot(source_cache=sources)
  def tearDown(self):self.tmp.cleanup()
  def configure(self,channel='desktop',action='hide',change=None):
   state=self.app.status();s=state[channel]['rules'][action] if channel=='desktop' else state[channel]['settings'];change(s)
@@ -73,9 +76,10 @@ class DesktopRulesTest(unittest.TestCase):
   with self.assertRaises(ValueError):self.app.configure(dict(revision=0,channel='desktop',settings=self.app.status()['desktop']['settings'],action='hide'))
  def test_oi_missing_and_equal_boundary(self):
   self.configure(change=lambda s:s['advanced'].update(globalOI=100))
-  now=time.time();self.app.oi._read=lambda ex,n:(ex,{ex+':BTCUSDT':dict(value=1e6,time=n*1000,basis='double-v1')})
+  now=time.time();values={ex:{ex+':BTCUSDT':dict(value=1e6,time=now*1000,basis='double-v1')} for ex in ('gate','binance')}
+  self.app.oi._read=lambda ex,n:(ex,values[ex])
   self.assertEqual(self.app.evaluate()['messages'],{})
-  self.app.oi.cache['gate']['gate:BTCUSDT']['value']=999999
+  values['gate']['gate:BTCUSDT']['value']=999999
   self.assertEqual(self.app.evaluate()['messages']['a'*64],'hide')
  def test_unranked_topic_keeps_coin_and_direction_checks(self):
   m=dict(self.message,title='专题｜BTC｜FF｜BN → GT')

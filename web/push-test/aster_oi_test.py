@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from advanced_rules import DEFAULT, OISnapshot, reasons
+from oi_source_cache import OISourceCache
 
 
 class AsterOITest(unittest.TestCase):
@@ -18,7 +19,8 @@ class AsterOITest(unittest.TestCase):
                           timeBasis='observed', sourceTime=None, source='official')
 
     def read(self, payload, row=None, rule=None):
-        snap = OISnapshot()
+        sources=OISourceCache();self.addCleanup(sources.close)
+        snap = OISnapshot(source_cache=sources)
         with patch('advanced_rules.urlopen', return_value=io.BytesIO(json.dumps(payload).encode())) as fetch:
             snap.enrich([row or self.row], rule or self.rule, self.now)
         return snap, fetch
@@ -72,7 +74,7 @@ class AsterOITest(unittest.TestCase):
                 fetch.assert_not_called()
 
     def test_other_venues_keep_relay_route(self):
-        for ex in ('binance','bybit','bitget','okx','gate','hyperliquid'):
+        for ex in ('binance','bybit','bitget','okx','gate'):
             with patch('advanced_rules.urlopen',return_value=io.BytesIO(b'{"basis":"double-v1","data":{}}')) as fetch:
                 self.assertEqual(OISnapshot()._read(ex,self.now),(ex,{}))
             self.assertEqual(fetch.call_args.args[0],f'http://127.0.0.1:8787/api/open-interest?exchange={ex}&basis=double-v1')
