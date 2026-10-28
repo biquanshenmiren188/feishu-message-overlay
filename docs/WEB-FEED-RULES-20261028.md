@@ -21,4 +21,12 @@
 
 本次不构建或发布 Windows 安装包，模拟 WebKit 手机视口不等于实体 iPhone 锁屏通知验收。生产只读核验，不发送测试消息、不改用户规则。
 
-上线版本、提交和正式页面检查结果在完成后补充。
+## 已部署及正式验收
+
+- 功能提交：`9db41b863f02ccf3fc46849576ea1bcfa8728809`；PR [#56](https://github.com/biquanshenmiren188/feishu-message-overlay/pull/56) 已推送、待合并。
+- 正式版本：`20261028-feed-rules-1793195745`，前版 `20261028-card-oi-1793159424`；备份在 `/opt/funding-radar-web/backups/20261028-feed-rules-1793195745`。
+- 服务器隔离候选再次通过完整 154 项 Python；部署目标 15 个文件全部哈希一致，保留 3412 个非目标文件。只重启 `radar-webpush-test`，其他运行服务及用户规则、绑定保持。
+- 正式接口健康正常；匿名决策请求 401、认证响应 no-store，原始方案与另外 14 个已有方案接口可读，决策读取不写规则文件，card-oi 仍可用。原始方案 revision 24 保持。
+- 正式 Chrome 加载新 bundle，主列表有 15 条其他消息，UNITREE 普通和置顶均为 0；“网页当前”显示被屏蔽的 15 条普通消息及 1 条置顶原文。卡片已屏蔽入口仍正常。以上数量为验收时快照，不是固定产品限制。
+- 截图在本任务 `outputs/feed-rules-live-20261028.jpg`，未上传用户消息原文到公开仓库。
+- GitHub Windows build 与 Cloud reader authorization 未启动，注释明确为账户付款/支出额度限制；不把本地和服务器验收称为云端 CI 通过。
