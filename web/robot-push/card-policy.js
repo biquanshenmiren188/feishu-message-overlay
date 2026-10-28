@@ -1,5 +1,6 @@
 /* The BOT and desktop share server-side card decisions, including OI/history. */
 import {openCardManager} from './card-manager.js?v=20261024-clarity1';
+import {paintCardOI} from './card-oi.js?v=20261028-2';
 export class CardPolicyState {
   constructor(){this.reset('');}
   reset(token){this.token=token;this.data=null;this.receivedAt=0;this.error='';this.access='unknown';}
@@ -36,18 +37,20 @@ export function createCardPolicy(toolbar,render){
   const token=()=>{try{return localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';}catch{return '';}};
   function syncIdentity(){const next=token();if(next!==identity){identity=next;identityRevision++;controller?.abort();state.reset(next);}return next;}
   async function refresh(){
-    const auth=syncIdentity();if(busy||document.hidden||!auth)return;
+    const auth=syncIdentity();if(busy||document.hidden)return;
     const revision=identityRevision;busy=true;controller=new AbortController();const timer=setTimeout(()=>controller.abort(),7000);
     try{
-      const res=await fetch('/radar/push-test/api/card-decisions',{headers:{Authorization:'Bearer '+auth},cache:'no-store',redirect:'error',signal:controller.signal});
+      const res=await fetch('/radar/push-test/api/'+(auth?'card-decisions':'card-oi'),{headers:auth?{Authorization:'Bearer '+auth}:{},cache:'no-store',redirect:'error',signal:controller.signal});
       if(auth!==token()||revision!==identityRevision)return;
       if(!res.ok){state.error=res.status===401?'连接已失效，请重新连接推送码':res.status===403?'当前推送码无权读取此方案，请重新连接':'规则同步失败，正在重试';state.denied();return;}
-      const data=await res.json();if(auth===token()&&revision===identityRevision)state.accept(data,Date.now());
+      const data=await res.json();if(auth===token()&&revision===identityRevision)state.accept(auth?data:{revision:0,cardsEnabled:true,decisions:{},oi:data.oi},Date.now());
     }catch{if(auth===token()&&revision===identityRevision){state.error='规则同步失败，正在重试';state.denied();}}
     finally{clearTimeout(timer);busy=false;render();}
   }
   function summary(rows){
     syncIdentity();const now=Date.now(),blocked=rows.filter(c=>state.outcome(c.data,now)==='hide').length,pending=rows.filter(c=>state.outcome(c.data,now)==='pending').length;
+    const byId=new Map(rows.flatMap(c=>[[c.data.id,c.data],[c.data.pair||c.data.id,c.data]]));
+    for(const card of document.querySelectorAll('.bp-card')){const data=byId.get(card.dataset.pair||card.dataset.id);if(data)paintCardOI(card,data,state,now);}
     for(const b of document.querySelectorAll('.bp-manage-rules')){b.disabled=!state.canManage(now);b.title=b.disabled?'连接自己的推送码并读取规则后可管理本方案':b.getAttribute('aria-label');}
     status.textContent=!state.token?'公共浏览 · 连接自己的推送码后应用本方案规则':!state.data||now-state.receivedAt>=10000?(state.error||'正在同步本方案卡片规则…')+' · 暂停展示':!state.data.cardsEnabled?'本方案行情卡片已暂停':`本方案规则已接入 · 已屏蔽 ${blocked} 张${pending?' · 待校验 '+pending+' 张':''}${state.error?' · 同步重试中':''}`;
     const empty=document.querySelector('.bp-empty');
@@ -56,6 +59,7 @@ export function createCardPolicy(toolbar,render){
     if(empty&&message){empty.hidden=false;empty.textContent=message;}
   }
   function decorate(card,data){
+    paintCardOI(card,data,state,Date.now());
     if(card.querySelector('[data-action="manage-rules"]'))return;
     const coin=String(data.asset||'').split(':').at(-1).toUpperCase(),footer=card.querySelector('.bp-card-foot');if(!footer)return;
     const b=document.createElement('button');b.type='button';b.textContent='管理';b.title='管理 '+coin+' 的三端规则';b.setAttribute('aria-label',b.title);b.dataset.action='manage-rules';b.className='bp-manage-rules';b.onclick=()=>openCardManager(coin,{onSaved:()=>{render();refresh();}});footer.insertBefore(b,footer.querySelector('.bp-radar'));

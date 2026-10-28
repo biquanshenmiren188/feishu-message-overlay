@@ -295,6 +295,9 @@ def handler(trial):
                 except Exception:return self.reply(503, {'error':'desktop_rules_unavailable'})
             if self.path == BASE + 'api/health':
                 return self.reply(200, {'ok': True, 'mode': 'live' if hasattr(trial, 'configure') or hasattr(trial, 'resolve') else 'synthetic-only'})
+            if self.path == BASE + 'api/card-oi' and desktop:
+                try:return self.reply(200, desktop.public_card_oi())
+                except Exception:return self.reply(503, {'error':'双边 OI 暂不可用'})
             account = self.authorized_account()
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})

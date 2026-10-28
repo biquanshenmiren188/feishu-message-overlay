@@ -14,6 +14,7 @@ class DesktopRulesTest(unittest.TestCase):
   self.cards.write_text(json.dumps(dict(snapshot=dict(complete=True,active=[dict(id='one',pair='pair-one',asset='BTC',strategy='FF',validUntil=(datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat(),v2Residual=dict(level=2,bps=113),details=dict(legs=[dict(exchange='binance'),dict(exchange='gate')]))]))))
   self.app=DesktopRules(self.root,self.feed,self.cards)
   sources=OISourceCache();self.addCleanup(sources.close);self.app.oi=OISnapshot(source_cache=sources)
+  self.app.oi._read=lambda ex,n:(ex,{ex+':BTCUSDT':dict(value=1e6,time=n*1000,basis='double-v1')})
  def tearDown(self):self.tmp.cleanup()
  def configure(self,channel='desktop',action='hide',change=None):
   state=self.app.status();s=state[channel]['rules'][action] if channel=='desktop' else state[channel]['settings'];change(s)
