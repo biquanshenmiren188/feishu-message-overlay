@@ -7,7 +7,7 @@ import copy, hashlib, json, os, re, threading, time
 from pathlib import Path
 from datetime import datetime
 import preferences
-from advanced_rules import DEFAULT as ADVANCED, OISnapshot, VENUES, symbol
+from advanced_rules import DEFAULT as ADVANCED, OISnapshot, VENUES, symbol, card_oi_evidence
 from signals import desktop_rows, EXCHANGES
 
 def defaults():
@@ -120,7 +120,7 @@ class DesktopRules:
     def rows(message, now):
         return desktop_rows(message,now)
 
-    def decision(self, channel, identity, rows, now):
+    def decision(self, channel, identity, rows, now, oi_evidence=None):
         policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide'
         if not settings['notify_enabled']:reasons=['接收已关闭']
         else:
@@ -128,6 +128,8 @@ class DesktopRules:
             for candidate,rule in candidates:
                 checked=copy.deepcopy(rows)
                 self.oi.enrich(checked,rule.get('advanced',ADVANCED),now)
+                if channel=='cards' and oi_evidence is not None and checked:
+                    oi_evidence.update(card_oi_evidence(checked[0],rule.get('advanced',ADVANCED)))
                 for row in checked:
                     if row.get('invalidSignal'):
                         # Default receive-all still includes malformed source
@@ -191,7 +193,7 @@ class DesktopRules:
             os.replace(temp,self.card_cache_path)
         return [entry['card'] for entry in self.card_cache.values()]
 
-    def card_decisions(self, envelope, now):
+    def card_decisions(self, envelope, now, oi_details=None):
         """One evaluator for desktop and authenticated BOT cards; caller holds lock."""
         decisions={}
         for card in self.retained_cards(envelope,now):
@@ -201,7 +203,9 @@ class DesktopRules:
                 rows=[dict(coin=card.get('asset','').split(':')[-1].upper(),mode=mode,buy=EXCHANGES.get(legs[0].get('exchange','').upper(),''),sell=EXCHANGES.get(legs[1].get('exchange','').upper(),''),rank='R'+str(level) if level is not None else '',value=str(bps/100 if type(bps) in (int,float) else 0)+'%',at=now,unranked=level is None or bps is None)]
                 rows[0]['oiContracts']={side:leg.get('symbol') for side,leg in zip(('left','right'),legs)}
             identity=card.get('pair') or card.get('id','')
-            decisions[identity]=self.decision('cards',identity,rows,now) or 'allow'
+            evidence={} if oi_details is not None else None
+            decisions[identity]=self.decision('cards',identity,rows,now,oi_evidence=evidence) or 'allow'
+            if oi_details is not None:oi_details[identity]=evidence
         return decisions
 
     def prune_seen(self, now):
@@ -215,10 +219,10 @@ class DesktopRules:
             envelope=json.loads(self.cards.read_text())
             if not isinstance(envelope.get('snapshot'),dict):raise ValueError('cards_source_unavailable')
             now=time.time();before=dict(self.data['seen'])
-            decisions=self.card_decisions(envelope,now)
+            oi_details={};decisions=self.card_decisions(envelope,now,oi_details)
             self.prune_seen(now)
             if self.data['seen']!=before:self.save()
-            return dict(revision=self.data['revision'],cardsEnabled=self.data['cards']['settings']['notify_enabled'],decisions=decisions)
+            return dict(revision=self.data['revision'],cardsEnabled=self.data['cards']['settings']['notify_enabled'],decisions=decisions,oi=oi_details)
 
     def evaluate(self):
         with self.lock:

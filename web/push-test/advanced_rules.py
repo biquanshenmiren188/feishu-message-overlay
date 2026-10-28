@@ -60,6 +60,35 @@ def legs(row):
     return [('left',venue(row['buy']),'spot' if row['mode'].startswith('S') else 'perp'),
             ('right',venue(row['sell']),'spot' if row['mode'].endswith('S') else 'perp')]
 
+def oi_value(data,exchange,now_ms):
+    """The single freshness/basis check used by filtering and its UI evidence."""
+    if not isinstance(data,dict):return None
+    value=data.get('value');ts=data.get('time')
+    if type(value) not in (int,float) or not math.isfinite(value) or value<0:return None
+    if type(ts) not in (int,float) or not math.isfinite(ts) or not -30000<=now_ms-ts<=300000:return None
+    if data.get('basis')!='double-v1':return None
+    if exchange=='hyperliquid':
+        expiry=data.get('expiresAt')
+        if type(expiry) not in (int,float) or not math.isfinite(expiry) or now_ms>expiry:return None
+    return value
+
+def card_oi_evidence(row,a):
+    """Copy only the exact checked public market values, never tokens or source URLs."""
+    now_ms=row['oiCheckedAt']*1000;result={}
+    for side,ex,market in legs(row):
+        limit=threshold(a,row['coin'],ex)
+        item=dict(exchange=ex,market=market,threshold=limit,checkedAt=now_ms,status='not-filtered')
+        if market=='perp' and limit is not None:
+            data=row.get('oi',{}).get(side,{})
+            value=oi_value(data,ex,now_ms)
+            item['status']='missing' if value is None else 'ok'
+            if value is not None:
+                expiry=data['time']+300000
+                if ex=='hyperliquid':expiry=min(expiry,data['expiresAt'])
+                item.update(value=value,basis='double-v1',time=data['time'],expiresAt=expiry)
+        result[side]=item
+    return result
+
 def reasons(row,a):
     if not a:return []
     result=[]
@@ -74,15 +103,9 @@ def reasons(row,a):
         limit=threshold(a,row['coin'],ex)
         if market=='perp' and limit is not None:
             data=row.get('oi',{}).get(side,{})
-            if not isinstance(data,dict):data={}
-            value=data.get('value')
             now=row.get('oiCheckedAt',time.time())*1000
-            ts=data.get('time',0)
-            fresh=type(ts) in (int,float) and math.isfinite(ts) and -30000 <= now-ts <= 300000
-            if ex=='hyperliquid':
-                expiry=data.get('expiresAt')
-                fresh=fresh and type(expiry) in (int,float) and math.isfinite(expiry) and now<=expiry
-            if type(value) not in (int,float) or not math.isfinite(value) or value<0 or not fresh or data.get('basis')!='double-v1':
+            value=oi_value(data,ex,now)
+            if value is None:
                 if a['missing']=='block':result.append(ex+' '+side_name+' OI 缺失或过期')
             elif value < limit*10000:
                 result.append(ex+' '+side_name+' OI 低于 '+str(limit)+' 万 USDT')

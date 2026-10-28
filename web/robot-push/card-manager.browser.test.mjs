@@ -19,7 +19,7 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});retur
 test('card manager uses one management entrance and stages blocking until explicit save', {skip:!chromium&&'Playwright unavailable; set NODE_PATH and RADAR_BROWSER_TESTS=1 to run'}, async t=>{
   const browser=await chromium.launch({headless:true,args:['--enable-logging=stderr']});
   t.after(()=>browser.close());
-  const files=new Map(await Promise.all(['card-manager.js','card-policy.js','card-policy.css'].map(async name=>[name,await readFile(new URL(name,import.meta.url),'utf8')])));
+  const files=new Map(await Promise.all(['card-manager.js','card-policy.js','card-policy.css','card-oi.js'].map(async name=>[name,await readFile(new URL(name,import.meta.url),'utf8')])));
 
   async function setup(t,{data=fixture(),loadGate,loadStatus=200,firstPostFailure,viewport={width:1280,height:800}}={}){
     const context=await browser.newContext({viewport});t.after(()=>context.close());
