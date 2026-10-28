@@ -135,6 +135,22 @@ def desktop_rows(message, now):
         if invalid:row['invalidSignal']=True
         result.append(row)
 
+    # A clearly identified strong-signal envelope must not become an unrelated
+    # announcement when one route/value is damaged. The strict parser above
+    # rejected the whole group, so do not borrow another route's R percentage.
+    # Preserve only identifiable coin/route context for the existing invalid
+    # signal policy (filtered profiles protect; receive-all stays unchanged).
+    strong=re.match(r'^\s*(?:🚨\s*)*强信号聚集\s*[|·]\s*('+COIN+r')(?=\s*(?:[|·]|$))',title,re.I)
+    if strong:
+        routes=re.findall(r'^\s*R[^|·\n]*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)$',body,re.M|re.I)
+        for mode,route in routes:
+            direction=DIRECTION.fullmatch(route.strip())
+            if direction:
+                buy,bk,sell,sk=direction.groups()
+                add(strong[1],mode.upper(),buy,sell,bk,sk,invalidSignal=True)
+        if not result:add(strong[1],'','','',invalidSignal=True)
+        return result
+
     # Actual source envelope and numbered entries, as used by the native and
     # webpage summary parsers. Do not infer a topic from arbitrary prose.
     topic=re.search(r'^\s*\[Binance\s*/\s*Aster\s+专题价差\]',title+'\n'+body,re.M|re.I)

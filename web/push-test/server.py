@@ -308,6 +308,9 @@ def handler(trial):
             if self.path == BASE + 'api/card-decisions' and desktop:
                 try:return self.reply(200, desktops.policy(account).web_cards())
                 except Exception:return self.reply(503, {'error':'行情卡片规则暂时无法同步'})
+            if self.path == BASE + 'api/message-decisions' and desktop:
+                try:return self.reply(200, desktops.policy(account).web_messages())
+                except Exception:return self.reply(503, {'error':'机器人推送规则暂时无法同步'})
             if self.path == BASE + 'api/status':
                 return self.reply(200, account.public_status())
             if self.path == BASE + 'api/binding':

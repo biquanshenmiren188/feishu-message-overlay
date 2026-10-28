@@ -1,7 +1,7 @@
-"""Separate desktop policies. Only the original owner may edit them.
+"""Separate per-code desktop policies, shared by native and website readers.
 
-Signed desktop readers request decisions through a loopback-only route. The
-source feed and phone settings are never rewritten by this module.
+Signed native readers use a loopback-only route; website decisions require the
+corresponding account token. Reading decisions never rewrites the source feed.
 """
 import copy, hashlib, json, os, re, threading, time
 from pathlib import Path
@@ -120,7 +120,7 @@ class DesktopRules:
     def rows(message, now):
         return desktop_rows(message,now)
 
-    def decision(self, channel, identity, rows, now, oi_evidence=None):
+    def decision(self, channel, identity, rows, now, oi_evidence=None, *, record=True):
         policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide'
         if not settings['notify_enabled']:reasons=['接收已关闭']
         else:
@@ -147,6 +147,9 @@ class DesktopRules:
                     reasons.extend(preferences.exclusion_reasons(row,check))
                 if reasons:action=candidate;break
         if not reasons:return None
+        # Website refreshes apply the same policy without recording delivery,
+        # advancing the native desktop heartbeat or mutating blocked history.
+        if not record:return action
         key=channel+':'+identity+':'+str(self.data['revision'])+':'+action
         reasons=list(dict.fromkeys(reasons))
         if key not in self.data['seen']:
@@ -239,6 +242,40 @@ class DesktopRules:
             self.prune_seen(now)
             if self.data['seen']!=before:self.save()
             return dict(revision=self.data['revision'],cardsEnabled=self.data['cards']['settings']['notify_enabled'],decisions=decisions,oi=oi_details)
+
+    @staticmethod
+    def message_fingerprint(message):
+        """Match UTF-8 JSON.stringify([id,title,body,sentAt]) in the browser.
+
+        Hash the original strings, before display normalization. A source edit
+        retaining its id must never inherit an older message's allow decision.
+        """
+        if not isinstance(message,dict) or message.get('senderType')!='bot':return None
+        values=[message.get(k) for k in ('id','title','body','sentAt')]
+        if any(not isinstance(v,str) or len(v)>limit for v,limit in zip(values,(256,1024,16000,64))) or not values[0]:return None
+        try:return hashlib.sha256(json.dumps(values,ensure_ascii=False,separators=(',',':')).encode('utf-8')).hexdigest()
+        except UnicodeEncodeError:return None
+
+    def web_messages(self):
+        """Read-only, per-code decisions for the current public feed snapshot.
+
+        Unknown ids/content are intentionally absent so clients wait for a
+        matching decision. Pinned messages are evaluated independently of the
+        bounded history, including while their original send time is old.
+        """
+        with self.lock:
+            feed=json.loads(self.feed.read_text(encoding='utf-8'))
+            if not isinstance(feed,dict) or not isinstance(feed.get('messages'),list):raise ValueError('feed_source_unavailable')
+            messages=feed['messages'][:1000]
+            if feed.get('pinned') is not None:messages=[*messages,feed['pinned']]
+            now=time.time();decisions={}
+            for message in messages:
+                fingerprint=self.message_fingerprint(message)
+                if fingerprint is None:continue
+                identity=message['id']
+                action=self.decision('desktop',identity,self.rows(message,now),now,record=False) or 'allow'
+                decisions[identity]=dict(action=action,fingerprint=fingerprint)
+            return dict(revision=self.data['revision'],desktopEnabled=self.data['desktop']['settings']['notify_enabled'],decisions=decisions)
 
     def evaluate(self):
         with self.lock:

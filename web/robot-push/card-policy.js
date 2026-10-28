@@ -1,5 +1,5 @@
 /* The BOT and desktop share server-side card decisions, including OI/history. */
-import {openCardManager} from './card-manager.js?v=20261024-clarity1';
+import {openCardManager} from './card-manager.js?v=20261028-feed1';
 import {paintCardOI} from './card-oi.js?v=20261028-2';
 export class CardPolicyState {
   constructor(){this.reset('');}

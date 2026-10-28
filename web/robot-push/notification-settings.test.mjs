@@ -4,7 +4,15 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
 
-const source=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
+const settingsSource=fs.readFileSync(new URL('./notification-settings.js',import.meta.url),'utf8');
+const ruleEventSource=fs.readFileSync(new URL('./rule-events.js',import.meta.url),'utf8');
+const ruleImport="import {notifyRulesChanged} from './rule-events.js?v=20261028-1';";
+const ruleExport='export function notifyRulesChanged';
+// This fixture runs classic scripts to inspect their lexical bindings. Include
+// the real event module, removing only its known module boundary, not its logic.
+assert.equal(settingsSource.split(ruleImport).length,2,'Expected exactly one rule-events import');
+assert.equal(ruleEventSource.split(ruleExport).length,2,'Expected exactly one rule-events export');
+const source=ruleEventSource.replace(ruleExport,'function notifyRulesChanged')+'\n'+settingsSource.replace(ruleImport,'');
 function fixture({failRoute='',savedSelection='',ios=false,android=false,installed=ios,supported=true,secure=true,permission='',subscribeError='',subscribed=false,transferFailure='',workerFailure=false,workerVersion='radar-delivery-v6',integratedAccount=false,responseHook=null}={}){
  const elements=new Map(),storage=new Map([['radar-test-token','owner-token']]),requests=[],workerTokens=[],events={},actions=[],emitted=[],windowEvents={};
  if(savedSelection)storage.set('radar-settings-token',savedSelection);
@@ -33,7 +41,7 @@ function fixture({failRoute='',savedSelection='',ios=false,android=false,install
  const navigator={userAgent:ios?'iPhone':android?'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile':'Desktop',standalone:installed,serviceWorker:{register:async()=>{actions.push('register');return {active:{postMessage:(data,ports)=>{workerTokens.push(data.token);ports[0].postMessage({ok:!(workerFailure&&data.token==='other-token'),version:typeof workerVersion==='function'?workerVersion(data.token):workerVersion})}},pushManager:{getSubscription:async()=>subscribed?subscription:null,subscribe:async()=>{actions.push('subscribe');if(subscribeError){const error=Error('fixture');error.name=subscribeError;throw error}subscribed=true;return subscription}},update:async()=>{}}},addEventListener(){}}};
  class MessageChannel{constructor(){const first=this.port1={close(){}};this.port2={postMessage:data=>queueMicrotask(()=>first.onmessage({data}))}}}
  class CustomEvent{constructor(type,options={}){this.type=type;this.detail=options.detail}}
- const context=vm.createContext({CustomEvent,document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
+ const context=vm.createContext({Event,CustomEvent,document,navigator,fetch,crypto:webcrypto,TextEncoder,Uint8Array,MessageChannel,setTimeout,clearTimeout,queueMicrotask,Notification:notification,PushManager:supported?function(){}:undefined,isSecureContext:secure,atob:value=>Buffer.from(value,'base64').toString('binary'),location:{pathname:'/radar/robot-push/'},matchMedia:()=>({matches:installed}),localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}});
  context.AbortSignal=AbortSignal;context.window=context;context.addEventListener=(name,fn)=>windowEvents[name]=fn;
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
@@ -196,6 +204,37 @@ test('integrated settings accept an ordinary profile and save only its desktop s
  const saved=f.requests.find(r=>r.route==='desktop-settings'&&r.body);
  assert.equal(saved.auth,'other-token');assert.equal(saved.body.revision,22);
  assert.equal(f.requests.some(r=>r.route==='subscribe'||r.route==='switch-subscription'),false);
+});
+
+test('successful desktop save broadcasts invalidation only after a payload-free storage stamp',async()=>{
+ const f=fixture({integratedAccount:true,savedSelection:'other-token'});await settle(f);
+ const observed=[];
+ (f.events['radar-rules-saved']??=[]).push(event=>observed.push({event,stamp:f.storage.get('radar-rules-revision')}));
+ await f.run("window.RadarDesktopSettings.save({revision:22,channel:'desktop',settings:{excluded_coins:['PRIVATE-RULE-FIXTURE']}})");
+ assert.equal(observed.length,1);assert.ok(observed[0].event instanceof Event);assert.equal(observed[0].event.detail,undefined);
+ assert.equal(observed[0].stamp,f.storage.get('radar-rules-revision'));
+ const [timestamp,nonce,...extra]=observed[0].stamp.split(':');
+ assert.deepEqual(extra,[]);assert.match(timestamp,/^\d+$/);assert.ok(Number(timestamp)>0);
+ assert.ok(Number.isFinite(Number(nonce))&&Number(nonce)>=0&&Number(nonce)<1);
+ assert.equal(JSON.stringify(observed[0].event),'{}');
+ for(const secret of ['owner-token','other-token','12345678','87654321','PRIVATE-RULE-FIXTURE'])assert.equal(observed[0].stamp.includes(secret),false);
+ assert.equal(f.requests.filter(r=>r.route==='desktop-settings'&&r.body).length,1);
+});
+
+test('failed desktop save neither broadcasts invalidation nor changes the storage stamp',async()=>{
+ const f=fixture({integratedAccount:true,responseHook:(route,auth,options)=>route==='desktop-settings'&&options.body?{status:503,ok:false,json:async()=>({error:'fixture-save-failed'})}:undefined});
+ await settle(f);f.storage.set('radar-rules-revision','previous-stamp');
+ await assert.rejects(f.run("window.RadarDesktopSettings.save({revision:17,channel:'desktop'})"),/fixture-save-failed/);
+ assert.equal(f.storage.get('radar-rules-revision'),'previous-stamp');
+ assert.equal(f.emitted.some(e=>e.type==='radar-rules-saved'),false);
+});
+
+test('ordinary page profile-change event observes the new stored selection without moving phone binding',async()=>{
+ const f=fixture();await f.run('load()');const observed=[];
+ (f.events['radar-profile-changing']??=[]).push(event=>observed.push({type:event.type,detail:event.detail,selection:f.storage.get('radar-settings-token'),phone:f.storage.get('radar-test-token')}));
+ await switchCode(f,'87654321');
+ assert.deepEqual(observed,[{type:'radar-profile-changing',detail:undefined,selection:'other-token',phone:'owner-token'}]);
+ assert.equal(f.run('token'),'other-token');assert.equal(f.requests.some(r=>r.route==='switch-subscription'),false);
 });
 
 test('late desktop response is discarded after a successful profile switch',async()=>{
