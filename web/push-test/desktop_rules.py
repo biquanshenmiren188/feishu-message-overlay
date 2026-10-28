@@ -127,7 +127,7 @@ class DesktopRules:
             candidates=[('hide',policy['rules']['hide']),('mute',policy['rules']['mute'])] if channel=='desktop' else [('hide',settings)]
             for candidate,rule in candidates:
                 checked=copy.deepcopy(rows)
-                self.oi.enrich(checked,rule.get('advanced',ADVANCED),now)
+                self.oi.enrich(checked,rule.get('advanced',ADVANCED),now,all_legs=channel=='cards' and oi_evidence is not None)
                 if channel=='cards' and oi_evidence is not None and checked:
                     oi_evidence.update(card_oi_evidence(checked[0],rule.get('advanced',ADVANCED)))
                 for row in checked:
@@ -211,6 +211,22 @@ class DesktopRules:
     def prune_seen(self, now):
         self.data['seen']={k:v for k,v in self.data['seen'].items() if now-v<86400}
         if len(self.data['seen'])>10000:self.data['seen']=dict(sorted(self.data['seen'].items(),key=lambda x:x[1])[-10000:])
+
+    def public_card_oi(self):
+        """Public market data only: no account rules, decisions, history or writes."""
+        with self.lock:
+            envelope=json.loads(self.cards.read_text());snapshot=envelope.get('snapshot')
+            if not isinstance(snapshot,dict):raise ValueError('cards_source_unavailable')
+            now=time.time();rows=[]
+            cards=list(snapshot.get('active',[]))[:1000]+[entry['card'] for entry in snapshot.get('retained',[])[:1000]]
+            seen=set()
+            for card in cards:
+                identity=card.get('pair') or card.get('id');legs=card.get('details',{}).get('legs',[]);mode=card.get('strategy')
+                if not identity or identity in seen or len(legs)!=2 or mode not in ('SF','FS','FF'):continue
+                seen.add(identity)
+                rows.append(dict(id=identity,coin=card.get('asset','').split(':')[-1].upper(),mode=mode,buy=EXCHANGES.get(str(legs[0].get('exchange','')).upper(),''),sell=EXCHANGES.get(str(legs[1].get('exchange','')).upper(),''),oiContracts={side:leg.get('symbol') for side,leg in zip(('left','right'),legs)}))
+            self.oi.enrich(rows,ADVANCED,now,all_legs=True)
+            return dict(oi={row['id']:card_oi_evidence(row,ADVANCED) for row in rows})
 
     def web_cards(self):
         # Do not update desktop heartbeat or evaluate computer messages here.

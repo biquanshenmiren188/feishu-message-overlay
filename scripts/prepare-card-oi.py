@@ -5,8 +5,8 @@ def prepare(baseline,backend,out):
  repo=pathlib.Path(__file__).resolve().parents[1];assert not out.exists()
  plan=json.loads((baseline/'manifest.json').read_text(encoding='utf-8'));back=json.loads(backend.read_text(encoding='utf-8-sig'))
  files={};sources={}
- for name in ('advanced_rules.py','desktop_rules.py'):
-  original=base64.b64decode(back['files'][name]);head=subprocess.check_output(['git','show','origin/main:web/push-test/'+name],cwd=repo)
+ for name in ('advanced_rules.py','desktop_rules.py','server.py'):
+  original=base64.b64decode(back['files'][name]);head=subprocess.check_output(['git','show','5401921f9622c411f9392335b7023cf67529491c:web/push-test/'+name],cwd=repo)
   assert original.replace(b'\r\n',b'\n')==head.replace(b'\r\n',b'\n'),'Inspect changed installed backend '+name
   raw=(repo/'web/push-test'/name).read_bytes();files[name]=raw;sources['web/push-test/'+name]=digest(raw.replace(b'\r\n',b'\n'))
  for name in ('card-policy.js','card-oi.js','basispulse.js'):
@@ -15,12 +15,14 @@ def prepare(baseline,backend,out):
  policy=(baseline/'robot-push/card-policy.js').read_bytes()
  source=(repo/'web/robot-push/card-policy.js').read_text(encoding='utf-8')
  additions=[('import {openCardManager}',"import {paintCardOI} from './card-oi.js?v=20261028-1';\n"),('    for(const b of document.querySelectorAll(\'.bp-manage-rules\'))',source[source.index('    const byId='):source.index("    for(const b of document.querySelectorAll('.bp-manage-rules'))")]),('    if(card.querySelector(\'[data-action="manage-rules"]\'))return;', '    paintCardOI(card,data,state,Date.now());\n')]
- for marker,insertion in additions:
-  assert policy.count(marker.encode())==1,marker;policy=policy.replace(marker.encode(),insertion.encode()+marker.encode())
+ assert b"import {paintCardOI}" in policy
+ replacements=[("card-oi.js?v=20261028-1","card-oi.js?v=20261028-2"),("if(busy||document.hidden||!auth)return;","if(busy||document.hidden)return;"),("fetch('/radar/push-test/api/card-decisions',{headers:{Authorization:'Bearer '+auth}","fetch('/radar/push-test/api/'+(auth?'card-decisions':'card-oi'),{headers:auth?{Authorization:'Bearer '+auth}:{}"),("state.accept(data,Date.now());","state.accept(auth?data:{revision:0,cardsEnabled:true,decisions:{},oi:data.oi},Date.now());")]
+ for old,new in replacements:
+  assert policy.count(old.encode())==1,old;policy=policy.replace(old.encode(),new.encode())
  files['robot-push/card-policy.js']=policy
  html=(baseline/'robot-push/index.html').read_bytes();old=re.findall(rb'/radar/(performance-[^"\s]+/bot-cards-[^"\s]+\.js)',html);assert len(old)==1
- old=old[0].decode();bundle=(baseline/old).read_bytes();needle=b'card-policy.js?v=20261025-blocked1';assert bundle.count(needle)==1
- bundle=bundle.replace(needle,b'card-policy.js?v=20261028-oi1');new=str(pathlib.PurePosixPath(old).parent/('bot-cards-oi-'+digest(bundle)[:16]+'.js'));files[new]=bundle
+ old=old[0].decode();bundle=(baseline/old).read_bytes();needle=b'card-policy.js?v=20261028-oi1';assert bundle.count(needle)==1
+ bundle=bundle.replace(needle,b'card-policy.js?v=20261028-oi2');new=str(pathlib.PurePosixPath(old).parent/('bot-cards-oi-'+digest(bundle)[:16]+'.js'));files[new]=bundle
  for name in ('robot-push/index.html','pwa-index.html'):
   raw=(baseline/name).read_bytes();assert raw.count(old.encode())==1;files[name]=raw.replace(old.encode(),new.encode())
  for name,raw in files.items():

@@ -78,7 +78,7 @@ def card_oi_evidence(row,a):
     for side,ex,market in legs(row):
         limit=threshold(a,row['coin'],ex)
         item=dict(exchange=ex,market=market,threshold=limit,checkedAt=now_ms,status='not-filtered')
-        if market=='perp' and limit is not None:
+        if market=='perp':
             data=row.get('oi',{}).get(side,{})
             value=oi_value(data,ex,now_ms)
             item['status']='missing' if value is None else 'ok'
@@ -138,8 +138,8 @@ class OISnapshot:
                 return ex,data['asterOI'] if isinstance(data,dict) and isinstance(data.get('asterOI'),dict) else {}
             return ex,data['data'] if isinstance(data,dict) and data.get('basis')=='double-v1' and isinstance(data.get('data'),dict) else {}
         except (OSError,ValueError,TypeError):return ex,{}
-    def enrich(self,rows,a,now):
-        needed={ex for row in rows for _,ex,market in legs(row) if ex in VENUES and market=='perp' and threshold(a,row['coin'],ex) is not None}
+    def enrich(self,rows,a,now,all_legs=False):
+        needed={ex for row in rows for _,ex,market in legs(row) if ex in VENUES and market=='perp' and (all_legs or threshold(a,row['coin'],ex) is not None)}
         # Every consumer observes the shared source generation. A per-consumer
         # fetch timestamp would incorrectly prolong an already 29s-old cache.
         sources=self.read_sources(needed,now,{ex:10 if ex=='hyperliquid' else 30 for ex in needed},lambda ex:self._read(ex,now)[1])

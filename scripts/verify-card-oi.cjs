@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {createRequire}=require('node:module');
 const runtime=path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
 const {chromium,webkit}=createRequire(runtime)('playwright');
-const candidate=path.resolve(process.argv[2]||'../card-oi-candidate'),baseline=path.resolve('../card-oi-live-baseline'),output=path.resolve(process.argv[3]||'../card-oi-browser-results');
+const candidate=path.resolve(process.argv[2]||'../card-oi-candidate-v2'),baseline=path.resolve('../card-oi-live-baseline-v2'),output=path.resolve(process.argv[3]||'../card-oi-browser-results-v2');
 fs.mkdirSync(output,{recursive:true});
 const cfg=JSON.parse(fs.readFileSync(path.join(candidate,'plan.json')));
 const bare=()=>({excluded_coins:[],advanced:{coins:[]}});
@@ -24,8 +24,9 @@ const bare=()=>({excluded_coins:[],advanced:{coins:[]}});
   await context.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url());if(u.origin!=='https://blocked.test')return route.abort();
    if(req.method()!=='GET'){posts.push(u.pathname);return route.fulfill({status:403,json:{error:'No writes allowed'}});}
-   if(u.pathname.endsWith('/api/card-decisions')){
+   if(u.pathname.endsWith('/api/card-decisions')||u.pathname.endsWith('/api/card-oi')){
     const n=Date.now(),oi=Object.fromEntries(['BLOCK','ALLOW'].map(id=>[id,Object.fromEntries(['left','right'].map((side,i)=>[side,{exchange:i?'gate':'binance',market:'perp',threshold:50,checkedAt:n,time:n-1000,expiresAt:n+299000,basis:'double-v1',status:missing?'missing':'ok',value:id==='BLOCK'?371600:amount}]))]));
+    if(u.pathname.endsWith('/api/card-oi'))return route.fulfill({json:{oi:Object.fromEntries(Object.entries(oi).map(([id,sides])=>[id,Object.fromEntries(Object.entries(sides).map(([side,p])=>[side,{...p,threshold:null}]))]))}});
     return route.fulfill({status,json:status===200?{...policy,oi}:{error:'Test unauthorized'}});
    }
    if(u.pathname.endsWith('/api/status'))return route.fulfill({json:{blockedHistory:[]}});
@@ -57,11 +58,11 @@ const bare=()=>({excluded_coins:[],advanced:{coins:[]}});
    await page.locator('.bp-blocked-button').click();await wait(()=>document.querySelectorAll('.bp-blocked-list .bp-card').length===2);await page.keyboard.press('Escape');
    missing=true;policy={...policy,decisions:{BLOCK:'hide',ALLOW:'allow'}};await wake();await wait(()=>document.querySelectorAll('.bp-board>.bp-card').length===1);assert.equal(await oi.first().locator('strong').innerText(),'—');assert.match(await oi.first().getAttribute('title'),/缺失或过期/);
    status=403;await wake();await wait(()=>document.querySelectorAll('.bp-board>.bp-card').length===0);
-   await page.evaluate(()=>{localStorage.removeItem('radar-settings-token');window.dispatchEvent(new Event('storage'));});await wait(()=>document.querySelectorAll('.bp-board>.bp-card').length===2);assert.match(await page.locator('.bp-board').innerText(),/源 OI/);
+   missing=false;amount=871898;await page.evaluate(()=>{localStorage.removeItem('radar-settings-token');window.dispatchEvent(new Event('storage'));});await wait(()=>document.querySelectorAll('.bp-board>.bp-card').length===2&&document.querySelector('.bp-board')?.textContent.includes('871.90k'));assert.doesNotMatch(await page.locator('.bp-board').innerText(),/源 OI/);
    status=200;missing=false;amount=871898;
    await page.goto('https://blocked.test/radar/push-test/');await wait(()=>document.querySelector('.bp-board .bp-card')?.textContent.includes('871.90k'));
    assert.deepEqual(posts,[]);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
-   results.push({engine:engineName,passed:true,layouts,checks:['exact backend snapshot replaces unrelated raw OI','threshold and basis available','blocked preview same proof','three layouts','500k equality allows','499999 hide','missing allow shows dash','denied clears cards','guest reference labelled','PWA','zero writes']});console.log(engineName+': PASS');
+   results.push({engine:engineName,passed:true,layouts,checks:['exact backend snapshot replaces unrelated raw OI','threshold and basis available','blocked preview same proof','three layouts','500k equality allows','499999 hide','missing allow shows dash','denied clears cards','guest double OI without account data','PWA','zero writes']});console.log(engineName+': PASS');
   }catch(e){await page.screenshot({path:path.join(output,engineName+'-failure.png')});results.push({engine:engineName,passed:false,error:e.stack,errors,unexpected,posts});throw e;}
   finally{await context.close();await browser.close();fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({candidate,stageHashes:cfg.stageHashes,results},null,2));}
  }

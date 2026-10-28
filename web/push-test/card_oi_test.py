@@ -33,6 +33,13 @@ class CardOITest(unittest.TestCase):
   row['oi']['right']['time']-=300001
   self.assertEqual(card_oi_evidence(row,a)['right']['status'],'missing');self.assertTrue(reasons(row,a))
   a['exchangeOI']['aster']['mode']='none';a['coinOI']=[]
-  self.assertEqual(card_oi_evidence(row,a)['right']['status'],'not-filtered');self.assertFalse(reasons(row,a))
+  self.assertEqual(card_oi_evidence(row,a)['right']['status'],'missing');self.assertFalse(reasons(row,a))
+ def test_public_oi_has_no_rules_decisions_or_history_and_unfiltered_cards_still_use_double(self):
+  now=time.time();self.app.oi._read=lambda ex,n:(ex,{ex+':BTCUSDT':dict(value=812345,time=now*1000,basis='double-v1')})
+  before=copy.deepcopy(self.app.data)
+  public=self.app.public_card_oi();self.assertEqual(set(public),{'oi'});self.assertEqual(self.app.data,before)
+  self.assertFalse(self.app.path.exists());self.assertFalse(self.app.card_cache_path.exists())
+  proof=public['oi']['pair-one']['right'];self.assertIsNone(proof['threshold']);self.assertEqual(proof['value'],812345)
+  bound=self.app.web_cards()['oi']['pair-one']['right'];self.assertEqual(bound['value'],proof['value']);self.assertIsNone(bound['threshold'])
 
 if __name__=='__main__':unittest.main()

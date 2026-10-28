@@ -4,7 +4,7 @@ from pathlib import Path
 common=runpy.run_path(str(Path(__file__).with_name('deploy-aster-oi.py')))
 settings_digest,other_pids,healthy=(common[k] for k in ('settings_digest','other_pids','healthy'))
 ROOT=Path('/opt/radar-webpush-test');CURRENT=Path('/opt/funding-radar-web/current');FALLBACK=ROOT/'public/index.html'
-BACKENDS=('advanced_rules.py','desktop_rules.py')
+BACKENDS=('advanced_rules.py','desktop_rules.py','server.py')
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def atomic(path,raw,metadata):
  tmp=path.with_name(path.name+'.oi-display-next')
