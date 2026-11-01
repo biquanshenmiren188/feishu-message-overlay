@@ -100,6 +100,48 @@ class UnicodeHistoryTests(unittest.TestCase):
         self.app.data['desktop']['rules']['hide']['excluded_coins']=['TOKEN']
         self.assertEqual(self.decision(message),'hide')
 
+    def test_malformed_strong_signal_cannot_bypass_configured_desktop_filters(self):
+        complete=self.message(title='强信号聚集｜UNITREE｜2 组同时 ACTIVE',body='R0｜FF｜买 GATE → 卖 ASTER\n净均 +0.25% · ACTIVE 1s\nR0｜FF｜买 GATE → 卖 BITGET\n净均 +0.29% · ACTIVE 1s')
+        cases=[dict(complete,body=complete['body'].replace('净均 +0.29% · ACTIVE 1s','')),
+               dict(complete,body=complete['body'].replace('BITGET','UNKNOWN')),
+               dict(complete,title=complete['title'].replace('2 组','3 组')),
+               dict(complete,body='没有可校验的组合'),
+               dict(complete,title='强信号聚集｜UNITREE',body='没有可校验的组合'),
+               dict(complete,title=complete['title'].replace('UNITREE','币安人生')),
+               dict(complete,body=complete['body'].replace('R0','RNaN',1))]
+        # The Unicode variant is deliberately malformed too.
+        cases[-2]['body']=cases[-2]['body'].replace('净均 +0.29% · ACTIVE 1s','')
+        for message in cases:
+            with self.subTest(title=message['title'],body=message['body']):
+                self.assertEqual(parse_messages(message,self.now),[])
+                rows=self.app.rows(message,self.now)
+                self.assertTrue(rows);self.assertTrue(all(r.get('invalidSignal') for r in rows))
+                self.assertTrue(all(r['coin'] in ('UNITREE','币安人生') for r in rows))
+                self.assertIsNone(self.decision(message),'Default receive-all must remain unchanged')
+        self.app.data['desktop']['rules']['hide']['excluded_coins']=['UNITREE']
+        self.assertEqual(self.decision(complete),'hide')
+        for message in cases:self.assertEqual(self.decision(message),'hide')
+        rows=self.app.rows(cases[1],self.now)
+        self.assertEqual([(r['buy'],r['sell'],r['mode']) for r in rows],[('GATE','ASTER','FF'),('GATE','','FF')])
+        self.app.data['desktop']['rules']['hide']['excluded_coins']=[]
+        self.app.data['desktop']['rules']['mute']['excluded_coins']=['UNITREE']
+        for message in cases:self.assertEqual(self.decision(message),'mute')
+        for title,body in [('普通公告：强信号聚集 UNITREE 更新','普通内容'),('强信号聚集功能说明','UNITREE'),('UNITREE 新闻','强信号聚集｜UNITREE｜2 组同时 ACTIVE')]:
+            message=self.message(title=title,body=body)
+            self.assertEqual(self.app.rows(message,self.now),[]);self.assertIsNone(self.decision(message))
+
+    def test_malformed_strong_mobile_messages_never_enter_send_queue(self):
+        config=self.root/'config.json';config.write_text(json.dumps(dict(pairCode='12345678',expiresAt=0,publicKey='public')))
+        sent=[];live=Live(self.root/'mobile-invalid-strong',config,lambda s,p:sent.append(p) or 201)
+        live.state['subscription']={'endpoint':'https://test.push.apple.com/test','keys':{'auth':'test','p256dh':'test'}}
+        strong=self.strong_v2_message()
+        bad=dict(strong,body=strong['body'].replace('净均 +0.43% · ACTIVE 2s',''))
+        other=dict(bad,id='b'*64,body=strong['body'].replace('ASTER','UNKNOWN'))
+        feed=dict(sourceConnected=True,updatedAt=datetime.fromtimestamp(self.now,timezone.utc).isoformat(),messages=[bad],pinned=other)
+        live.tick(feed,self.now)
+        self.assertEqual(sent,[]);self.assertEqual(live.state['live']['pending'],[])
+        self.assertEqual(live.state['live']['history'],[])
+
     def test_old_retained_messages_keep_hide_and_mute(self):
         self.app.data['desktop']['rules']['hide']['excluded_coins']=['BULLA']
         for age in (1799,1801,86400,30*86400):

@@ -1,3 +1,4 @@
+import {notifyRulesChanged} from './rule-events.js?v=20261028-1';
 const BASE='/radar/push-test/', API=BASE+'api/';
 const integrated=document.querySelector('#live-mobile-account');
 const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-android1';document.head.append(css);
@@ -30,9 +31,9 @@ for(const [id,values] of [['ns-modes',[['SF','SF'],['FS','FS'],['FF','FF']]],['n
 }
 let deviceToken=localStorage.getItem('radar-test-token')||'';
 let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
-function selectIdentity(next){if(next===token)return;token=next;identityRevision++;if(integrated)document.dispatchEvent(new CustomEvent('radar-profile-changing'));}
+function selectIdentity(next){if(next===token)return;token=next;identityRevision++;queueMicrotask(()=>document.dispatchEvent(new CustomEvent('radar-profile-changing')));}
 function currentIdentity(auth,epoch){return auth===token&&epoch===identityRevision;}
-async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');return result;}
+async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');if(data!==undefined&&['settings','desktop-settings','edit-coins','block-coins'].includes(route))notifyRulesChanged();return result;}
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
 // V6 adds profile-scoped delivery. Deployment cache versions may append a dated
 // build suffix; that does not change the worker protocol or require a rebind.

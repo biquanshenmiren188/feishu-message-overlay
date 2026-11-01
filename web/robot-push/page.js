@@ -4,6 +4,7 @@ import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261011-session';
 import {CarouselReader} from './carousel.js?v=20261003m';
 import {mobileSummary} from './summary.js?v=20261003m';
 import {demoData} from './demo.js';
+import {createFeedPolicy} from './feed-policy.js?v=20261028-1';
 const $=id=>document.getElementById(id),store=new FeedStore(),reader=new CarouselReader();
 const board=$('board'),feed=$('feed'),pin=$('pinned');let timer=null,poll=null,newCount=0,lastPinKey=null,lastWindowKey=null,manualHeld=false;
 const demo=new URLSearchParams(location.search).get('mode')==='demo';
@@ -145,7 +146,7 @@ function render(anchor=null){
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
  // Both layouts mount the bounded history so natural-height rows fill the pane.
  if(!anchor&&lastWindowKey){const item=[...feed.children].find(el=>el.dataset.id===firstVisible());if(item)anchor={id:item.dataset.id,top:item.getBoundingClientRect().top,scroll:board.scrollTop,delta:0};}
- let layoutChanged=false;const ids=reader.ids,key=String(mobile.matches)+'|'+ids.join('|');
+ let layoutChanged=false;const ids=reader.ids,key=String(mobile.matches)+'|'+store.revision+'|'+ids.join('|');
  const pinKey=store.pinned?JSON.stringify(store.pinned):'';
  if(pinKey!==lastPinKey){layoutChanged=true;guardScroll();pin.replaceChildren(...(store.pinned?[card(store.pinned,true)]:[]));lastPinKey=pinKey;}
  if(key!==lastWindowKey){
@@ -156,7 +157,7 @@ function render(anchor=null){
   if(anchor){const retained=[...feed.children].find(el=>el.dataset.id===anchor.id);if(retained)board.scrollTop=anchor.scroll+retained.getBoundingClientRect().top-anchor.top+anchor.delta;}else board.scrollTop=0;
  }
  for(const item of feed.children)item.dataset.reading=String(item.dataset.id===reader.current);
- $('empty').hidden=store.messages.length!==0;$('more').hidden=true;
+ $('empty').hidden=store.messages.length!==0||!!store.pinned;$('more').hidden=true;
  fitCards(layoutChanged);status();updateLatest();updateProgress();
 }
 function schedule(){
@@ -165,8 +166,19 @@ function schedule(){
  timer=setTimeout(()=>{const admitted=reader.tick(Date.now(),!document.hidden);render();if(admitted){const item=[...feed.children].find(el=>el.dataset.id===admitted);if(item){guardScroll();board.scrollTop+=item.getBoundingClientRect().top-board.getBoundingClientRect().top;}}updateLatest();updateProgress();schedule();},Math.max(1,delay));
 }
 let initialPositionPending=true,initialScrollToken=0;
-function accept(batch){
- const revision=store.revision,beforePin=store.pinned?.id;const added=store.ingest(batch);alertNew([...store.messages.filter(m=>added.includes(m.id)),...(store.pinned?.id!==beforePin?[store.pinned]:[])]);if(store.revision===revision)return;if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}reader.synchronize(store.messages.map(m=>m.id),Date.now());
+function accept(batch,{audible=[],emptyMessage='等待新的机器人消息'}={}){
+ $('empty').textContent=emptyMessage;
+ alertNew(audible);if(!batch)return;
+ const previous=new Set(store.messages.map(message=>message.id)),added=batch.messages.filter(message=>!previous.has(message.id)).map(message=>message.id);
+ store.messages=batch.messages;store.pinned=batch.pinned;store.revision++;
+ // Rule revocation takes effect even during touch inertia or an open detail.
+ // Remove only disallowed DOM now; normal layout/scroll work keeps its gate.
+ const allowed=new Set(store.messages.map(message=>message.id));
+ for(const node of [...feed.children])if(!allowed.has(node.dataset.id))node.remove();
+ for(const node of [...pin.children])if(node.dataset.id!==store.pinned?.id)node.remove();
+ if(detailOpen&&!allowed.has(detailOpen.focus)&&store.pinned?.id!==detailOpen.focus){detailOpen=null;$('detail-content').replaceChildren();$('message-detail').close();}
+ reader.synchronize(store.messages.map(message=>message.id),Date.now());
+ if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
  const initialJump=initialPositionPending&&reader.ids.length>0;
  if(initialJump){initialPositionPending=false;reader.show(reader.ids.at(-1));reader.focus(reader.window()[0],Date.now());}
  newCount+=added.length;render();
@@ -303,7 +315,7 @@ board.addEventListener('scroll',()=>updateProgress(true),{passive:true});
 
 let latestFeed=null;
 function receiveFeed(data){
- latestFeed=data;accept(data);refreshFeedConnection();
+ latestFeed=data;void feedPolicy.receive(data);refreshFeedConnection();
 }
 function refreshFeedConnection(){
  const data=latestFeed;if(!data)return;const age=Date.now()-Date.parse(data.updatedAt);const connected=data.sourceConnected===true&&Number.isFinite(age)&&age>=-30000&&age<45000;setConnection(connected?'connected':'offline',connected?'消息源已连接':'等待消息源');
@@ -312,4 +324,5 @@ document.addEventListener('visibilitychange',()=>{reader.setVisible(!document.hi
 mobile.addEventListener('change',queueResize);
 let resizeFrame=null;function queueResize(){if(resizeFrame!==null)return;resizeFrame=requestAnimationFrame(()=>{resizeFrame=null;const capacity=mobile.matches?5:3;if(reader.capacity!==capacity){reader.setCapacity(capacity,firstVisible());lastWindowKey=null;lastPinKey=null;render();schedule();}fitKey='';fitCards(true);updateLatest();updateProgress();});}
 window.addEventListener('resize',queueResize);window.visualViewport?.addEventListener('resize',queueResize);
-if(demo){$('demo-note').hidden=false;accept(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');subscribePush('feed',{data:receiveFeed,unchanged:refreshFeedConnection,error:()=>setConnection('error','暂时无法更新，保留已接收消息')});}
+const feedPolicy=createFeedPolicy(accept,{publicOnly:demo});
+if(demo){$('demo-note').hidden=false;void feedPolicy.receive(demoData());setConnection('offline','演示数据 · 未接入飞书');}else{$('demo-note').hidden=true;setConnection('connecting','连接中');subscribePush('feed',{data:receiveFeed,unchanged:refreshFeedConnection,error:()=>setConnection('error','暂时无法更新，保留已接收消息')});}
