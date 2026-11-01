@@ -13,6 +13,19 @@ for(const n of ['fn','q','qe'])assert(after.get(n).includes('return __radarPrese
 assert(after.get('Nt').includes('!__defer&&__radarClearPlaceholders(Xe)'));assert.equal(after.get('Nt').split('__radarRetire(').length-1,2);
 assert(after.get('Nt').includes('!__defer&&u.age.textContent!==x'));assert(after.get('Nt').includes('!__defer&&(Ne.textContent='));assert(after.get('Nt').includes(',__cardPolicy.summary(t))'));
 assert.equal(fs.readFileSync(path.join(candidate,plan.module),'utf8'),fs.readFileSync('web/robot-push/mobile-scroll.js','utf8').replaceAll('\r\n','\n'));
+// Run the candidate helper itself, including browser-native timer receiver
+// semantics, against the same small DOM model used by the source regressions.
+const helperRaw=fs.readFileSync(path.join(candidate,plan.module)),helper=await import('data:text/javascript;base64,'+helperRaw.toString('base64'));
+const fixtureSource=fs.readFileSync('web/robot-push/mobile-scroll.test.mjs','utf8'),fixtureDecl=declarations(fixtureSource);
+const makeFixture=Function('createScrollGate','preserveCardViewport',fixtureDecl.get('fixture')+'\n'+fixtureDecl.get('cardFixture')+'\nreturn cardFixture;')(helper.createScrollGate,helper.preserveCardViewport);
+for(const reason of ['refill','timeout','input']){
+ const f=makeFixture(),rows=f.rows();let cancellations=0;
+ function nativeCancel(timer){assert.equal(this,undefined,'Native cancellation must not receive the hold object');cancellations++;f.cancel(timer);}
+ const run=mutate=>helper.preserveCardViewport(f.board,mutate,{target:f.target,gate:f.gate,later:f.later,cancel:nativeCancel});
+ run(()=>f.set([]));assert.equal(f.target.scrollY,600);
+ if(reason==='refill')run(()=>f.set(rows));else if(reason==='timeout')f.tick(helper.CARD_LAYOUT_GRACE_MS);else f.emit('touchstart',[{}]);
+ assert.equal(cancellations,1,reason);assert.equal(f.board.style.getPropertyValue('min-height'),'');
+}
 for(const entry of ['robot-push/index.html','pwa-index.html'])assert.equal(fs.readFileSync(path.join(candidate,entry),'utf8').replace('/radar/'+plan.bundle,'/radar/'+plan.original),fs.readFileSync(path.join(baseline,entry),'utf8'));
-const report={schema:1,passed:true,sourceCommit:plan.sourceCommit,files:plan.files,baselineHash:plan.baselineHash,inventoryHash:plan.inventoryHash,changedFunctions:changed,protectedDeclarations:before.size-changed.length,originalFeedRulesPreserved:true,cssAndPwaWorkerUnchanged:true,frontendMainUntouched:true,browserAcceptanceRequired:true,serverPreflightRequired:true};
+const report={schema:1,passed:true,sourceCommit:plan.sourceCommit,files:plan.files,baselineHash:plan.baselineHash,inventoryHash:plan.inventoryHash,changedFunctions:changed,protectedDeclarations:before.size-changed.length,nativeTimerReceiverPaths:3,originalFeedRulesPreserved:true,cssAndPwaWorkerUnchanged:true,frontendMainUntouched:true,browserAcceptanceRequired:true,serverPreflightRequired:true};
 fs.writeFileSync(reportPath,JSON.stringify(report,null,2));console.log(JSON.stringify({passed:true,changedFunctions:changed,protectedDeclarations:report.protectedDeclarations,report:reportPath}));
