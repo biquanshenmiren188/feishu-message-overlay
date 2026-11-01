@@ -1,5 +1,5 @@
 import {subscribePush} from './push-subscription.js';
-import {mobileScrollGate,preserveCardViewport} from './mobile-scroll.js';
+import {mobileScrollGate,preserveCardViewport,retireCardNode,clearCardPlaceholders} from './mobile-scroll.js';
 import {createCardPolicy} from './card-policy.js?v=20261028-feed1';
 import { Opportunities, assetName, opportunityState } from './basispulse-model.js?v=20261025-retention1';
 import { cardNode } from './basispulse-card.js?v=20261010gc1';
@@ -24,6 +24,7 @@ function render() {
   return preserveCardViewport(board,()=>renderCards(deferStructure));
 }
 function renderCards(deferStructure) {
+  if(!deferStructure)clearCardPlaceholders(board);
   const now=Date.now(), rows=model.tick(now),commitValues=now-lastValuesAt>=DISPLAY_REFRESH_MS;
   if(commitValues&&!deferStructure)lastValuesAt=now;
   const healthy=!failed && envelope?.status==='connected' && now-Date.parse(envelope.receivedAt)<20_000 && now-Date.parse(envelope.snapshot?.sampledAt)<20_000 && Date.parse(envelope.receivedAt)<=now+30000 && Date.parse(envelope.snapshot?.sampledAt)<=now+30000;
@@ -32,7 +33,7 @@ function renderCards(deferStructure) {
   count.dataset.connected=String(healthy);
   const keep=new Set(); let active=0, shown=0;
   for(const c of rows) {
-    if(!cardPolicy.visible(c.data)){nodes.get(c.data.id)?.card.remove();nodes.delete(c.data.id);continue;}
+    if(!cardPolicy.visible(c.data)){retireCardNode(nodes.get(c.data.id)?.card,deferStructure);nodes.delete(c.data.id);continue;}
     const id=c.data.id, state=opportunityState(c,healthy,now), live=state==='active';
     if(live)active++;
     shown++; keep.add(id); let node=nodes.get(id);
@@ -44,16 +45,18 @@ function renderCards(deferStructure) {
       if(focus)node.card.querySelector(`[data-action="${focus}"]`)?.focus({preventScroll:true});
     }
     if(!node)continue;
-    node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; const ageText=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';if(node.age.textContent!==ageText)node.age.textContent=ageText;
+    node.card.classList.toggle('bp-expired',!live); node.card.dataset.state=state; const ageText=live?`ACTIVE ${duration(c.data.enteredAt,now)}`:state==='expired'?'已失效':state==='pending'?'待确认':'待恢复';if(!deferStructure&&node.age.textContent!==ageText)node.age.textContent=ageText;
     const desired=board.children[shown-1]; if(!deferStructure && desired!==node.card)board.insertBefore(node.card,desired || null);
   }
   for(const [id,node]of nodes)if(!keep.has(id)){
     // The shared expiry deadline also applies while the user is scrolling.
-    node.card.remove();nodes.delete(id);
+    retireCardNode(node.card,deferStructure);nodes.delete(id);
   }
-  count.textContent=`${active} ACTIVE`; if(!deferStructure)empty.hidden=shown>0;
-  empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
-  cardPolicy.summary(rows);
+  if(!deferStructure){
+    count.textContent=`${active} ACTIVE`;empty.hidden=shown>0;
+    empty.textContent=healthy?'当前没有活跃机会':'正在连接数据源，恢复后自动显示';
+    cardPolicy.summary(rows);
+  }
 }
 const cardPolicy=createCardPolicy(tools,render);
 subscribePush('basispulse',{

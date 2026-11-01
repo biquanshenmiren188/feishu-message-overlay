@@ -1,5 +1,5 @@
 import {subscribePush} from './push-subscription.js';
-import {mobileScrollGate,stablePaneBottom} from './mobile-scroll.js';
+import {mobileScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
 import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261011-session';
 import {CarouselReader} from './carousel.js?v=20261003m';
 import {mobileSummary} from './summary.js?v=20261003m';
@@ -119,9 +119,15 @@ function status(){
 let detailOpen=null;
 const mobile=matchMedia('(max-width:640px)');reader.setCapacity(mobile.matches?5:3);
 let fitKey='',touchActive=false,touchSettling=false,touchQuiet=null,touchTravel=0,pendingTouchStep=0,deferredRefresh=false;
+// Message updates happen above the cards on phones. Preserve the card being
+// read across the entire synchronous layout commit, including policy removal.
+function preserveReading(mutate){return preserveCardViewport(document.querySelector('#basis-pane .bp-board'),mutate);}
 function fitCards(force=false){
  if(mobileScrollGate.defer(fitCards,()=>fitCards(force)))return;
  if(touchActive||touchSettling||reader.paused&&!force||detailOpen)return;
+ return preserveReading(()=>fitFeed(force));
+}
+function fitFeed(force){
  const footer=document.querySelector('.boundary');
  const footerHeight=getComputedStyle(footer).display==='none'?0:footer.getBoundingClientRect().height+8;
  const viewportBottom=Math.min(innerHeight,window.visualViewport?visualViewport.height+visualViewport.offsetTop:innerHeight);
@@ -144,6 +150,9 @@ function fitCards(force=false){
 function render(anchor=null){
  if(mobileScrollGate.defer(render,()=>render(anchor)))return;
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
+ return preserveReading(()=>renderFeed(anchor));
+}
+function renderFeed(anchor){
  // Both layouts mount the bounded history so natural-height rows fill the pane.
  if(!anchor&&lastWindowKey){const item=[...feed.children].find(el=>el.dataset.id===firstVisible());if(item)anchor={id:item.dataset.id,top:item.getBoundingClientRect().top,scroll:board.scrollTop,delta:0};}
  let layoutChanged=false;const ids=reader.ids,key=String(mobile.matches)+'|'+store.revision+'|'+ids.join('|');
@@ -167,6 +176,9 @@ function schedule(){
 }
 let initialPositionPending=true,initialScrollToken=0;
 function accept(batch,{audible=[],emptyMessage='等待新的机器人消息'}={}){
+ return preserveReading(()=>acceptFeed(batch,{audible,emptyMessage}));
+}
+function acceptFeed(batch,{audible,emptyMessage}){
  $('empty').textContent=emptyMessage;
  alertNew(audible);if(!batch)return;
  const previous=new Set(store.messages.map(message=>message.id)),added=batch.messages.filter(message=>!previous.has(message.id)).map(message=>message.id);

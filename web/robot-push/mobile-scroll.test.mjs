@@ -1,13 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
+import {readFileSync} from 'node:fs';
+import {createScrollGate,stablePaneBottom,preserveCardViewport,retireCardNode,clearCardPlaceholders,CARD_LAYOUT_GRACE_MS} from './mobile-scroll.js';
 function fixture(){
  let time=0,id=0;const jobs=new Map(),target=new EventTarget(),phone=new EventTarget();
  target.document=new EventTarget();target.document.hidden=false;phone.matches=true;target.matchMedia=()=>phone;
- const gate=createScrollGate(target,{later:(fn,delay)=>{jobs.set(++id,{fn,at:time+delay});return id},cancel:n=>jobs.delete(n)});
+ const later=(fn,delay)=>{jobs.set(++id,{fn,at:time+delay});return id},cancel=n=>jobs.delete(n);
+ const gate=createScrollGate(target,{later,cancel});
  const tick=n=>{time+=n;for(const [key,j]of [...jobs])if(j.at<=time){jobs.delete(key);j.fn()}};
- const emit=(type,touches=[])=>{const e=new Event(type);Object.defineProperty(e,'touches',{value:touches});target.dispatchEvent(e)};
- return {target,phone,gate,tick,emit};
+ const emit=(type,touches=[],origin=target)=>{const e=new Event(type);Object.defineProperty(e,'touches',{value:touches});Object.defineProperty(e,'target',{value:origin});target.dispatchEvent(e)};
+ return {target,phone,gate,tick,emit,later,cancel};
 }
 test('keeps one latest structural render through finger motion and inertia',()=>{
  const f=fixture();let rendered=0,latest=0;const render=()=>rendered=latest;
@@ -40,22 +42,32 @@ function cardFixture({scroll=600,height=600,base=300,rows=['a','b','c','d','e'].
  const f=fixture(),{target}=f,calls=[];let cards=[],modal=false;
  target.innerHeight=height;target.scrollY=scroll;target.scrollX=0;
  const body={};target.document.body=body;target.document.documentElement=body;
- const total=()=>base+cards.reduce((sum,node)=>sum+node.height,0)+100;
+ const nodeHeight=node=>parseFloat(node.style?.height)||node.height||0;
+ const total=()=>base+Math.max(cards.reduce((sum,node)=>sum+nodeHeight(node),0),parseFloat(board.style.getPropertyValue('min-height'))||0)+100;
  target.document.scrollingElement={get scrollHeight(){return total()},get clientHeight(){return height}};
  target.document.querySelectorAll=()=>modal?[{hidden:false,getClientRects:()=>[{}]}]:[];
- const board={isConnected:true,parentElement:body,scrollHeight:0,clientHeight:0,querySelectorAll:()=>cards,
-  getBoundingClientRect:()=>({top:base-target.scrollY,bottom:total()-100-target.scrollY})};
+ const board={isConnected:true,parentElement:body,scrollHeight:0,clientHeight:0,querySelectorAll:selector=>selector==='.bp-reading-placeholder'?cards.filter(n=>n.className==='bp-reading-placeholder'):cards,
+  getBoundingClientRect:()=>({top:base-target.scrollY,bottom:total()-100-target.scrollY,height:total()-base-100})};
+ const values=new Map(),clamp=()=>{target.scrollY=Math.max(0,Math.min(maximum(),target.scrollY));};
+ board.style={getPropertyValue:key=>values.get(key)||'',getPropertyPriority:()=>'',setProperty(key,value){values.set(key,value);clamp();},removeProperty(key){values.delete(key);clamp();}};
  target.getComputedStyle=()=>({position:'static',overflowY:'visible'});
  const maximum=()=>Math.max(0,total()-height);
  target.scrollTo=({top,behavior})=>{calls.push({top,behavior});target.scrollY=Math.max(0,Math.min(maximum(),top));};
+ function nodeFor(row={}){
+  const node={dataset:row.id?{id:row.id,pair:row.pair||''}:{},height:row.height||0,isConnected:true,parentElement:board,ownerDocument:target.document,style:{},className:row.id?'bp-card':'',textContent:row.id?'private card '+row.id:'',children:row.id?[{href:'https://example.test/private'}]:[],attributes:{},setAttribute(k,v){this.attributes[k]=v;}};
+  node.getBoundingClientRect=()=>{const index=cards.indexOf(node),top=base+cards.slice(0,index).reduce((sum,n)=>sum+nodeHeight(n),0)-target.scrollY;return {top,bottom:top+nodeHeight(node),height:nodeHeight(node),width:380};};
+  node.remove=()=>{cards=cards.filter(n=>n!==node);node.isConnected=false;clamp();};
+  node.replaceWith=next=>{const index=cards.indexOf(node);node.remove();cards.splice(index,0,next);clamp();};
+  return node;
+ }
+ target.document.createElement=()=>nodeFor();
  function set(rows,{clamp=true}={}){
-  cards=rows.map(row=>{const node={dataset:{id:row.id,pair:row.pair||''},height:row.height,isConnected:true};
-   node.getBoundingClientRect=()=>{const index=cards.indexOf(node),top=base+cards.slice(0,index).reduce((sum,n)=>sum+n.height,0)-target.scrollY;return {top,bottom:top+node.height,height:node.height,width:380};};return node;});
+  cards=rows.map(nodeFor);
   if(clamp)target.scrollY=Math.max(0,Math.min(maximum(),target.scrollY));
  }
  set(rows);const top=id=>cards.find(c=>c.dataset.id===id)?.getBoundingClientRect().top;
- const run=mutate=>preserveCardViewport(board,mutate,{target,gate:f.gate});
- return {...f,board,calls,run,set,top,rows:()=>cards.map(c=>({id:c.dataset.id,pair:c.dataset.pair,height:c.height})),modal:on=>modal=on};
+ const run=mutate=>preserveCardViewport(board,mutate,{target,gate:f.gate,later:f.later,cancel:f.cancel});
+ return {...f,board,calls,run,set,top,node:id=>cards.find(c=>c.dataset.id===id),rows:()=>cards.map(c=>({id:c.dataset.id,pair:c.dataset.pair,height:c.height})),modal:on=>modal=on};
 }
 test('removing an expired card above the reader preserves the same fractional viewport position',()=>{
  const f=cardFixture({scroll:300+284.527-90.256,rows:[{id:'bbb',height:284.527},{id:'ccc',height:420},{id:'ddd',height:420}]});
@@ -74,10 +86,10 @@ test('deleted first visible anchor falls back to the next surviving visible card
  const f=cardFixture(),before=f.top('c');f.run(()=>f.set(f.rows().filter(c=>c.id!=='b')));
  assert.equal(f.top('c'),before);assert.equal(f.calls.length,1);
 });
-test('temporary document collapse and scrollY clamp are repaired from the final layout',()=>{
+test('temporary document collapse is prevented throughout the complete DOM transaction',()=>{
  const f=cardFixture(),rows=f.rows(),before=f.top('b');
- f.run(()=>{f.set([]);assert.equal(f.target.scrollY,0);f.set(rows);});
- assert.equal(f.target.scrollY,600);assert.equal(f.top('b'),before);assert.equal(f.calls.length,1);
+ f.run(()=>{f.set([]);assert.equal(f.target.scrollY,600);f.set(rows);});
+ assert.equal(f.target.scrollY,600);assert.equal(f.top('b'),before);assert.equal(f.calls.length,0);
 });
 test('already anchored browsers and repeated unchanged transactions do not compensate twice',()=>{
  const f=cardFixture(),before=f.top('b');f.run(()=>{f.set([{id:'new',height:100},...f.rows()]);f.target.scrollY+=100;});
@@ -122,4 +134,82 @@ test('promise-returning mutation never schedules restoration after later user ac
 test('partial DOM mutation that throws still restores synchronously and propagates error',()=>{
  const f=cardFixture(),before=f.top('b');assert.throws(()=>f.run(()=>{f.set([{id:'new',height:100},...f.rows()]);throw Error('synthetic failure');}),/synthetic failure/);
  assert.equal(f.top('b'),before);assert.equal(f.calls.length,1);
+});
+
+test('programmatic BOT and document scrolling cannot create a user gesture gate',()=>{
+ const f=cardFixture(),nested={parentElement:f.target.document.body,scrollHeight:1000,clientHeight:200};
+ f.emit('scroll',[],nested);f.emit('scroll');assert.equal(f.gate.active,false);assert.equal(f.gate.inputRevision,0);
+ const before=f.top('c');f.run(()=>f.set(f.rows().filter(r=>r.id!=='a')));
+ assert.equal(f.top('c'),before,'automatic message scrolling must not suppress card anchoring');
+});
+
+test('only the actual user scroller extends inertia; unrelated BOT auto-scroll does not',()=>{
+ const f=cardFixture(),nested={parentElement:f.target.document.body,scrollHeight:1000,clientHeight:200};
+ f.target.getComputedStyle=node=>({overflowY:node===nested?'auto':'visible'});
+ f.emit('touchstart',[{}]);f.emit('touchend');f.tick(200);f.emit('scroll',[],nested);f.tick(40);
+ assert.equal(f.gate.active,false,'nested programmatic motion must not prolong document inertia');
+ f.emit('touchstart',[{}],nested);f.emit('touchend',[],nested);f.tick(200);f.emit('scroll',[],nested);f.tick(239);assert.equal(f.gate.active,true);f.tick(1);assert.equal(f.gate.active,false);
+});
+
+test('blocked and expired deletion preserves geometry during the real gesture and removes all content immediately',()=>{
+ for(const policyBlocked of [true,false]){
+  const f=cardFixture(),before=f.top('c'),y=f.target.scrollY,source=readFileSync(new URL('./basispulse.js',import.meta.url),'utf8');
+  const body=source.slice(source.indexOf('function renderCards('),source.indexOf('\nconst cardPolicy='));
+  const nodes=new Map(f.rows().map(row=>[row.id,{card:f.node(row.id)}])),model={tick:()=>policyBlocked?f.rows().map(row=>({data:{id:row.id}})):[]};
+  let summaries=0;
+  const deps={model,DISPLAY_REFRESH_MS:10000,failed:true,envelope:null,time:()=>'',count:{setAttribute(){},dataset:{}},cardPolicy:{visible:()=>false,summary(){summaries++;}},nodes,board:f.board,empty:{},retireCardNode:(node,deferred)=>retireCardNode(node,deferred,{target:f.target}),clearCardPlaceholders};
+  const renderCards=Function(...Object.keys(deps),'let lastValuesAt=-Infinity;'+body+';return renderCards;')(...Object.values(deps));
+  f.emit('touchstart',[{}]);const finish=()=>f.run(()=>renderCards(false));f.gate.defer(finish);renderCards(true);
+  assert.equal(nodes.size,0);assert.equal(f.target.scrollY,y);assert.equal(summaries,0);
+  const placeholders=f.board.querySelectorAll('.bp-reading-placeholder');assert.equal(placeholders.length,5);
+  assert.equal(placeholders[2].getBoundingClientRect().top,before);
+  for(const node of placeholders){assert.equal(node.textContent,'');assert.deepEqual(node.children,[]);assert.deepEqual(node.dataset,{});assert.equal(node.attributes['aria-hidden'],'true');assert.equal(node.inert,true);assert.equal(node.style.visibility,'hidden');assert.equal(node.style.pointerEvents,'none');}
+  f.emit('touchend');f.tick(239);assert.equal(f.target.scrollY,y);assert.equal(f.board.querySelectorAll('.bp-reading-placeholder').length,5);
+  f.tick(1);assert.equal(f.board.querySelectorAll('.bp-reading-placeholder').length,0);assert.equal(f.target.scrollY,y,'empty results get only a bounded geometry grace period');
+  f.tick(CARD_LAYOUT_GRACE_MS);assert.equal(f.board.style.getPropertyValue('min-height'),'');
+ }
+});
+
+test('nested feed render and fit transactions retain the outer height lock until final commit',()=>{
+ const f=cardFixture(),rows=f.rows(),before=f.top('c');
+ f.run(()=>{f.set([]);assert.equal(f.target.scrollY,600);f.run(()=>f.run(()=>{}));assert.equal(f.target.scrollY,600);assert.equal(f.board.style.getPropertyValue('min-height'),'1000px');f.set(rows);});
+ assert.equal(f.top('c'),before);assert.equal(f.target.scrollY,600);assert.equal(f.board.style.getPropertyValue('min-height'),'');assert.equal(f.calls.length,0);
+});
+
+test('rules pending can clear then asynchronously refill without clamping or retaining card content',()=>{
+ const f=cardFixture(),rows=f.rows(),before=f.top('c');f.run(()=>f.set([]));
+ assert.equal(f.board.querySelectorAll('*').length,0);assert.equal(f.target.scrollY,600);assert.equal(f.board.style.getPropertyValue('min-height'),'1000px');
+ f.tick(3000);f.run(()=>f.set(rows));assert.equal(f.top('c'),before);assert.equal(f.target.scrollY,600);assert.equal(f.board.style.getPropertyValue('min-height'),'');
+ f.tick(1000);assert.equal(f.top('c'),before);assert.equal(f.calls.length,0);
+});
+
+test('repeated empty responses cannot extend the bounded geometry grace',()=>{
+ const f=cardFixture();f.run(()=>f.set([]));f.tick(3000);f.run(()=>{});f.tick(499);assert.equal(f.target.scrollY,600);f.tick(1);
+ assert.equal(f.board.style.getPropertyValue('min-height'),'');assert.equal(f.target.scrollY,0);assert.equal(f.calls.length,0);
+});
+
+test('a new gesture or viewport transition cancels empty recovery instead of restoring an old reading position',()=>{
+ for(const action of [f=>f.emit('touchstart',[{}]),f=>f.emit('wheel'),f=>f.emit('keydown'),f=>f.emit('resize')]){
+  const f=cardFixture(),rows=f.rows();f.run(()=>f.set([]));action(f);
+  assert.equal(f.board.style.getPropertyValue('min-height'),'');assert.equal(f.target.scrollY,0);f.set(rows);f.tick(4000);f.run(()=>{});assert.equal(f.target.scrollY,0);assert.equal(f.calls.length,0);
+ }
+});
+
+test('height reservation restores a pre-existing inline minimum and propagates failures',()=>{
+ const f=cardFixture();f.board.style.setProperty('min-height','120px');const rows=f.rows();
+ assert.throws(()=>f.run(()=>{f.set([]);f.set(rows);throw Error('commit failed');}),/commit failed/);
+ assert.equal(f.board.style.getPropertyValue('min-height'),'120px');assert.equal(f.target.scrollY,600);
+});
+
+test('timer cancellation is a plain call on refill, timeout and input, never a method on hold state',()=>{
+ for(const reason of ['refill','timeout','input']){
+  const f=cardFixture(),rows=f.rows();let cancelled=0;
+  function browserCancel(timer){assert.equal(this,undefined,'native clearTimeout cannot receive the hold record as its receiver');cancelled++;f.cancel(timer);}
+  const run=mutate=>preserveCardViewport(f.board,mutate,{target:f.target,gate:f.gate,later:f.later,cancel:browserCancel});
+  run(()=>f.set([]));assert.equal(f.target.scrollY,600);
+  if(reason==='refill'){run(()=>f.set(rows));assert.equal(f.target.scrollY,600);}
+  else if(reason==='timeout')f.tick(CARD_LAYOUT_GRACE_MS);
+  else f.emit('touchstart',[{}]);
+  assert.equal(cancelled,1,reason);assert.equal(f.board.style.getPropertyValue('min-height'),'');
+ }
 });
