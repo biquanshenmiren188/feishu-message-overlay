@@ -200,3 +200,16 @@ test('height reservation restores a pre-existing inline minimum and propagates f
  assert.throws(()=>f.run(()=>{f.set([]);f.set(rows);throw Error('commit failed');}),/commit failed/);
  assert.equal(f.board.style.getPropertyValue('min-height'),'120px');assert.equal(f.target.scrollY,600);
 });
+
+test('timer cancellation is a plain call on refill, timeout and input, never a method on hold state',()=>{
+ for(const reason of ['refill','timeout','input']){
+  const f=cardFixture(),rows=f.rows();let cancelled=0;
+  function browserCancel(timer){assert.equal(this,undefined,'native clearTimeout cannot receive the hold record as its receiver');cancelled++;f.cancel(timer);}
+  const run=mutate=>preserveCardViewport(f.board,mutate,{target:f.target,gate:f.gate,later:f.later,cancel:browserCancel});
+  run(()=>f.set([]));assert.equal(f.target.scrollY,600);
+  if(reason==='refill'){run(()=>f.set(rows));assert.equal(f.target.scrollY,600);}
+  else if(reason==='timeout')f.tick(CARD_LAYOUT_GRACE_MS);
+  else f.emit('touchstart',[{}]);
+  assert.equal(cancelled,1,reason);assert.equal(f.board.style.getPropertyValue('min-height'),'');
+ }
+});

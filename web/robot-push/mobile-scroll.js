@@ -84,7 +84,7 @@ function reserveHeight(board,target){
   board.style.setProperty('min-height',Math.max(0,board.getBoundingClientRect().height-inset)+'px');
   return ()=>{if(value)board.style.setProperty('min-height',value,priority);else board.style.removeProperty('min-height');};
 }
-function releaseHold(board){const hold=emptyHolds.get(board);if(hold){emptyHolds.delete(board);hold.cancel(hold.timer);hold.cleanup();hold.release();}}
+function releaseHold(board){const hold=emptyHolds.get(board);if(hold){emptyHolds.delete(board);const {cancel,timer}=hold;cancel(timer);hold.cleanup();hold.release();}}
 function holdEmpty(board,snapshot,release,{target,later,cancel}){
   if(emptyHolds.has(board)||!release)return;
   const discard=()=>releaseHold(board),types=['touchstart','pointerdown','wheel','keydown'];
