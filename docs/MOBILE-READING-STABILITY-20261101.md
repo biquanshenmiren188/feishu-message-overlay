@@ -22,3 +22,16 @@
 发布脚本先核对真实 release、3500 个文件的完整清单、BOT/PWA 所有静态依赖及独立 PWA fallback；只增量添加带 hash 的 bundle/helper，并替换两个 HTML 引用。保留 SS、组合图、缓存、复制及所有线上叠加。静态发布不重启服务或桌面程序，不修改推送规则、绑定或订阅，也不发送真实测试通知。
 
 `deploy-mobile-reading.py` 默认只检查。正式切换前需要已提交源码、候选完整性验证和浏览器验收；切换失败时只回滚仍属于本次发布的 current/fallback，不覆盖并发更新。
+
+## 2026-11-01 发布验收
+
+- 功能源码：`6c45e7301607bd85b7fe07b0715a5b0a847c67c4`。本地网页 198 项、消息规则后端 25 项通过；GitHub Windows build 中网页回归、核心检查和 portable publish 全部通过。
+- Chrome 393×852、相同生产依赖图的九例回放全部通过：新消息、30条截断、置顶增高、上方卡增高、消息屏蔽回流、卡片屏蔽回流、程序滚动与规则同时更新、503全清空回填、合成触摸期间503回填。最大可见卡片偏移 0.304px；后两项整页偏移和高度下降均为0，规则失效期间卡片内容确实消失。页面错误为0；明确来自浏览器扩展的错误另列，不算页面错误。非实体 iPhone 测试。
+- 浏览器自动重载曾失联，后续通过显式重载逐项接续，全部已完成 case 单独落盘；未完成的尝试未计为通过。无证据把它归因于生产代码或测试日志。
+- 回放抓到原生 clearTimeout 被错误绑定 receiver 的候选问题，已修复并增加严格 this 回归及候选产物专项后才发布；失败草稿从未上线。
+- 正式 release：`/opt/funding-radar-web/releases/20261101-mobile-reading-1793507888136690389`。
+- 回滚 release：`/opt/funding-radar-web/releases/20261101-ss-book-cache-1793505553745329896`；原 PWA fallback 和清单保存在 `/opt/funding-radar-web/backups/20261101-mobile-reading-1793507888136690389`。
+- bundle：`performance-20261017/bot-reading-8789d8b685f6e827.js`；helper：`mobile-reading-20261101/mobile-scroll-257123247a4c6ae5.js`。
+- 保留3499个原静态文件，服务/容器PID均未改变，桌面未重启。正式手机视口已确认新bundle、消息连接及个人规则/卡片正常加载。
+
+本地证据目录：`outputs/mobile-reading-20261101/`；完整合成逐帧记录：`work/mobile-reading-fixture-evidence/8102/`。3500ms几何宽限有明确上限，长期规则故障、真正清空全部机会后的自然滚动范围变化不承诺维持失去的卡片位置。

@@ -50,3 +50,5 @@ python scripts/mobile-reading-fixture/serve.py --baseline ../mobile-reading-live
 每个已完成案例还会 POST 到同一回环服务的 `/__fixture-report`，保存完整合成帧；批量运行每一例之后保存 `suite-progress`，最后保存 `suite`。因此页面后续失联不影响之前完成的证据。默认写入基线目录旁的 `mobile-reading-fixture-evidence/<端口>/`；可用 `--out <目录>` 指定，文件名包含唯一时间和场景名，日志打印实际路径。该接口只接收标记为合成诊断的 JSON，大小限制10MB，不接收生产 API 数据；这些报告是本地测试产物，不进入生产，也不提交到仓库。
 
 若服务尚未更新而页面使用了新增上报脚本，报告中的 `evidenceError` 会明确说明保存失败；静止几何结论仍由逐帧证据决定。重启服务后重新运行需要留档的案例。服务启动时读取入口 HTML，因此候选更新后不能只刷新页面，须重启对应端口服务。
+
+服务不打印常规GET日志；启动时输出证据目录，每次成功保存只打印短文件名，避免长时间批测产生大量子进程输出。HTTP压力检查不能替代浏览器验收；浏览器自动重载失联时，先检查已保存的case与suite-progress，不把没有完成的场景计为通过。
