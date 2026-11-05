@@ -69,6 +69,9 @@ foreach($contract in @('coin-rules','push-code')){
  if($check.ExitCode -ne 0 -or !(Test-Path -LiteralPath $report) -or !(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).passed){throw "$contract contract failed: $folder"}
 }
 & (Join-Path $PSScriptRoot 'test-update-process.ps1') -AppDirectory (Join-Path $root $OutputDirectory)
+$transportReport=Join-Path $root ('artifacts/verification/radar-transport-'+[guid]::NewGuid().ToString('N'))
+$transport=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @('--radar-transport-contract',('"'+$transportReport+'"')) -WindowStyle Hidden -PassThru -Wait
+if($transport.ExitCode -ne 0 -or !(Get-Content (Join-Path $transportReport 'radar-transport-contract.json') -Raw | ConvertFrom-Json).passed){throw 'Radar transport contract failed'}
 $recoveryReport=Join-Path $root ('artifacts/verification/recovery-'+[guid]::NewGuid().ToString('N'))
 $recovery=Start-Process -FilePath (Join-Path $root (Join-Path $OutputDirectory 'FeishuMessageOverlay.exe')) -ArgumentList @('--recovery-contract',('"'+$recoveryReport+'"')) -WindowStyle Hidden -PassThru -Wait
 if($recovery.ExitCode -ne 0 -or !(Test-Path -LiteralPath (Join-Path $recoveryReport 'recovery-contract.json'))){throw 'Desktop recovery contracts failed'}

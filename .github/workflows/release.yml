@@ -8,7 +8,13 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  receiver-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/test-radar-update-receiver.py
   release:
+    needs: receiver-tests
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,8 +46,47 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           $name="FeishuMessageOverlay-$env:RELEASE_TAG-win-x64.zip"
-          Copy-Item -LiteralPath artifacts/FeishuMessageOverlay-win-x64.zip -Destination "artifacts/$name"
-          $hash=(Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText("$pwd/artifacts/SHA256SUMS.txt","$hash  $name`n",[Text.UTF8Encoding]::new($false))
-          gh release create $env:RELEASE_TAG "artifacts/$name" artifacts/SHA256SUMS.txt --verify-tag --generate-notes --title $env:RELEASE_TAG
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          gh release view $env:RELEASE_TAG --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            # A rerun uses the immutable first artifact; never replaces a published ZIP.
+            gh release download $env:RELEASE_TAG --pattern $name --dir artifacts
+            if ($LASTEXITCODE -ne 0) { throw 'Existing release download failed' }
+          } else {
+            Copy-Item -LiteralPath artifacts/FeishuMessageOverlay-win-x64.zip -Destination "artifacts/$name"
+            $hash=(Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+            [IO.File]::WriteAllText("$pwd/artifacts/SHA256SUMS.txt","$hash  $name`n",[Text.UTF8Encoding]::new($false))
+            gh release create $env:RELEASE_TAG "artifacts/$name" artifacts/SHA256SUMS.txt --verify-tag --generate-notes --title $env:RELEASE_TAG
+            if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          }
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $release.draft -or $release.prerelease){throw 'Official release required'}
+          $asset=@($release.assets | Where-Object name -eq $name)
+          $hash=(Get-FileHash -LiteralPath "artifacts/$name").Hash.ToLowerInvariant()
+          if($asset.Count -ne 1 -or $asset[0].digest -ne "sha256:$hash" -or $asset[0].size -ne (Get-Item "artifacts/$name").Length){throw 'GitHub asset verification failed'}
+      - name: Publish signed radar update
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RADAR_UPDATE_SSH_KEY: ${{ secrets.RADAR_UPDATE_SSH_KEY }}
+          RADAR_UPDATE_SSH_TARGET: ${{ secrets.RADAR_UPDATE_SSH_TARGET }}
+          RADAR_UPDATE_KNOWN_HOSTS: ${{ secrets.RADAR_UPDATE_KNOWN_HOSTS }}
+        run: |
+          foreach($value in @($env:RADAR_UPDATE_SSH_KEY,$env:RADAR_UPDATE_SSH_TARGET,$env:RADAR_UPDATE_KNOWN_HOSTS)){if(!$value){throw 'Radar release secrets are required'}}
+          $key=Join-Path $env:RUNNER_TEMP 'radar-update-key'
+          $known=Join-Path $env:RUNNER_TEMP 'radar-update-known-hosts'
+          try {
+            [IO.File]::WriteAllText($key,$env:RADAR_UPDATE_SSH_KEY.Replace("`r",'').Trim()+"`n",[Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($known,$env:RADAR_UPDATE_KNOWN_HOSTS,[Text.UTF8Encoding]::new($false))
+            icacls $key /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+            if($LASTEXITCODE -ne 0){throw 'Key ACL failed'}
+            $source=(git rev-parse HEAD).Trim()
+            ./scripts/publish-radar-update.ps1 -Package "artifacts/FeishuMessageOverlay-$env:RELEASE_TAG-win-x64.zip" -Version $env:RELEASE_TAG -SourceCommit $source -SshTarget $env:RADAR_UPDATE_SSH_TARGET -IdentityFile $key -KnownHostsFile $known
+          } finally {
+            Remove-Item -LiteralPath $key,$known -Force -ErrorAction SilentlyContinue
+          }
+      - name: Verify public signed download without GitHub login
+        shell: pwsh
+        run: |
+          $out=Join-Path $pwd 'artifacts/radar-source-check'
+          $p=Start-Process artifacts/app/FeishuMessageOverlay.exe -ArgumentList @('--verify-update-source',('"'+$out+'"')) -WindowStyle Hidden -PassThru -Wait
+          if($p.ExitCode -ne 0 -or !(Get-Content "$out/update-source-check.json" -Raw | ConvertFrom-Json).passed){throw 'Radar end-to-end verification failed'}

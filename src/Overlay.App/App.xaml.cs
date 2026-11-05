@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.IO;
 namespace Overlay.App;
 public partial class App : Application
@@ -12,6 +12,12 @@ public partial class App : Application
     internal static string SmokeStage { get; set; } = "ui";
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if(e.Args.Length==2&&e.Args[0]=="--radar-transport-contract")
+        {
+            SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
+            try{await RadarUpdateTransportContract.RunAsync(e.Args[1]);Shutdown();}
+            catch(Exception error){Directory.CreateDirectory(e.Args[1]);File.WriteAllText(Path.Combine(e.Args[1],"failure.txt"),error.ToString());Shutdown(1);}return;
+        }
         if(e.Args.Length==2&&e.Args[0]=="--push-code-contract")
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
@@ -42,7 +48,7 @@ public partial class App : Application
         if(e.Args.Length==2&&e.Args[0]=="--verify-update-source")
         {
             SmokeMode=true;ShutdownMode=ShutdownMode.OnExplicitShutdown;base.OnStartup(e);
-            try{await GitHubUpdateTransport.VerifySourceAsync(e.Args[1]);Shutdown();}
+            try{await RadarUpdateTransport.VerifySourceAsync(e.Args[1]);Shutdown();}
             catch(Exception error){Directory.CreateDirectory(e.Args[1]);File.WriteAllText(Path.Combine(e.Args[1],"update-source-check.json"),System.Text.Json.JsonSerializer.Serialize(new{passed=false,type=error.GetType().Name}));Shutdown(1);}return;
         }
         if(e.Args.Length==2&&e.Args[0]=="--apply-desktop-update")
