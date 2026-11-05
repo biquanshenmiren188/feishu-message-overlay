@@ -10,9 +10,9 @@ public partial class MainWindow
     private sealed class ManualUpdateTransportFixture : IDesktopUpdateTransport
     {
         internal int Checks,Downloads;
-        internal readonly TaskCompletionSource<(string Json,bool Private)> Response=new();
-        public Task<(string Json,bool Private)> LatestAsync(CancellationToken ct){Checks++;return Response.Task;}
-        public async Task DownloadAsync(DesktopRelease release,bool isPrivate,string zip,CancellationToken ct){Downloads++;await File.WriteAllTextAsync(zip,"invalid synthetic package",ct);}
+        internal readonly TaskCompletionSource<DesktopRelease?> Response=new();
+        public Task<DesktopRelease?> LatestAsync(string current,CancellationToken ct){Checks++;return Response.Task;}
+        public async Task DownloadAsync(DesktopRelease release,string zip,CancellationToken ct){Downloads++;await File.WriteAllTextAsync(zip,"invalid synthetic package",ct);}
         public void Dispose(){}
     }
     private async Task RunManualUpdateContractAsync(string output)
@@ -32,7 +32,7 @@ public partial class MainWindow
         Check(updater.Busy&&fixture.Checks==1,"repeated manual clicks coalesce during check");
         const string tag="v2099.01.01.1";
         var asset=$"FeishuMessageOverlay-{tag}-win-x64.zip";
-        fixture.Response.SetResult((JsonSerializer.Serialize(new{draft=false,prerelease=false,tag_name=tag,assets=new[]{new{name=asset,state="uploaded",size=50,digest="sha256:"+new string('0',64),browser_download_url=$"https://github.com/{DesktopUpdates.Repository}/releases/download/{tag}/{asset}"}}}),true));
+        fixture.Response.SetResult(new(tag,asset,new Uri(RadarDesktopUpdates.BaseUrl+tag+"/"+asset),50,new string('0',64)));
         await checking;
         Check(fixture.Downloads==0&&updater.CanInstall&&!updater.Busy,"checking a newer release does not download it");
         var dialog=new Window{ShowActivated=false,ShowInTaskbar=false,Left=-20000,Top=-20000,Width=1,Height=1,WindowStyle=WindowStyle.None};

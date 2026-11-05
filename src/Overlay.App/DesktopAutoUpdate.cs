@@ -19,7 +19,7 @@ internal sealed class DesktopAutoUpdate : IDisposable
     private DesktopUpdateState state;
     private DesktopUpdatePlan? prepared;
     private DesktopRelease? available;
-    private bool privateRelease;
+
     private bool busy;
     internal bool Enabled=>false;
     internal bool Busy=>busy;
@@ -30,7 +30,7 @@ internal sealed class DesktopAutoUpdate : IDisposable
     internal DesktopAutoUpdate(MainWindow window,IDesktopUpdateTransport? transport=null,string? updateDirectory=null)
     {
         this.window=window;
-        this.transport=transport??new GitHubUpdateTransport();
+        this.transport=transport??new RadarUpdateTransport();
         directory=updateDirectory??Path.Combine(LocalStorage.DirectoryPath,"updates");
         try{state=File.Exists(StatePath)?JsonSerializer.Deserialize<DesktopUpdateState>(File.ReadAllText(StatePath))??new(false):new();}
         catch{state=new(false,Status:"更新配置不可读，请手动检查");}
@@ -46,12 +46,13 @@ internal sealed class DesktopAutoUpdate : IDisposable
         {
             available=null;
             state=state with{Status="正在检查更新"};Save();
-            var metadata=await transport.LatestAsync(stop.Token);
-            available=DesktopUpdates.SelectRelease(metadata.Json,CurrentVersion);privateRelease=metadata.Private;
+            available=await transport.LatestAsync(CurrentVersion,stop.Token);
+
             state=state with{Status=available is null?"已是最新正式版（"+CurrentVersion+"）":$"发现 {available.Tag}，请点击下载并安装"};Save();
         }
         catch(OperationCanceledException){if(!stop.IsCancellationRequested){state=state with{Status="更新检查超时，请手动重试"};try{Save();}catch{}}}
-        catch{state=state with{Status="更新检查或校验失败；请检查网络及 GitHub 登录，当前版本继续运行"};try{Save();}catch{}}
+        catch(InvalidDataException){state=state with{Status="更新签名或版本清单校验失败，已阻止更新；当前版本继续运行"};try{Save();}catch{}}
+        catch{state=state with{Status="无法连接雷达更新服务器或版本校验失败；当前版本继续运行，请稍后手动重试"};try{Save();}catch{}}
         finally{busy=false;Changed?.Invoke();}
     }
     internal async Task InstallManuallyAsync()
@@ -67,7 +68,7 @@ internal sealed class DesktopAutoUpdate : IDisposable
                 state=state with{Status="正在下载并校验 "+release.Tag};Save();
                 var sessionPath=Path.Combine(directory,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(sessionPath);
                 var zip=Path.Combine(sessionPath,"package.zip");
-                await transport.DownloadAsync(release,privateRelease,zip,stop.Token);
+                await transport.DownloadAsync(release,zip,stop.Token);
                 var package=Path.Combine(sessionPath,"package");
                 await Task.Run(()=>DesktopUpdates.ExtractVerified(zip,package,release.Tag,release.Sha256,release.Size),stop.Token);
                 using var self=Process.GetCurrentProcess();
