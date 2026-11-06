@@ -11,13 +11,14 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
  try{
  for(const width of [1440,393,320]){
   const context=await browser.newContext({viewport:{width,height:width===1440?1000:852},reducedMotion:'reduce'});
-  const page=await context.newPage(),errors=[],writes=[],states={a:initial(),b:initial()};let failNext=false;
+  const page=await context.newPage(),errors=[],writes=[],states={a:initial(),b:initial()};let failNext=false,scopeOnly=false;
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await context.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic_token_a_123456789'));
   await context.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url()),p=url.pathname,profile=req.headers().authorization?.includes('_b_')?'b':'a';
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(url.origin!==origin)return route.abort();
+   if(scopeOnly&&['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/'].includes(p))return route.fulfill({contentType:'text/html',body:'<!doctype html><header class="topbar compact-header"><strong>雷达</strong></header><nav class="site-nav"><a>全市场费率</a></nav><div class="feed-tools"></div><script type="module" src="/radar/robot-push/shared-account.js?v=20261106-2"></script>'});
    if(p.startsWith('/radar/push-test/api/')){
     const kind=p.split('/').at(-1);
     if(kind==='status')return json({profileId:profile,revision:0,publicKey:'synthetic',settings,subscribed:false,blockedHistory:[]});
@@ -50,7 +51,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
    try{const body=await fs.readFile(file),ext=path.extname(file);return route.fulfill({contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[ext]||'application/octet-stream',body});}catch{return route.fulfill({status:404,body:''});}
   });
   await page.goto(origin+'/radar/robot-push/alarms/');await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
-  await page.locator('.radar-account-entry').waitFor();assert.match(await page.locator('.radar-account-entry').innerText(),/88/);
+  await page.locator('.radar-account-entry').waitFor();assert.equal(await page.locator('.radar-account-entry').innerText(),'推送码已绑定');
   assert.equal(await page.locator('nav.site-nav a').count(),7);
   const navFits=await page.evaluate(()=>{const n=document.querySelector('.site-nav').getBoundingClientRect();return [...document.querySelectorAll('.site-nav>a')].every(a=>a.getBoundingClientRect().bottom<=n.bottom+1)&&document.querySelector('main').getBoundingClientRect().top>=n.bottom;});assert.equal(navFits,true,'navigation overlaps content '+width);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false,'page overflow '+width);
@@ -68,17 +69,24 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   await page.screenshot({path:path.join(root,`outputs/verification/alarms-list-${width}.png`),fullPage:true});
   // Unknown write response must retry the original immutable request id/body.
   failNext=true;await page.locator('[data-action=toggle]').first().click();await page.locator('#pending-action').waitFor({state:'visible'});const failed=writes.at(-1);await page.click('#retry-action');await page.waitForFunction(()=>document.querySelector('#pending-action').hidden);assert.deepEqual(writes.at(-1),failed);
-  await page.locator('.radar-account-entry').click();assert.match(await page.locator('#ns-bound-code').innerText(),/••••••88/);
+  await page.locator('.radar-account-entry').click();assert.match(await page.locator('#ns-bound-code').innerText(),/12345688/);
   await page.screenshot({path:path.join(root,`outputs/verification/push-code-${width}.png`),fullPage:true});
-  await page.click('#ns-switch-open');await page.fill('#ns-switch-code','12345699');await page.click('#ns-switch-submit');await page.waitForFunction(()=>document.querySelector('.radar-account-entry').textContent.includes('99'));await page.click('.ra-close');
+  await page.click('#ns-switch-open');await page.fill('#ns-switch-code','12345699');await page.click('#ns-switch-submit');await page.waitForFunction(()=>document.querySelector('#ns-bound-code').textContent==='12345699');await page.click('.ra-close');
   await page.waitForFunction(()=>document.querySelector('#alarm-count').textContent==='0');assert.equal(states.a.rules.length,2);assert.equal(states.b.rules.length,0);assert.equal(states.b.device,null);
   await page.goto(origin+'/radar/robot-push/settings/');
-  await page.waitForFunction(()=>document.querySelector('.radar-account-entry')?.textContent.includes('88'));
+  await page.waitForFunction(()=>document.querySelector('.radar-account-entry')?.textContent==='推送码已绑定');
   assert.equal(await page.locator('#mobile-account').count(),0);
   await page.locator('.radar-account-entry').click();await page.locator('#ns-switch-open').waitFor({state:'visible'});await page.click('.ra-close');
   await page.screenshot({path:path.join(root,`outputs/verification/settings-account-${width}.png`),fullPage:true});
   assert.deepEqual(errors,[],'browser errors '+width);
-  results.push({width,passed:true,checks:['layout','create','copy','pause','filter','bind','immutable-retry','masked-code','switch-isolation'],writes:writes.length});
+  scopeOnly=true;
+  for(const scope of ['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/']){
+   await page.goto(origin+scope);await page.locator('.radar-seven-nav').waitFor();
+   assert.equal(await page.locator('.radar-account-entry,#radar-account-dialog,.has-radar-account').count(),0,'account entry outside settings '+scope);
+   if(scope.includes('push')){await page.locator('#notification-settings').waitFor({state:'attached'});assert.equal(await page.locator('#notification-settings').count(),1);}
+  }
+  assert.deepEqual(errors,[],'scope browser errors '+width);
+  results.push({width,passed:true,checks:['layout','create','copy','pause','filter','bind','immutable-retry','full-code','switch-isolation'],writes:writes.length});
   await context.close();
  }
  await fs.writeFile(path.join(root,'outputs/verification/browser-results.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results));

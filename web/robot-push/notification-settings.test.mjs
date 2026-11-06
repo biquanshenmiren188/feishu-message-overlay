@@ -55,7 +55,7 @@ async function switchCode(f,code){f.elements.get('ns-switch').hidden=false;f.ele
 test('switch loads the target revision/settings and saves only to its token',async()=>{
  const f=fixture();await f.run('load()');await switchCode(f,'87654321');
  assert.equal(f.run('token'),'other-token');assert.equal(f.run('revision'),2);
- assert.equal(f.elements.get('ns-bound-code').textContent,'••••••21');assert.equal(f.elements.get('ns-coins').value,'ETH');
+ assert.equal(f.elements.get('ns-bound-code').textContent,'87654321');assert.equal(f.elements.get('ns-coins').value,'ETH');
  assert.equal(f.storage.get('radar-test-token'),'owner-token');assert.equal(f.storage.get('radar-settings-token'),'other-token');
  // Form controls normally stringify assigned values in browsers.
  f.elements.get('ns-ranks').value='';f.elements.get('ns-percent').value='';
@@ -69,7 +69,7 @@ test('wrong code or failed target load retains original token, code, revision an
   const f=fixture({failRoute});await f.run('load()');f.elements.get('ns-coins').value='UNSAVED';
   await switchCode(f,failRoute?'87654321':'00000000');
   assert.equal(f.run('token'),'owner-token');assert.equal(f.run('revision'),7);
-  assert.equal(f.elements.get('ns-bound-code').textContent,'••••••78');assert.equal(f.elements.get('ns-coins').value,'UNSAVED');
+  assert.equal(f.elements.get('ns-bound-code').textContent,'12345678');assert.equal(f.elements.get('ns-coins').value,'UNSAVED');
   assert.equal(f.storage.get('radar-test-token'),'owner-token');assert.equal(f.storage.has('radar-settings-token'),false);
   assert.equal(f.elements.get('ns-switch').hidden,false);assert.ok(f.elements.get('ns-switch-error').textContent);
  }
