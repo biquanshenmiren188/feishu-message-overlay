@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s),apiBase='/radar/push-center-api/';
 const token=()=>window.RadarAccount?.token()||'';
-let state=null,epoch=0,busy=false,mode='',pending=null,loadedToken='';
+let state=null,epoch=0,busy=false,mode='',pending=null,loadedToken='',loadSequence=0,appliedSequence=0;
 const dialog=$('#pc-editor'),form=$('#pc-form');
 window.RadarHasUnsavedChanges=()=>busy||!!pending;
 const note=(text,error=false)=>{$('#pc-message').textContent=text;$('#pc-message').classList.toggle('is-error',error);};
@@ -28,10 +28,10 @@ function render(waiting=false){
  for(const item of state.history){const row=document.createElement('div'),at=document.createElement('time'),action=document.createElement('span');row.className='pc-log';at.textContent=new Date(item.at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});action.textContent=item.action;row.append(at,action);logs.append(row);}
 }
 async function load(){
- const auth=token(),generation=epoch;
+ const auth=token(),generation=epoch,sequence=++loadSequence;
  if(!auth){state=null;loadedToken='';render();note('连接后查看当前推送码的设备与设置。');return;}
- try{const next=await api('state',undefined,auth);if(auth!==token()||generation!==epoch)return;state=next;loadedToken=auth;render();note('已同步当前推送码。');}
- catch(e){if(auth!==token()||generation!==epoch)return;if(loadedToken!==auth)state=null;render();note(e.message,true);}
+ try{const next=await api('state',undefined,auth);if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;state=next;loadedToken=auth;render();note('已同步当前推送码。');}
+ catch(e){if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;if(loadedToken!==auth)state=null;render();note(e.message,true);}
 }
 function close(){if(busy)return;if(pending){$('#pc-form-error').textContent='操作结果待确认，请先重试原操作。';return;}dialog.close();}
 function editor(next){
@@ -53,7 +53,7 @@ function editor(next){
 }
 async function submit(){
  if(busy)return;
- const auth=token(),generation=epoch,data=new FormData(form);busy=true;$('#pc-submit').disabled=true;
+ const auth=token(),generation=epoch,data=new FormData(form);appliedSequence=++loadSequence;busy=true;$('#pc-submit').disabled=true;
  try{
   if(mode==='switch'||mode==='create'){
    // Identity's own guard must not mistake this explicit form submission for an unrelated write.

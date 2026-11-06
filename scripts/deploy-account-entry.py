@@ -12,12 +12,12 @@ spec=importlib.util.spec_from_file_location('alarm_deploy',Path(__file__).with_n
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 
 def service_ids():
-    return subprocess.check_output(['systemctl','show','robot-push','radar-webpush-test','radar-alarms','--property=Id,MainPID'],text=True)
+    return subprocess.check_output(['systemctl','show','robot-push','radar-webpush-test','radar-alarms','radar-push-center','--property=Id,MainPID'],text=True)
 
 def main():
     stage=Path(sys.argv[1]).resolve();apply='--apply' in sys.argv[2:]
     manifest=json.loads((stage/'manifest.json').read_text())
-    assert manifest['validation']['passed']
+    assert manifest['validation']['passed'] and manifest['validation']['files']==manifest['files']
     for name,digest in manifest['files'].items():
         assert not name.startswith('/') and '..' not in name.split('/') and '\\' not in name
         assert base.sha((stage/'static'/name).read_bytes())==digest
@@ -25,6 +25,7 @@ def main():
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         old=base.CURRENT.resolve();assert str(old)==manifest['previous']
         for name,digest in manifest['baseline'].items():assert base.sha((old/name).read_bytes())==digest,name
+        for name in manifest.get('newFiles',[]):assert not (old/name).exists(),name
         before,links=base.inventory(old);states=base.state_digest();pids=service_ids();fallback=base.FALLBACK.read_bytes()
         if not apply:
             print(json.dumps({'preflight':True,'release':str(old),'files':len(manifest['files'])}));return

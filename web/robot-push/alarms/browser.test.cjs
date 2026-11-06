@@ -11,7 +11,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
  try{
  for(const width of [1440,393,320]){
   const context=await browser.newContext({viewport:{width,height:width===1440?1000:852},reducedMotion:'reduce'});
-  const page=await context.newPage(),errors=[],writes=[],states={a:initial(),b:initial()};let failNext=false,scopeOnly=false;
+  const page=await context.newPage(),errors=[],writes=[],states={a:initial(),b:initial()};let failNext=false,scopeOnly=false,delayState=null;
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await context.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic_token_a_123456789'));
   await context.route('**/*',async route=>{
@@ -29,8 +29,8 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
     return json({});
    }
    if(p.startsWith('/radar/alarms-api/')){
-    if(p.endsWith('/state'))return json(states[profile]);
-    if(p.endsWith('/catalog'))return json({items:['BTCUSDT','ETHUSDT','1000RATSUSDT'].map((symbol,i)=>({symbol,base:symbol.slice(0,-4),unit:symbol.slice(0,-4),last:['76000','2300','0.03'][i],mark:['76001','2301','0.0301'][i],observedAt:Date.now()/1000}))});
+    if(p.endsWith('/state')){const snapshot=structuredClone(states[profile]);if(delayState){const gate=delayState;delayState=null;await gate;}return json(snapshot);}
+    if(p.endsWith('/catalog'))return json({items:['BTCUSDT','ETHUSDT','1000RATSUSDT','WBTCUSDT','BTCBUSDT','RATSUSDT'].map((symbol,i)=>({symbol,base:symbol.slice(0,-4),unit:symbol.slice(0,-4),last:['76000','2300','0.03','76000','76000','0.00003'][i],mark:'76001',observedAt:Date.now()/1000}))});
     if(p.endsWith('/change')){
      const b=req.postDataJSON();writes.push(b);
      if(failNext){failNext=false;return route.abort('failed');}
@@ -57,12 +57,19 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false,'page overflow '+width);
   await fs.mkdir(path.join(root,'outputs/verification'),{recursive:true});
   await page.screenshot({path:path.join(root,`outputs/verification/alarms-empty-${width}.png`),fullPage:true});
-  await page.click('#add-alarm');await page.fill('[name=symbol]','BTCUSDT');await page.fill('[name=target]','80000');await page.selectOption('[name=repeat]','true');await page.selectOption('[name=hold]','3');
+  let releaseOld;delayState=new Promise(r=>releaseOld=r);await page.click('#refresh-alarms');await page.waitForTimeout(80);
+  await page.click('#add-alarm');await page.locator('#alarm-symbols option').first().waitFor({state:'attached'});
+  for(const [query,expected] of [['btc',['BTCUSDT']],['BT',[]],['RATS',['RATSUSDT']],['1000RATS',['1000RATSUSDT']],['BTCUSDT',['BTCUSDT']]]){
+   await page.fill('[name=symbol]',query);assert.deepEqual(await page.locator('#alarm-symbols option').evaluateAll(xs=>xs.map(x=>x.value)),expected,'exact catalog '+query);
+  }
+  await page.fill('[name=target]','80000');await page.selectOption('[name=repeat]','true');await page.selectOption('[name=hold]','3');
   await page.fill('[name=note]','突破观察');assert.match(await page.locator('#rule-preview').innerText(),/80000/);
   await page.screenshot({path:path.join(root,`outputs/verification/alarm-editor-${width}.png`),fullPage:true});
   await page.click('#save-alarm');await page.waitForFunction(()=>!document.querySelector('#alarm-editor').open);
+  releaseOld();await page.waitForTimeout(100);assert.equal(await page.locator('.alarm-row').count(),1,'late refresh cannot erase saved alarm');
   assert.equal(states.a.rules.length,1);assert.equal(states.a.rules[0].hold,3);
   await page.locator('[data-action=copy]').click();await page.fill('[name=target]','82000');await page.click('#save-alarm');await page.waitForFunction(()=>!document.querySelector('#alarm-editor').open);assert.equal(states.a.rules.length,2);
+  await page.fill('#alarm-search','BT');assert.equal(await page.locator('.alarm-row').count(),0);await page.fill('#alarm-search','btc');assert.equal(await page.locator('.alarm-row').count(),2);await page.fill('#alarm-search','突破');assert.equal(await page.locator('.alarm-row').count(),0);await page.fill('#alarm-search','突破观察');assert.equal(await page.locator('.alarm-row').count(),2);await page.fill('#alarm-search','');
   await page.locator('[data-action=toggle]').first().click();await page.waitForTimeout(100);assert.equal(states.a.rules[0].enabled,false);
   await page.selectOption('#alarm-filter','paused');assert.equal(await page.locator('.alarm-row').count(),1);await page.selectOption('#alarm-filter','all');
   await page.click('#bind-device');await page.fill('#bark-form [name=key]','synthetic_device_12345');await page.fill('#bark-form [name=label]','我的 iPhone');await page.click('#save-bark');await page.waitForFunction(()=>!document.querySelector('#bark-editor').open);assert.equal(states.a.device.label,'我的 iPhone');

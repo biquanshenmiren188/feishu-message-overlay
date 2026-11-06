@@ -1,3 +1,4 @@
+import {matchesInstrument,matchesAlarm} from './search.js?v=20261106-exact1';
 const $=s=>document.querySelector(s),form=$('#alarm-form'),barkForm=$('#bark-form');
 const field=n=>form.elements.namedItem(n),API='/radar/alarms-api/';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -5,7 +6,7 @@ const venue={binance:'Binance',bybit:'Bybit',okx:'OKX',bitget:'Bitget',gate:'Gat
 const conditions={above:'上穿',below:'下穿',enter:'进入区间',exit:'离开区间'};
 const labels={watching:'监控中',waiting:'等待下次穿越',confirming:'持续确认中',paused:'已暂停',expired:'已到期',triggered:'已触发',stale:'行情中断',unavailable:'价格暂缺'};
 const deliveries={queued:'等待发送',sending:'发送中',accepted:'接口接受',retry:'等待重试',failed:'发送失败',unknown:'结果未知',expired:'已过期',cancelled:'已取消',no_device:'未绑定设备'};
-let current=null,catalog=[],editing=null,busy=false,epoch=0,lastToken='',pending=null,draft=false,toastTimer,catalogEpoch=0;
+let current=null,catalog=[],editing=null,busy=false,epoch=0,lastToken='',pending=null,draft=false,toastTimer,catalogEpoch=0,loadSequence=0,appliedSequence=0;
 const token=()=>window.RadarAccount?.token()||'';
 window.RadarAlarmHasDraft=()=>draft||!!pending;
 function toast(text){$('#alarm-toast').textContent=text;$('#alarm-toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#alarm-toast').hidden=true,3500);}
@@ -23,7 +24,7 @@ function description(r){return conditions[r.condition]+' '+price(r.target)+(r.up
 function renderRules(){
  if(!current)return;
  const search=$('#alarm-search').value.trim().toLowerCase(),filter=$('#alarm-filter').value;
- const rows=current.rules.filter(r=>(r.symbol+' '+r.note+' '+r.exchange).toLowerCase().includes(search)).filter(r=>filter==='all'||filter==='active'?! (filter==='active'&&['paused','expired','triggered'].includes(safeStatus(r))):safeStatus(r)===filter);
+ const rows=current.rules.filter(r=>matchesAlarm(search,r)).filter(r=>filter==='all'||filter==='active'?! (filter==='active'&&['paused','expired','triggered'].includes(safeStatus(r))):safeStatus(r)===filter);
  $('#alarm-count').textContent=current.rules.length;
  const selected=new URLSearchParams(location.search).get('rule');
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
@@ -43,9 +44,9 @@ function render(){
  $('#event-list').innerHTML=current.events.length?current.events.map(e=>`<details data-id="${e.id}" ${opened.has(e.id)?'open':''}><summary><span>${esc(e.title)}<time>${new Date(e.at*1000).toLocaleString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})} 北京时间</time></span><span class="alarm-badge ${e.status==='accepted'?'is-live':['unknown','failed','no_device'].includes(e.status)?'is-warning':''}">${deliveries[e.status]||e.status}</span></summary><pre>${esc(e.body)}</pre>${e.error?'<p class="event-error">'+esc(e.error)+'</p>':''}<p class="event-error">发送尝试 ${e.attempts} 次 · ${esc(e.id.slice(-8))}</p></details>`).join(''):'<p class="alarm-empty-small">暂无触发记录。达到条件后，会在这里显示触发价格和发送结果。</p>';
 }
 async function load(showError=true){
- const auth=token(),generation=epoch;if(!auth){current=null;connected(false);return;}
- try{const next=await api('state',undefined,auth);if(auth!==token()||generation!==epoch)return;current=next;render();}
- catch(e){if(auth!==token()||generation!==epoch)return;connected(false);if(showError)notice(e.message);}
+ const auth=token(),generation=epoch,sequence=++loadSequence;if(!auth){current=null;connected(false);return;}
+ try{const next=await api('state',undefined,auth);if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;current=next;render();}
+ catch(e){if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;connected(false);if(showError)notice(e.message);}
 }
 async function commit(data){
  if(busy)return false;
@@ -53,7 +54,7 @@ async function commit(data){
  const auth=token(),generation=epoch;
  if(!current||!auth){toast('请先连接推送码并载入规则');return false;}
  const body=pending?.data||{...data,requestId:crypto.randomUUID().replaceAll('-',''),revision:current.revision};
- busy=true;connected(false);$('#save-alarm').disabled=true;$('#save-bark').disabled=true;
+ appliedSequence=++loadSequence;busy=true;connected(false);$('#save-alarm').disabled=true;$('#save-bark').disabled=true;
  try{await api('change',body,auth);if(auth!==token()||generation!==epoch)return false;pending=null;$('#pending-action').hidden=true;await load();return true;}
  catch(e){if(auth!==token()||generation!==epoch)return false;
   if(!e.status||e.status>=500){pending={data:body,auth};$('#pending-action').hidden=false;}
@@ -71,10 +72,14 @@ function updateForm(){
  $('#quote-preview').textContent=q?`当前${field('priceType').value==='last'?'最新成交价':'标记价格'}：${price(q[field('priceType').value])} USDT / ${q.unit}。按交易对原始报价，不自动缩放。`:'请选择列表中的完整交易对；不同交易所、千倍合约分别设置。';
  $('#rule-preview').textContent=field('symbol').value&&field('target').value?`${venue[field('exchange').value]} ${field('symbol').value} ${field('market').value==='future'?'永续':'现货'}的${field('priceType').value==='last'?'最新成交价':'标记价格'}${conditions[field('condition').value]} ${field('target').value}${range?' ～ '+field('upper').value:''} USDT${field('hold').value!=='0'?'，连续采样确认 '+field('hold').value+' 秒':''}，通过 Bark ${repeat?'重复报警':'报警一次'}。`:'填写条件后预览报警规则。';
 }
+function renderCatalog(){
+ const rows=catalog.filter(q=>matchesInstrument(field('symbol').value,q));
+ $('#alarm-symbols').innerHTML=rows.map(q=>`<option value="${esc(q.symbol)}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');
+}
 async function loadCatalog(){
  const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market=field('market').value;
  catalog=[];$('#alarm-symbols').replaceChildren();$('#quote-preview').textContent='正在载入交易对…';
- try{const data=await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(generation!==catalogEpoch||auth!==token())return;catalog=data.items;$('#alarm-symbols').innerHTML=catalog.sort((a,b)=>a.symbol.localeCompare(b.symbol)).map(q=>`<option value="${esc(q.symbol)}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
+ try{const data=await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>a.symbol.localeCompare(b.symbol));renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
 }
 function openRule(rule=null,copy=false){
  if(!current)return;form.reset();editing=rule&&!copy?rule.id:null;draft=false;$('#alarm-form-error').textContent='';$('#alarm-editor-title').textContent=editing?'编辑报警':copy?'复制报警':'新增报警';
@@ -85,7 +90,7 @@ function openRule(rule=null,copy=false){
  updateForm();$('#alarm-editor').showModal();loadCatalog();
 }
 $('#add-alarm').onclick=()=>openRule();
-form.addEventListener('input',()=>{draft=true;updateForm();});
+form.addEventListener('input',e=>{draft=true;if(e.target.name==='symbol')renderCatalog();updateForm();});
 form.addEventListener('change',e=>{draft=true;if(['exchange','market'].includes(e.target.name)){field('symbol').value='';loadCatalog();}updateForm();});
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
