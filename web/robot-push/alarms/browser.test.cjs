@@ -51,7 +51,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
    try{const body=await fs.readFile(file),ext=path.extname(file);return route.fulfill({contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[ext]||'application/octet-stream',body});}catch{return route.fulfill({status:404,body:''});}
   });
   await page.goto(origin+'/radar/robot-push/alarms/');await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
-  await page.locator('.radar-account-entry').waitFor();assert.match(await page.locator('.radar-account-entry').innerText(),/推送中心[\s\S]*已连接推送码/);assert.match(await page.locator('.radar-account-entry').getAttribute('href'),/center\/$/);
+  await page.locator('.radar-account-entry').waitFor();assert.match(await page.locator('.radar-account-entry').innerText(),/推送中心[\s\S]*已连接/);assert.match(await page.locator('.radar-account-entry').getAttribute('href'),/center\/$/);
   assert.equal(await page.locator('nav.site-nav a').count(),7);
   const navFits=await page.evaluate(()=>{const n=document.querySelector('.site-nav').getBoundingClientRect();return [...document.querySelectorAll('.site-nav>a')].every(a=>a.getBoundingClientRect().bottom<=n.bottom+1)&&document.querySelector('main').getBoundingClientRect().top>=n.bottom;});assert.equal(navFits,true,'navigation overlaps content '+width);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false,'page overflow '+width);
@@ -74,7 +74,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   await page.click('#ns-switch-open');await page.fill('#ns-switch-code','12345699');await page.click('#ns-switch-submit');await page.waitForFunction(()=>document.querySelector('#ns-bound-code').textContent==='12345699');await page.click('.ra-close');
   await page.waitForFunction(()=>document.querySelector('#alarm-count').textContent==='0');assert.equal(states.a.rules.length,2);assert.equal(states.b.rules.length,0);assert.equal(states.b.device,null);
   await page.goto(origin+'/radar/robot-push/settings/');
-  await page.waitForFunction(()=>document.querySelector('.ra-entry-status')?.textContent==='已连接推送码');
+  await page.waitForFunction(()=>document.querySelector('.ra-entry-status')?.textContent==='已连接');
   assert.equal(await page.locator('#mobile-account').count(),0);
   await page.evaluate(()=>window.RadarAccount.open());await page.locator('#ns-switch-open').waitFor({state:'visible'});await page.click('.ra-close');
   await page.screenshot({path:path.join(root,`outputs/verification/settings-account-${width}.png`),fullPage:true});
@@ -82,7 +82,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   scopeOnly=true;
   for(const scope of ['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/']){
    await page.goto(origin+scope);await page.locator('.radar-seven-nav').waitFor();
-   assert.equal(await page.locator('.radar-account-entry').count(),scope.includes('push')?1:0,'account entry scope '+scope);if(scope.includes('push')){await page.waitForFunction(()=>document.querySelector('.ra-entry-status')?.textContent==='已连接推送码');}
+   assert.equal(await page.locator('.radar-account-entry').count(),scope.includes('push')?1:0,'account entry scope '+scope);if(scope.includes('push')){await page.waitForFunction(()=>document.querySelector('.ra-entry-status')?.textContent==='已连接');}
    if(scope.includes('push')){await page.locator('#notification-settings').waitFor({state:'attached'});assert.equal(await page.locator('#notification-settings').count(),1);}
   }
   assert.deepEqual(errors,[],'scope browser errors '+width);

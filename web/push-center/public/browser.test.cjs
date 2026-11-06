@@ -10,7 +10,7 @@ const init=(name,code)=>({profileId:code,name,pushCode:code,revision:0,history:[
  const browser=await chromium.launch({headless:true,channel:'chrome'});
  try{for(const width of [1440,393,320]){
   const context=await browser.newContext({viewport:{width,height:852}}),page=await context.newPage(),errors=[],writes=[];
-  const states={a:init('主推送码','12345678'),b:init('观察方案','24681357'),c:init('我的推送码','36901234')};let failNext=false,delay=null;
+  const states={a:init('主推送码','12345678'),b:init('观察方案','24681357'),c:init('我的推送码','36901234')};let failNext=false,delay=null,releaseInitial;const initialGate=new Promise(r=>releaseInitial=r);let initial=true;
   page.on('pageerror',e=>errors.push(e.message));
   await context.addInitScript(auth=>localStorage.setItem('radar-settings-token',auth),token('a'));
   await context.route('**/*',async route=>{
@@ -30,20 +30,20 @@ const init=(name,code)=>({profileId:code,name,pushCode:code,revision:0,history:[
    }
    if(p.startsWith('/radar/push-test/api/')){
     const kind=p.split('/').at(-1);
-    if(kind==='status')return json({profileId:s.profileId,revision:0,settings,subscribed:true,source:{connected:true},publicKey:'synthetic'});
+    if(kind==='status'&&initial)await initialGate;if(kind==='status')return json({profileId:s.profileId,revision:0,settings,subscribed:true,source:{connected:true},publicKey:'synthetic'});
     if(kind==='binding')return json({pushCode:s.pushCode});
     if(kind==='desktop-settings')return json({revision:0,connected:false,desktop:{action:'mute',settings,rules:{mute:settings,hide:settings}},cards:{action:'hide',settings},history:[]});
     return json({});
    }
    let relative=p.replace(/^\/radar\//,'');if(p.endsWith('/'))relative+='index.html';
-   const paths=[path.join(candidate,relative),path.join(root,'work/push/web',relative),path.join(root,'work/radar/public',relative),path.join(root,'work/baseline',path.basename(relative))];
+   const paths=[path.join(candidate,relative),path.join(root,'work/push/web',relative.startsWith('push-center/')?relative.replace('push-center/','push-center/public/'):relative),path.join(root,'work/radar/public',relative),path.join(root,'work/baseline',path.basename(relative))];
    for(const file of paths){try{const body=await fs.readFile(file);return route.fulfill({contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[path.extname(file)]||'text/plain',body});}catch{}}
    return route.fulfill({status:404,body:''});
   });
-  await page.goto(origin+'/radar/robot-push/center/');await page.waitForFunction(()=>document.querySelector('#pc-code').textContent==='12345678');
+  await page.goto(origin+'/radar/push-center/',{waitUntil:'domcontentloaded'});await page.locator('.ra-entry-status').waitFor();assert.equal(await page.locator('.ra-entry-status').innerText(),'已连接');initial=false;releaseInitial();await page.waitForFunction(()=>document.querySelector('#pc-code').textContent==='12345678');
   assert.equal(await page.locator('nav.site-nav a').allTextContents().then(x=>x.join(',')),'全市场费率,机会筛选,充提查询,HY限额查询,BOT,消息设置,报警设置');
   async function fits(){assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'horizontal overflow '+width);const bad=await page.evaluate(()=>[...document.querySelectorAll('dialog[open] button,dialog[open] input')].filter(e=>e.getClientRects().length).some(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth;}));assert.equal(bad,false,'dialog overflow '+width);}
-  await fits();await fs.mkdir(path.join(root,'outputs/push-center'),{recursive:true});await page.screenshot({path:path.join(root,`outputs/push-center/center-${width}.png`),fullPage:true});
+  assert.equal(await page.locator('nav.site-nav [aria-current=page]').count(),0,'center must not select BOT');await fits();await fs.mkdir(path.join(root,'outputs/push-center'),{recursive:true});await page.screenshot({path:path.join(root,`outputs/push-center/center-${width}.png`),fullPage:true});
   await page.click('#pc-rename');await page.fill('[name=name]','测试主方案');await page.click('#pc-submit');await page.waitForFunction(()=>!document.querySelector('#pc-editor').open);assert.equal(states.a.name,'测试主方案');assert.equal(states.b.name,'观察方案');
   await page.click('#pc-bark-manage');await page.fill('[name=label]','测试 iPhone');await page.fill('[name=key]','synthetic_bark_key');await fits();
   failNext=true;await page.click('#pc-submit');await page.waitForFunction(()=>document.querySelector('#pc-submit').textContent==='重试原操作');await page.click('#pc-submit');await page.waitForFunction(()=>!document.querySelector('#pc-editor').open);assert.deepEqual(writes.at(-1),writes.at(-2));assert.equal(states.a.bark.device.label,'测试 iPhone');

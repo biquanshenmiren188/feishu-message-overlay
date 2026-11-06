@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import re
 
-VERSION='20261106-entry1'
+VERSION='20261106-independent1'
 LINKS=[('全市场费率','/radar/?tab=market'),('机会筛选','/radar/?tab=FF&amp;mode=FF'),('充提查询','/radar/?panel=transfer'),('HY限额查询','/radar/position-limits/'),('BOT','/radar/robot-push/'),('消息设置','/radar/robot-push/settings/'),('报警设置','/radar/robot-push/alarms/')]
 
 def patch(raw, page):
@@ -22,7 +22,7 @@ def patch(raw, page):
         return head+''.join(links)+'</nav>'
     raw=re.sub(pattern,nav,raw,flags=re.S)
     for name in ['position-limits-nav.js','shared-account.js','notification-settings.js']:
-        raw=re.sub(re.escape(name)+r'(?:\?v=[^"\s]+)?',name+'?v='+('20261106-center3' if name=='position-limits-nav.js' else VERSION),raw)
+        raw=re.sub(re.escape(name)+r'(?:\?v=[^"\s]+)?',name+'?v='+VERSION,raw)
     for href in ['/radar/robot-push/shared-account.css','/radar/navigation-stable.css']:
         if href not in raw:raw=raw.replace('</head>',f'<link rel="stylesheet" href="{href}?v={'20261106-center2' if 'navigation-stable' in href else VERSION}"></head>')
     return raw
@@ -34,8 +34,10 @@ def main():
     repo=Path(__file__).resolve().parents[1];files={};baseline={}
     for local,remote,page in [('index.html','index.html','main'),('bot.html','robot-push/index.html','BOT'),('settings.html','robot-push/settings/index.html','消息设置'),('alarms.html','robot-push/alarms/index.html','报警设置'),('limits.html','position-limits/index.html','HY限额查询')]:
         raw=(args.baseline/local).read_bytes();baseline[remote]=sha(raw);files[remote]=patch(raw.decode(),page).encode()
-    for name in ['shared-account.js','shared-account.css','notification-settings.js','center/index.html','center/style.css','center/app.js']:
+    for name in ['shared-account.js','shared-account.css','notification-settings.js',]:
         files['robot-push/'+name]=(repo/'web/robot-push'/name).read_bytes().replace(b'\r\n',b'\n')
+    for name in ['index.html','style.css','app.js']:
+        files['push-center/'+name]=(repo/'web/push-center/public'/name).read_bytes().replace(b'\r\n',b'\n')
     for name in ['navigation-stable.css','position-limits-nav.js']:
         files[name]=(args.radar/'public'/name).read_bytes().replace(b'\r\n',b'\n')
     for name,raw in files.items():

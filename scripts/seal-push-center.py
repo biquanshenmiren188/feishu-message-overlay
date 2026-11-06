@@ -18,5 +18,6 @@ for name,digest in m['baseline'].items():assert live['files'][name]==digest,name
 m['baseline']=live['files'];m['previous']=live['previous'];m['newFiles']=live['newFiles']
 m['sourceCommits']={key:subprocess.check_output(['git','-C',str(path),'rev-parse','HEAD'],text=True).strip() for key,path in [('push',repo),('radar',radar)]}
 m['validation']={'passed':True,'files':m['files'],'checks':['center Python isolation and HTTP tests','legacy identity and PWA transfer regression','alarm engine regression','center and alarm browser fixtures at 1440/393/320','navigation source and layout checks','radar tests, types and build']}
+if len(sys.argv)>3:m['validation']['checks']=json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
 (stage/'manifest.json').write_text(json.dumps(m,indent=2),encoding='utf-8')
 print(json.dumps({'previous':m['previous'],'sourceCommits':m['sourceCommits'],'existing':len(m['baseline']),'new':len(m['newFiles'])}))

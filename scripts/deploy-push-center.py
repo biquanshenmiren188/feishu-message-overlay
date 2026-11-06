@@ -70,7 +70,7 @@ def main():
 }
 ''')
             base.SNIPPET.write_bytes(old_nginx+b'\ninclude /etc/nginx/snippets/radar-push-center.conf;\n')
-            PWA.symlink_to(base.CURRENT/'robot-push/center',target_is_directory=True)
+            PWA.symlink_to(base.CURRENT/'push-center',target_is_directory=True)
             subprocess.run(['nginx','-t'],check=True)
             assert base.CURRENT.resolve()==old and base.state_digest()==states and pids()==services
             base.switch(base.CURRENT,new);base.FALLBACK.write_bytes((new/'robot-push/index.html').read_bytes())

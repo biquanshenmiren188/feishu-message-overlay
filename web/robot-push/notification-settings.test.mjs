@@ -258,3 +258,15 @@ test('a failed target read keeps the current integrated identity and drafts vali
  await switchCode(f,'87654321');assert.equal(f.run('token'),'owner-token');assert.equal(f.emitted.some(e=>e.type==='radar-profile-changing'),false);
  assert.equal(f.emitted.filter(e=>e.type==='radar-desktop-loaded').length,before);
 });
+
+test('reload rejects a confirmed expired identity without reviving the phone token',async()=>{
+ const f=fixture({integratedAccount:true,responseHook:route=>route==='status'?{status:401,ok:false,json:async()=>({error:'已失效'})}:undefined});
+ await settle(f);assert.equal(f.run('token'),'');assert.equal(f.storage.get('radar-settings-signed-out'),'1');
+ assert.equal(f.elements.get('ns-pair').hidden,false);assert.equal(f.elements.get('ns-binding').hidden,true);
+ assert.equal(f.storage.get('radar-test-token'),'owner-token','phone subscription token is preserved');
+});
+
+test('temporary status outage retains the saved identity for background recovery',async()=>{
+ const f=fixture({integratedAccount:true,responseHook:route=>route==='status'?{status:503,ok:false,json:async()=>({error:'暂不可用'})}:undefined});
+ await settle(f);assert.equal(f.run('token'),'owner-token');assert.equal(f.storage.has('radar-settings-signed-out'),false);
+});
