@@ -5,3 +5,12 @@
  .alarm-toolbar{flex-wrap:wrap}.alarm-toolbar input{flex:1 0 100%;width:100%}.alarm-toolbar select{flex:1;width:auto;min-width:0}
  .alarm-list-heading{flex-direction:column;gap:4px}.alarm-list-heading>span:last-child{max-width:none;text-align:left}
 }
+
+/* Compact text stays consistent across the outer and inner screens. */
+@media(max-width:1024px){
+ .alarm-layout input:not([type=checkbox]):not([type=radio]),.alarm-layout select,
+ .alarm-dialog input:not([type=checkbox]):not([type=radio]),.alarm-dialog select{font-size:13px}
+ .alarm-heading h1,.alarm-dialog h2{font-size:14px;line-height:22px}
+ .alarm-heading h2{font-size:13px}
+ .alarm-layout button,.alarm-dialog button:not(.icon-button){font-size:12px}
+}

@@ -60,3 +60,12 @@ button:disabled{cursor:default}.primary:disabled{opacity:.48}#coin-manager .dial
 .channel-tools{padding:0 20px 12px;display:flex;flex-wrap:wrap;gap:8px}.channel-tools[hidden]{display:none}.channel-tools button{font-size:12px;min-height:36px}.channel-tools p{flex-basis:100%;margin:0;color:var(--muted);font-size:12px}.settings input:disabled,.settings select:disabled{cursor:not-allowed;opacity:.55}.settings button:disabled{opacity:.5}@media(max-width:700px){.channel-tools{padding-inline:12px}.channel-tools button{min-height:44px}}
 
 .settings-intro{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}.software-link{display:inline-flex;align-items:center;min-height:36px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--blue);white-space:nowrap;font-size:12px}.software-link:hover{background:var(--blue-soft)}.software-link:focus-visible{outline:2px solid var(--blue);outline-offset:2px}@media(max-width:700px){.software-link{min-height:44px}}
+
+/* Keep compact type when folding or rotating; touch target size is independent. */
+@media(max-width:1024px){
+ body:has(.settings) input:not([type=checkbox]):not([type=radio]),
+ body:has(.settings) select{font-size:13px}
+ .settings h1,.settings .section-heading h2,#coin-manager .dialog-title h2,
+ body:has(.settings) dialog h2{font-size:14px;line-height:22px}
+ .settings button,body:has(.settings) dialog button:not(.icon-button){font-size:12px}
+}
