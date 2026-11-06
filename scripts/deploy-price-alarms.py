@@ -79,6 +79,7 @@ def main():
         fcntl.flock(guard,fcntl.LOCK_EX|fcntl.LOCK_NB)
         old=CURRENT.resolve();assert old.parent==ROOT/'releases'
         for name,digest in manifest['baseline'].items():assert sha((old/name).read_bytes())==digest,'Live asset changed: '+name
+        for name in manifest.get('newFiles',[]):assert not (old/name).exists(),'Unexpected concurrent asset: '+name
         original,links=inventory(old);states=state_digest();services=pids();fallback=FALLBACK.read_bytes()
         if not apply:
             print(json.dumps(dict(preflight=True,release=str(old),files=len(original),rulesPreserved=True)));return
