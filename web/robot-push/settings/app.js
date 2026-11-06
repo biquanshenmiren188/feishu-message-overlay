@@ -6,6 +6,7 @@ profiles.desktop=R.defaults();profiles.cards=R.defaults();state=profiles[active]
 let desktopLoaded=false,desktopRevision=0,desktopHistory=[],desktopConnected=false,desktopError='正在连接电脑规则…';
 let desktopAction='mute',desktopSets={mute:{...R.defaults(),desktopAction:'mute'},hide:{...R.defaults(),desktopAction:'hide'}},desktopSaved=JSON.parse(JSON.stringify(desktopSets));
 let savedSnapshot=JSON.stringify(profiles);
+window.RadarHasUnsavedChanges=()=>JSON.stringify(profiles)!==savedSnapshot||!!document.querySelector('#editor[open],#coin-manager[open]');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 const number=v=>v.trim()===''?null:Number(v);
 const options=(all=false)=>`${all?'<option value="all">全部交易所</option>':''}${R.exchanges.map(e=>`<option value="${e[0]}">${e[1]}${e[2]?' · '+e[2]:''}</option>`).join('')}`;
@@ -80,7 +81,7 @@ function updateChannelUI(){
  const overview=!$('#panel-coins').hidden;$('.settings').classList.toggle('coin-overview',overview);$('#tab-coins').setAttribute('aria-pressed',overview);$('h1').textContent=overview?'已屏蔽币种':label+'设置';$('.title-row p').textContent=overview?'查看当前推送码的三端规则，按币种与交易所范围管理。':'屏蔽币种 / '+label+' · 独立保存';$('#tab-other').textContent=mobile?'推送与预览':'其他设置';$('#refresh-history').hidden=false;$('#refresh-history').disabled=mobile?!mobileLoaded:!desktopLoaded;
  $$('[data-channel]').forEach(b=>b.setAttribute('aria-pressed',!overview&&b.dataset.channel===active));
  $('#channel-hint').textContent=overview?'选择下方币种可屏蔽当前推送码的三端；不影响其他推送码。':mobile?(mobileLoaded?'正在编辑云端手机规则，保存后生效。':'请连接推送码载入规则。'):desktopLoaded?(active==='cards'?'控制绑定同一推送码的桌面和网页卡片，保存后约 3 秒同步。':'静音与屏蔽消息分别配置、同时生效；同时命中时优先屏蔽消息。'):desktopError;
- $('#mobile-cadence').hidden=!mobile;$('#mobile-account').hidden=false;$('#desktop-action').hidden=active!=='desktop';
+ $('#mobile-cadence').hidden=!mobile;if($('#mobile-account'))$('#mobile-account').hidden=false;$('#desktop-action').hidden=active!=='desktop';
  $$('[name=desktop-action]').forEach(x=>x.checked=x.value===desktopAction);$('#desktop-editing').textContent=desktopAction==='mute'?'正在编辑：仅屏蔽声音。下方币种、交易所、左右腿、OI 和等级条件只用于静音，消息照常显示。':'正在编辑：屏蔽消息。下方条件命中后不显示消息，也不响铃。';
  const editable=mobile?mobileLoaded:desktopLoaded;
  $('#channel-tools').hidden=overview;
@@ -117,7 +118,7 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 function replaceCurrent(next){if(active==='desktop'){desktopSets[desktopAction]=next;profiles.desktop=next;}else profiles[active]=next;state=next;initialize();}
 $('#discard-draft').addEventListener('click',()=>{replaceCurrent(clone(active==='desktop'?desktopSaved[desktopAction]:JSON.parse(savedSnapshot)[active]));toast('已放弃当前渠道未保存的修改；云端规则未变。');});
 $('#reset-filters').addEventListener('click',()=>{if(active==='mobile'?!mobileLoaded:!desktopLoaded)return;replaceCurrent(R.resetFilters(state));changed();toast('已生成全部接收草稿，请点击保存才生效。');});
-$('#connect-owner').addEventListener('click',()=>{$('#mobile-account').open=true;$('#ns-switch-open')?.click();});
+$('#connect-owner').addEventListener('click',()=>{window.RadarAccount?.open();$('#ns-switch-open')?.click();});
 
 function mergeDraft(draft,old,next){
  const result=clone(next);

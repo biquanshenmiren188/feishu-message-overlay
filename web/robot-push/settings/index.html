@@ -7,7 +7,7 @@
 <div class="preview-banner settings-intro"><span>电脑消息、行情卡片、手机推送分别设置，保存后生效。</span><a class="software-link" href="https://github.com/biquanshenmiren188/feishu-message-overlay" target="_blank" rel="noopener noreferrer">行情推送软件 · GitHub ↗</a></div>
 <main class="layout">
 <div class="settings">
-<details class="mobile-account" id="mobile-account"><summary>通知与推送码 <span>管理</span></summary><div id="live-mobile-account"></div></details>
+
 <nav class="rule-navigation" aria-label="屏蔽币种菜单"><button type="button" id="tab-coins" data-tab="coins" aria-controls="panel-coins" aria-pressed="true"><span>屏蔽币种</span><small>三端汇总</small></button><div class="channel-switch" role="group" aria-label="屏蔽币种子菜单"><button data-channel="desktop" aria-pressed="false">电脑消息</button><button data-channel="cards" aria-pressed="false">行情卡片</button><button data-channel="mobile" aria-pressed="false">手机推送</button></div></nav>
 <div class="title-row"><div><h1>消息屏蔽设置</h1><p>汇总管理币种，或进入子菜单单独设置。</p></div><label class="switch"><input id="enabled" type="checkbox" checked aria-label="接收消息"><span></span></label></div>
 <div class="receive-row"><span id="receive-label">接收消息已开启</span><span>默认全部接收，按需排除</span></div>
@@ -51,5 +51,5 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="rules.js?v=20261024-binding1"></script><script src="app.js?v=20261024-binding1"></script>
 <script src="coin-list.js?v=20261024-clarity1"></script><script src="coin-center.js?v=20261024-clarity1"></script>
-<script type="module" src="/radar/robot-push/notification-settings.js?v=20261024-binding1"></script>
+<script type="module" src="/radar/robot-push/shared-account.js?v=20261106-1"></script>
 </body></html>

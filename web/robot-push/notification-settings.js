@@ -30,8 +30,8 @@ for(const [id,values] of [['ns-modes',[['SF','SF'],['FS','FS'],['FF','FF']]],['n
  for(const [value,label] of values){const el=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;el.append(input,document.createTextNode(label));$(id).append(el)}
 }
 let deviceToken=localStorage.getItem('radar-test-token')||'';
-let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
-function selectIdentity(next){if(next===token)return;token=next;identityRevision++;queueMicrotask(()=>document.dispatchEvent(new CustomEvent('radar-profile-changing')));}
+let token=localStorage.getItem('radar-settings-signed-out')?'':localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
+function selectIdentity(next){if(next===token)return;token=next;identityRevision++;document.dispatchEvent(new CustomEvent('radar-profile-changing'));}
 function currentIdentity(auth,epoch){return auth===token&&epoch===identityRevision;}
 async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');if(data!==undefined&&['settings','desktop-settings','edit-coins','block-coins'].includes(route))notifyRulesChanged();return result;}
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
@@ -69,16 +69,20 @@ function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.s
 }
 async function task(fn,propagate=false){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=true;try{return await fn()}catch(e){message(e.message,true);if(!$('ns-switch').hidden)$('ns-switch-error').textContent=e.message;if(propagate)throw e}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=!!pendingSwitch();$('ns-save').disabled=!!pendingSwitch();for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=false;renderNotification();if(reloadRequested){reloadRequested=false;queueMicrotask(()=>task(load));}}}
 async function readPlan(auth){const [status,binding]=await Promise.all([api('status',undefined,auth,false),api('binding',undefined,auth,false)]);return {status,binding}}
-function showPlan(plan){fill(plan.status);$('ns-bound-code').textContent=plan.binding.pushCode;$('ns-binding').hidden=false}
+let shownCode='',revealCode=false;
+function showPlan(plan){fill(plan.status);shownCode=plan.binding.pushCode;revealCode=false;$('ns-bound-code').textContent='••••••'+shownCode.slice(-2);$('ns-binding').hidden=false;document.dispatchEvent(new CustomEvent('radar-profile-ready',{detail:{suffix:shownCode.slice(-2),profileId:plan.status.profileId}}));}
+const reveal=document.createElement('button');reveal.type='button';reveal.textContent='显示';reveal.onclick=()=>{revealCode=!revealCode;$('ns-bound-code').textContent=revealCode?shownCode:'••••••'+shownCode.slice(-2);reveal.textContent=revealCode?'隐藏':'显示';};$('ns-binding').append(reveal);
+const copyCode=document.createElement('button');copyCode.type='button';copyCode.textContent='复制';copyCode.onclick=async()=>{try{await navigator.clipboard.writeText(shownCode);copyCode.textContent='已复制';setTimeout(()=>copyCode.textContent='复制',1500);}catch{message('复制失败，请点击显示后手动复制',true);}};$('ns-binding').append(copyCode);
 async function load(){if(phoneApp&&pendingSwitch())await finishPhoneSwitch();if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}const auth=token,epoch=identityRevision,plan=await readPlan(auth);await syncPhone().catch(()=>{});if(currentIdentity(auth,epoch))showPlan(plan)}
 function closeSwitch(){ $('ns-switch').hidden=true;$('ns-switch-open').setAttribute('aria-expanded','false');$('ns-switch-code').value='';$('ns-switch-error').textContent='' }
 async function activatePlan(result,movePhone=false){
+ const changing=new Event('radar-before-profile-change',{cancelable:true});document.dispatchEvent(changing);if(changing.defaultPrevented)throw Error('已取消切换，草稿保持不变');
  // Verify both responses before changing the current identity or form. A failed
  // switch must leave the original token, revision and unsaved edits intact.
  let plan=await readPlan(result.token);
  if(movePhone&&phoneApp){const moved=await switchPhone(result.token,plan);if(moved)plan=moved}
  if(!deviceToken){localStorage.setItem('radar-test-token',result.token);deviceToken=result.token}
- localStorage.setItem('radar-settings-token',result.token);selectIdentity(result.token);
+ localStorage.removeItem('radar-settings-signed-out');localStorage.setItem('radar-settings-token',result.token);selectIdentity(result.token);
  showPlan(plan);closeSwitch();$('ns-created').hidden=true;
  dialog.querySelector('.ns-body').scrollTop=0;
 }
@@ -225,7 +229,7 @@ if(integrated){
  let desktopToken='';
  async function loadDesktop(){if(desktopToken===token||!token)return;const auth=token,epoch=identityRevision;document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:'正在连接本推送码的电脑规则…'}));try{const data=await scopedApi('desktop-settings');if(!currentIdentity(auth,epoch))return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(currentIdentity(auth,epoch)){desktopToken='';document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.status===403?'当前推送码无法读取本方案规则，请重新连接。':e.message}));}}}
  document.addEventListener('radar-profile-changing',()=>{desktopToken='';});
- window.addEventListener('storage',e=>{if(!['radar-settings-token','radar-test-token',null].includes(e.key))return;const next=localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';if(next===token)return;selectIdentity(next);if(busy)reloadRequested=true;else task(load);});
+ window.addEventListener('storage',e=>{if(!['radar-settings-token','radar-test-token','radar-settings-signed-out',null].includes(e.key))return;const next=localStorage.getItem('radar-settings-signed-out')?'':localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';if(next===token)return;selectIdentity(next);if(busy)reloadRequested=true;else task(load);});
  document.addEventListener('radar-mobile-loaded',loadDesktop);
  task(load);
 }
