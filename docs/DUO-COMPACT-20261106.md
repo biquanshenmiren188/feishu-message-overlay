@@ -9,3 +9,12 @@
 主站 655 项 Node 测试、TypeScript 和 Vite 构建通过。部署仅更新两页样式与对应样式链接、图表状态模块及受影响的模块引用，不整体覆盖构建产物。线上消息页额外脚本版本/头部差异从当前线上保留。发布脚本检查当前目标、基线哈希、文件白名单、其他文件、服务 PID 和 PWA fallback，并保留回滚路径。
 
 图表候选构建：funding-radar/scripts/prepare-duo-chart-view.mjs BASELINE STAGE；发布：scripts/deploy-duo-compact.py STAGE [--apply]。CSS 输入与静态 HTML 版本来自 feishu-message-overlay/web/robot-push/{settings,alarms}。部署和 PR 信息在完成后补入。
+
+## 发布结果
+
+- 当前 release：`/opt/funding-radar-web/releases/20261106-duo-compact-1793979688292156498`。
+- 回滚目标：`/opt/funding-radar-web/releases/20261106-duo-layout-1793945502368806023`；备份：`/opt/funding-radar-web/backups/20261106-duo-compact-1793979688292156498`。
+- 部署功能源码：radar `496839f8634792a61aebb375efedeba91dc85b7d`，push `ab9232ecd5d7e6329d2611fa8eca61ccdd51e4e1`。
+- 19 个增量文件，保留 3526 个其他文件，服务 PID 与 PWA fallback 不变；全部发布文件哈希匹配验证候选。
+- PR：https://github.com/biquanshenmiren188/funding-radar/pull/169（待用户授权合并）。
+- PR：https://github.com/biquanshenmiren188/feishu-message-overlay/pull/63（待用户授权合并）。
