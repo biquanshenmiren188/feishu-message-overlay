@@ -18,6 +18,7 @@ async function api(route,data,auth=token()){
  if(!response.ok){const e=Error(result.error||'操作失败');e.status=response.status;throw e;}return result;
 }
 function connected(enabled){for(const id of ['add-alarm','bind-device','master-enabled'])$('#'+id).disabled=!enabled||busy;}
+function syncPlanLabel(){const code=window.RadarIdentity?.code();$('#plan-label').textContent=!token()?'未连接推送码':code?'当前推送码 · 尾号 '+code.slice(-2):'当前推送码 · 已连接';}
 function safeStatus(r){if(!r.enabled)return 'paused';if(r.expiresAt&&r.expiresAt<Date.now()/1000)return 'expired';if(r.state?.status==='triggered')return 'triggered';if(r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt>12)return 'stale';return r.state?.status||'waiting';}
 function price(value){if(!value)return '—';const n=Number(value);return n>=1?n.toLocaleString('en-US',{maximumFractionDigits:10}):value;}
 function description(r){return conditions[r.condition]+' '+price(r.target)+(r.upper?' ～ '+price(r.upper):'')+' USDT';}
@@ -35,6 +36,7 @@ function renderRules(){
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
 }
 function render(){
+ syncPlanLabel();
  connected(true);$('#master-enabled').checked=current.enabled;
  $('#alarm-status').textContent=current.enabled?'规则保存后生效，当前推送码独立运行。':'当前推送码的全部价格报警已暂停。';
  $('#device-label').textContent=current.device?current.device.label+' · 已绑定':'Bark 未绑定';$('#bind-device').classList.toggle('is-bound',!!current.device);
@@ -111,7 +113,7 @@ $('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;if(draft&&!confirm('放弃尚未保存的修改？'))return;draft=false;$('#'+b.dataset.close).close();};
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy||(draft&&!confirm('放弃尚未保存的修改？')))e.preventDefault();else draft=false;});
 $('#alarm-search').oninput=renderRules;$('#alarm-filter').onchange=renderRules;$('#refresh-alarms').onclick=()=>load();$('#empty-connect').onclick=()=>window.RadarAccount?.open();
-document.addEventListener('radar-profile-changing',()=>{epoch++;catalogEpoch++;current=null;catalog=[];pending=null;draft=false;$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';$('#event-list').innerHTML='<p class="alarm-empty-small">正在载入记录…</p>';});
+document.addEventListener('radar-profile-changing',()=>{epoch++;catalogEpoch++;current=null;catalog=[];pending=null;draft=false;syncPlanLabel();$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';$('#event-list').innerHTML='<p class="alarm-empty-small">正在载入记录…</p>';});
 document.addEventListener('radar-profile-ready',async e=>{$('#plan-label').textContent='当前推送码 · 尾号 '+e.detail.suffix;lastToken=token();await load();if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});
 window.addEventListener('beforeunload',e=>{if(draft||pending){e.preventDefault();e.returnValue='';}});
 setInterval(()=>{if(document.visibilityState==='visible'&&token()&&!busy){if(token()!==lastToken){lastToken=token();epoch++;}load(false);}},5000);

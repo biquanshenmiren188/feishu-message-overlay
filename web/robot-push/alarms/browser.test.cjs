@@ -16,6 +16,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   await context.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic_token_a_123456789'));
   await context.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url()),p=url.pathname,profile=req.headers().authorization?.includes('_b_')?'b':'a';
+   if(p==='/radar/robot-push/alarms/app.js')await page.waitForFunction(()=>window.RadarIdentity?.code());
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(url.origin!==origin)return route.abort();
    if(scopeOnly&&['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/'].includes(p))return route.fulfill({contentType:'text/html',body:'<!doctype html><header class="topbar compact-header"><strong>雷达</strong></header><nav class="site-nav"><a>全市场费率</a></nav><div class="feed-tools"></div><script type="module" src="/radar/robot-push/shared-account.js?v=20261106-2"></script>'});
@@ -51,6 +52,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
    try{const body=await fs.readFile(file),ext=path.extname(file);return route.fulfill({contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[ext]||'application/octet-stream',body});}catch{return route.fulfill({status:404,body:''});}
   });
   await page.goto(origin+'/radar/robot-push/alarms/');await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
+  assert.match(await page.locator('#plan-label').innerText(),/当前推送码/,'identity ready before app initialization is reflected');
   await page.locator('.radar-account-entry').waitFor();assert.match(await page.locator('.radar-account-entry').innerText(),/推送中心[\s\S]*已连接/);assert.match(await page.locator('.radar-account-entry').getAttribute('href'),/center\/$/);
   assert.equal(await page.locator('nav.site-nav a').count(),7);
   const navFits=await page.evaluate(()=>{const n=document.querySelector('.site-nav').getBoundingClientRect();return [...document.querySelectorAll('.site-nav>a')].every(a=>a.getBoundingClientRect().bottom<=n.bottom+1)&&document.querySelector('main').getBoundingClientRect().top>=n.bottom;});assert.equal(navFits,true,'navigation overlaps content '+width);
