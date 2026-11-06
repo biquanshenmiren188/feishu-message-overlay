@@ -1,0 +1,27 @@
+[Unit]
+Description=Radar push-code center
+After=network-online.target radar-webpush-test.service radar-alarms.service
+Wants=network-online.target
+
+[Service]
+User=radar-webpush-test
+Group=radar-webpush-test
+ExecStart=/usr/bin/python3 /opt/radar-push-center/current/server.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StateDirectory=radar-push-center
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+TasksMax=64
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

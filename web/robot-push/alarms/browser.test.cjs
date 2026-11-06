@@ -2,7 +2,7 @@
 const {chromium}=require('playwright');
 const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(process.env.RADAR_TASK_ROOT||'C:/Users/Admin/Documents/Codex/2026-11-06/bark');
-const repo=path.join(root,'work/push'),candidate=path.join(root,'work/candidate/static');
+const repo=path.join(root,'work/push'),candidate=path.join(root,'work/center-candidate/static');
 const origin='https://radar-alarms.test';
 const settings={notify_enabled:true,rows:4,notify_interval_seconds:60,min_percent:null,excluded_ranks:[],excluded_coins:[],excluded_modes:[],excluded_exchanges:[]};
 const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
@@ -19,7 +19,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(url.origin!==origin)return route.abort();
    if(scopeOnly&&['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/'].includes(p))return route.fulfill({contentType:'text/html',body:'<!doctype html><header class="topbar compact-header"><strong>雷达</strong></header><nav class="site-nav"><a>全市场费率</a></nav><div class="feed-tools"></div><script type="module" src="/radar/robot-push/shared-account.js?v=20261106-2"></script>'});
-   if(p.startsWith('/radar/push-test/api/')){
+   if(p.startsWith('/radar/push-test/api/')||p.startsWith('/radar/push-center-api/')){
     const kind=p.split('/').at(-1);
     if(kind==='status')return json({profileId:profile,revision:0,publicKey:'synthetic',settings,subscribed:false,blockedHistory:[]});
     if(kind==='binding')return json({pushCode:profile==='a'?'12345688':'12345699'});
@@ -82,7 +82,7 @@ const initial=()=>({revision:0,enabled:true,device:null,rules:[],events:[]});
   scopeOnly=true;
   for(const scope of ['/radar/','/radar/position-limits/','/radar/robot-push/','/radar/push-test/']){
    await page.goto(origin+scope);await page.locator('.radar-seven-nav').waitFor();
-   assert.equal(await page.locator('.radar-account-entry,#radar-account-dialog,.has-radar-account').count(),0,'account entry outside settings '+scope);
+   assert.equal(await page.locator('.radar-account-entry').count(),scope.includes('push')?1:0,'account entry scope '+scope);if(scope.includes('push')){await page.waitForFunction(()=>document.querySelector('.radar-account-entry')?.textContent==='已连接推送码');}
    if(scope.includes('push')){await page.locator('#notification-settings').waitFor({state:'attached'});assert.equal(await page.locator('#notification-settings').count(),1);}
   }
   assert.deepEqual(errors,[],'scope browser errors '+width);

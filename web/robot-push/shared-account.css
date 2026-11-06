@@ -13,3 +13,8 @@
 #radar-account-dialog #notification-settings .ns-plan-buttons button{width:auto!important;flex:none!important;margin:0!important}
 #radar-account-dialog #notification-settings .ns-plans{border:0!important;padding:0!important;margin:0!important}
 #radar-account-dialog #notification-settings #ns-enable{width:auto!important;min-width:100px!important}
+
+/* Reserve the same entry width while identity status loads. */
+.radar-account-entry{width:112px!important;min-width:112px!important;text-align:center!important}
+#radar-account-dialog:not(.ra-phone-mode) #ns-enable,#radar-account-dialog:not(.ra-phone-mode) #ns-notification-help,#radar-account-dialog:not(.ra-phone-mode) .ra-footnote:has(+ #ns-enable){display:none!important}
+#radar-account-dialog #ra-center-link{display:inline-flex;align-items:center;min-height:40px;padding:6px 10px;border-radius:7px;background:#eaf4ff}
