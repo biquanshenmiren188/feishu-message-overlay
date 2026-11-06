@@ -10,8 +10,8 @@ async function api(route,data,auth=token()){
  if(!response.ok){const e=Error(value.error||'操作失败');e.status=response.status;throw e;}return value;
 }
 function badge(id,text,kind=''){$(id).textContent=text;$(id).className='pc-badge '+kind;}
-function render(){
- const ready=!!state;$('#pc-disconnected').hidden=ready;$('#pc-profile').hidden=!ready;$('#pc-management').hidden=!ready;$('#pc-exit').hidden=!token();
+function render(waiting=false){
+ const ready=!!state;$('#pc-disconnected').hidden=ready||waiting;$('#pc-profile').hidden=!ready;$('#pc-management').hidden=!ready;$('#pc-exit').hidden=!token();
  if(!ready)return;
  $('#pc-name').textContent=state.name;$('#pc-code').textContent=state.pushCode;
  const d=state.desktop,p=state.phone,b=state.bark;
@@ -86,8 +86,8 @@ $('#pc-refresh').onclick=load;$('#pc-connect').onclick=()=>editor('switch');$('#
 $('#pc-copy').onclick=async()=>{try{await navigator.clipboard.writeText(state.pushCode);note('推送码已复制。');}catch{note('复制失败，请选中完整推送码手动复制。',true);}};
 $('#pc-desktop-manage').onclick=()=>editor('desktop');$('#pc-phone-manage').onclick=()=>window.RadarAccount?.open('phone');$('#pc-bark-manage').onclick=()=>editor('bark');$('#pc-bark-test').onclick=()=>editor('test-bark');$('#pc-phone-test').onclick=()=>editor('test-phone');
 $('#pc-exit').onclick=()=>document.getElementById('ra-exit')?.click();
-document.addEventListener('radar-profile-changing',()=>{epoch++;state=null;loadedToken='';pending=null;form._request=null;dialog.close();render();note('正在切换推送码…');});
+document.addEventListener('radar-profile-changing',()=>{epoch++;state=null;loadedToken='';pending=null;form._request=null;dialog.close();render(!!token());note(token()?'正在切换推送码…':'请重新连接推送码。');});
 document.addEventListener('radar-profile-ready',load);
 window.addEventListener('focus',()=>{if(!dialog.open)load();});
 if(location.pathname.startsWith('/radar/push-test/')||matchMedia('(display-mode: standalone)').matches||navigator.standalone===true){for(const a of document.querySelectorAll('.pc-layout a')){if(a.pathname==='/radar/robot-push/')a.href='/radar/push-test/';if(a.pathname==='/radar/robot-push/settings/')a.href='/radar/push-test/settings/';}}
-render();setTimeout(load,250);
+render(true);setTimeout(load,250);

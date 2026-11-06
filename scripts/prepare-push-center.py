@@ -22,7 +22,7 @@ def patch(raw, page):
         return head+''.join(links)+'</nav>'
     raw=re.sub(pattern,nav,raw,flags=re.S)
     for name in ['position-limits-nav.js','shared-account.js','notification-settings.js']:
-        raw=re.sub(re.escape(name)+r'(?:\?v=[^"\s]+)?',name+'?v='+('20261106-center2' if name=='position-limits-nav.js' else VERSION),raw)
+        raw=re.sub(re.escape(name)+r'(?:\?v=[^"\s]+)?',name+'?v='+('20261106-center3' if name=='position-limits-nav.js' else VERSION),raw)
     for href in ['/radar/robot-push/shared-account.css','/radar/navigation-stable.css']:
         if href not in raw:raw=raw.replace('</head>',f'<link rel="stylesheet" href="{href}?v={'20261106-center2' if 'navigation-stable' in href else VERSION}"></head>')
     return raw
