@@ -5,3 +5,5 @@
 源 HTML 引入新样式，导航缓存标识同步更新。生产增量发布由 funding-radar scripts/prepare-foldable-layout.mjs 与 deploy-foldable-layout.py 执行，不覆盖旧 BOT bundle。相关导航及短屏弹窗修改在主站仓库。
 
 浏览器实际生产 CSS 加虚构布局样例：382×580、594×368、669×867、951×585、385×571、320×568、1440×900 连续切换，无页面横向溢出；内屏横向卡片约396px且按钮44px，桌面三列保持。不是实体 iPhone/Safari 验收。正式部署结果后续追加。
+
+已部署至20261106-duo-layout-1793945502368806023；功能源码6cd6634786fde3f0ca0fdd2f43588430fd21553b，配套主站8fee19ca87454bc3763d3d621ac0ddbe897e7bcf。9个静态文件更新、3522其他文件保留，相关服务PID未变。正式站五组Duo视口与1440px切换无横向溢出；卡片当前0 ACTIVE，单列轨道已核对，卡片内容及44px按钮采用候选相同样式样例验证。备份与回滚目标20261106-account-entry-1793945286076741106，需恢复current和独立PWA fallback，不回退用户数据。PR62已推送未合并；实体Duo/Safari未验证。
