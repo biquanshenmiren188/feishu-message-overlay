@@ -1,0 +1,14 @@
+/* Responsive to available space, including Duo's inner landscape viewport.
+   No model detection or experimental folding APIs; desktop columns above 1199px stay intact. */
+@media (min-width:901px) and (max-width:1199px) {
+  html body.split-mode .bp-board { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width:1024px) {
+  html body.split-mode .bp-card-foot { gap:6px; }
+  html body.split-mode .bp-card-foot :is(button,a) { min-height:44px;min-width:44px; }
+  html body.split-mode .bp-card { overflow-wrap:anywhere; }
+}
+/* Let a short landscape screen show a useful reader without a forced 350px panel. */
+@media (max-width:900px) and (max-height:500px) {
+  html body.split-mode .feed-pane { height:70svh;min-height:240px; }
+}
