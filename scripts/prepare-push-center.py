@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import re
 
-VERSION='20261106-center1'
+VERSION='20261106-entry1'
 LINKS=[('全市场费率','/radar/?tab=market'),('机会筛选','/radar/?tab=FF&amp;mode=FF'),('充提查询','/radar/?panel=transfer'),('HY限额查询','/radar/position-limits/'),('BOT','/radar/robot-push/'),('消息设置','/radar/robot-push/settings/'),('报警设置','/radar/robot-push/alarms/')]
 
 def patch(raw, page):

@@ -18,3 +18,8 @@
 .radar-account-entry{width:112px!important;min-width:112px!important;text-align:center!important}
 #radar-account-dialog:not(.ra-phone-mode) #ns-enable,#radar-account-dialog:not(.ra-phone-mode) #ns-notification-help,#radar-account-dialog:not(.ra-phone-mode) .ra-footnote:has(+ #ns-enable){display:none!important}
 #radar-account-dialog #ra-center-link{display:inline-flex;align-items:center;min-height:40px;padding:6px 10px;border-radius:7px;background:#eaf4ff}
+/* Direct destination and connection status share one fixed-size header entry. */
+a.radar-account-entry{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:0!important;height:44px!important;min-height:44px!important;padding:3px 8px!important;text-decoration:none!important;box-sizing:border-box!important}
+.radar-account-entry .ra-entry-title{font-size:13px;line-height:19px;font-weight:600}
+.radar-account-entry .ra-entry-status{font-size:11px;line-height:15px;font-weight:400;color:#647184}
+.radar-account-entry.is-connected .ra-entry-status{color:#167454}
