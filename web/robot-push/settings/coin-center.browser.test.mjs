@@ -13,7 +13,7 @@ const rule=(data,c,exchange,enabled,coin='PTB')=>data.profiles[c].coins.push({co
 const sort=changes=>[...changes].sort((a,b)=>[a.channel,a.coin,a.exchange].join('|').localeCompare([b.channel,b.coin,b.exchange].join('|')));
 
 test('settings matrix presents one desktop mode without altering untouched legacy rules',{skip:!chromium&&'Playwright unavailable; set NODE_PATH and RADAR_BROWSER_TESTS=1 to run'},async t=>{
- const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
+ const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||undefined});t.after(()=>browser.close());
  const html=(await readFile(new URL('index.html',import.meta.url),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'');
  const css=await readFile(new URL('style.css',import.meta.url),'utf8'),source=await readFile(new URL('coin-center.js',import.meta.url),'utf8'),listSource=await readFile(new URL('coin-list.js',import.meta.url),'utf8');
  async function setup(t,data=fixture(),width=1280,firstMuteFailure=false){
@@ -149,6 +149,16 @@ test('settings matrix presents one desktop mode without altering untouched legac
   const scopeRows=await row('SCOPE').allInnerTexts();assert.equal(scopeRows.length,2);for(const text of scopeRows)assert.match(text,/行情卡片 · 屏蔽/);
   assert.doesNotMatch(await page.locator('#blocked-list').innerText(),/未设置|已启用|已停用|电脑静音/);
   await page.locator('#refresh-coins').click();await page.locator('#coin-sync-status').filter({hasText:'其他筛选仍按原设置'}).waitFor();assert.deepEqual(networkWrites,[]);
+ });
+
+ await t.test('saved coin search is exact and preserves multiplier and wrapped coin identities',async t=>{
+  const data=fixture();for(const coin of ['BTC','WBTC','1000BTC','BTCB'])rule(data,'desktop','all',true,coin);
+  const {page,networkWrites}=await setup(t,data);await page.locator('#center-cancel').click();
+  await page.evaluate(()=>{window.RadarCoinSettings.syncUI=()=>{};});await page.addScriptTag({content:listSource});
+  for(const q of ['BTC',' btc ']){await page.fill('#blocked-search',q);assert.deepEqual(await page.locator('.blocked-identity b').allTextContents(),['BTC']);}
+  await page.fill('#blocked-search','BT');assert.equal(await page.locator('.blocked-coin-row').count(),0);
+  await page.fill('#blocked-search','1000BTC');assert.deepEqual(await page.locator('.blocked-identity b').allTextContents(),['1000BTC']);
+  await page.fill('#blocked-search','');assert.equal(await page.locator('.blocked-coin-row').count(),4);assert.deepEqual(networkWrites,[]);
  });
 
  await t.test('operation history describes actual channel states and distinguishes unsaved failures',async t=>{

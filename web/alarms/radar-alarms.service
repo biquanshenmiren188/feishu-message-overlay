@@ -1,0 +1,27 @@
+[Unit]
+Description=Radar price alarms and Bark outbox
+After=network-online.target radar-webpush-test.service
+Wants=network-online.target
+
+[Service]
+User=radar-webpush-test
+Group=radar-webpush-test
+ExecStart=/opt/radar-webpush-test/venv/bin/python /opt/radar-alarms/current/server.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StateDirectory=radar-alarms
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=256M
+TasksMax=64
+CPUQuota=35%
+
+[Install]
+WantedBy=multi-user.target

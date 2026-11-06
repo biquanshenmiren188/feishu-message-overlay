@@ -1,5 +1,6 @@
 import {notifyRulesChanged} from './rule-events.js?v=20261028-1';
 const BASE='/radar/push-test/', API=BASE+'api/';
+const identityAPI='/radar/push-center-api/';
 const integrated=document.querySelector('#live-mobile-account');
 const css=document.createElement('link');css.rel='stylesheet';css.href='/radar/robot-push/notification-settings.css?v=20261017-android1';document.head.append(css);
 const mount=document.querySelector('.feed-tools')||document.querySelector('#notification-controls');
@@ -10,8 +11,8 @@ const dialog=document.createElement(integrated?'section':'dialog');dialog.id='no
 dialog.innerHTML=`<div class="ns-head"><div><h2 id="notification-settings-title">手机推送设置</h2><p>消息合并显示，最新在上。</p></div><button type="button" id="ns-close" aria-label="关闭推送设置">关闭</button></div>
 <div class="ns-body"><p id="ns-message" role="status" aria-live="polite"></p>
 <section class="ns-notification" aria-label="通知与绑定"><div id="ns-binding" hidden><span>当前推送码</span><output id="ns-bound-code"></output></div><button type="button" id="ns-enable" aria-describedby="ns-notification-help">开启通知</button><p id="ns-notification-help">开启后可在手机锁屏接收提醒。</p></section>
-<section class="ns-plans" aria-label="独立推送方案"><div class="ns-plan-buttons"><button type="button" id="ns-switch-open" aria-expanded="false" aria-controls="ns-switch">切换推送码</button><button type="button" id="ns-create-code">新建推送码</button></div><p>每个推送码的设置与通知独立，修改本码不影响其他码。</p><form id="ns-switch" hidden><label for="ns-switch-code">切换到推送码</label><input id="ns-switch-code" type="password" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" required autocomplete="off" placeholder="输入其他 8 位推送码" aria-describedby="ns-switch-help ns-switch-error"><p id="ns-switch-help">切换后载入该码已保存的设置，当前未保存内容不会带过去。本机通知绑定保持不变。</p><p id="ns-switch-error" class="ns-error" role="alert"></p><div class="ns-plan-buttons"><button type="submit" id="ns-switch-submit">确认切换</button><button type="button" id="ns-switch-cancel">取消</button></div></form><div id="ns-created" hidden role="status"><span>新推送码</span><output id="ns-created-code"></output><p>可切换到此码管理设置，在另一台手机连接后开启通知。当前方案保持不变。</p></div></section>
-<form id="ns-pair" hidden><label for="ns-code">推送码</label><div class="ns-inline"><input id="ns-code" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位推送码"><button>连接</button></div><p>沿用原来的推送码，不需要重新安装。</p></form>
+<section class="ns-plans" aria-label="独立推送方案"><div class="ns-plan-buttons"><button type="button" id="ns-switch-open" aria-expanded="false" aria-controls="ns-switch">切换推送码</button><button type="button" id="ns-create-code">新建推送码</button></div><p>每个推送码的设置与通知独立，修改本码不影响其他码。</p><form id="ns-switch" hidden><label for="ns-switch-code">切换到推送码</label><input id="ns-switch-code" type="text" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" required autocomplete="off" placeholder="输入其他 8 位推送码" aria-describedby="ns-switch-help ns-switch-error"><p id="ns-switch-help">切换后载入该码已保存的设置，当前未保存内容不会带过去。本机通知绑定保持不变。</p><p id="ns-switch-error" class="ns-error" role="alert"></p><div class="ns-plan-buttons"><button type="submit" id="ns-switch-submit">确认切换</button><button type="button" id="ns-switch-cancel">取消</button></div></form><div id="ns-created" hidden role="status"><span>新推送码</span><output id="ns-created-code"></output><p>可切换到此码管理设置，在另一台手机连接后开启通知。当前方案保持不变。</p></div></section>
+<form id="ns-pair" hidden><label for="ns-code">推送码</label><div class="ns-inline"><input id="ns-code" type="text" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="输入原来的 8 位推送码"><button>连接</button></div><p>沿用原来的推送码，不需要重新安装。</p></form>
 <form id="ns-form" hidden><fieldset id="ns-fields"><label class="ns-toggle"><span>接收消息</span><input id="ns-enabled" type="checkbox"></label>
 <div class="ns-grid"><label>显示条数<select id="ns-rows"><option value="1">1 条</option><option value="2">2 条</option><option value="3">3 条</option><option value="4">4 条</option></select></label><label>提醒间隔<select id="ns-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="180">3 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option></select></label></div>
 <p class="ns-help">间隔内合并提醒，无新消息不打扰。时间为 UTC+8。</p>
@@ -30,8 +31,8 @@ for(const [id,values] of [['ns-modes',[['SF','SF'],['FS','FS'],['FF','FF']]],['n
  for(const [value,label] of values){const el=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;el.append(input,document.createTextNode(label));$(id).append(el)}
 }
 let deviceToken=localStorage.getItem('radar-test-token')||'';
-let token=localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
-function selectIdentity(next){if(next===token)return;token=next;identityRevision++;queueMicrotask(()=>document.dispatchEvent(new CustomEvent('radar-profile-changing')));}
+let token=localStorage.getItem('radar-settings-signed-out')?'':localStorage.getItem('radar-settings-token')||deviceToken, revision=0, publicKey='', busy=false, identityRevision=0, reloadRequested=false;
+function selectIdentity(next){if(next===token)return;token=next;identityRevision++;document.dispatchEvent(new CustomEvent('radar-profile-changing'));}
 function currentIdentity(auth,epoch){return auth===token&&epoch===identityRevision;}
 async function scopedApi(route,data){const auth=token,epoch=identityRevision;if(!auth)throw Error('请先连接自己的推送码');const result=await api(route,data,auth);if(!currentIdentity(auth,epoch))throw Error('推送码已切换，请在原方案核对保存结果后重新载入');if(data!==undefined&&['settings','desktop-settings','edit-coins','block-coins'].includes(route))notifyRulesChanged();return result;}
 let phone=null, serverFingerprint=null, workerVersion='unknown', notificationReady=false;
@@ -50,7 +51,7 @@ let registrationError='';
 const pendingSwitch=()=>JSON.parse(localStorage.getItem('radar-phone-switch')||'null');
 $('ns-switch-help').textContent=phoneApp?'切换后，本机接收新码的推送，并载入该码已保存的设置。当前未保存内容不会带过去。':'切换后载入该码已保存的设置，不改变手机绑定。要切换手机推送，请在安卓浏览器或 iPhone 主屏幕雷达中操作。';
 function message(text,error=false){$('ns-message').textContent=text;$('ns-message').classList.toggle('ns-error',error)}
-async function api(route,data,auth=token,clearSession=true){const r=await fetch(API+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401&&clearSession&&auth===token){selectIdentity('');localStorage.removeItem('radar-settings-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok){const error=Error(body.error||'请求失败');error.status=r.status;throw error}return body}
+async function api(route,data,auth=token,clearSession=true){const r=await fetch((['pair','create-code'].includes(route)?identityAPI:API)+route,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});let body;try{body=await r.json()}catch{throw Error('网站登录已失效，请重新打开页面登录。')}if(r.status===401&&clearSession&&auth===token){selectIdentity('');localStorage.setItem('radar-settings-signed-out','1');localStorage.removeItem('radar-settings-token');$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification()}if(!r.ok){const error=Error(body.error||'请求失败');error.status=r.status;throw error}return body}
 function renderNotification(){
  const otherPlan=!!(token&&deviceToken&&token!==deviceToken);
  notificationReady=!!(!otherPlan&&token&&phoneApp&&pushSupported&&phone?.permission==='granted'&&phone.subscriptionFingerprint&&phone.subscriptionFingerprint===serverFingerprint);
@@ -69,16 +70,19 @@ function fill(s){revision=s.revision;publicKey=s.publicKey;serverFingerprint=s.s
 }
 async function task(fn,propagate=false){if(busy)return;busy=true;dialog.setAttribute('aria-busy','true');$('ns-fields').disabled=true;$('ns-save').disabled=true;$('ns-enable').disabled=true;for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=true;try{return await fn()}catch(e){message(e.message,true);if(!$('ns-switch').hidden)$('ns-switch-error').textContent=e.message;if(propagate)throw e}finally{busy=false;dialog.setAttribute('aria-busy','false');$('ns-fields').disabled=!!pendingSwitch();$('ns-save').disabled=!!pendingSwitch();for(const id of ['ns-create-code','ns-switch-open','ns-switch-submit','ns-switch-cancel','ns-switch-code'])$(id).disabled=false;renderNotification();if(reloadRequested){reloadRequested=false;queueMicrotask(()=>task(load));}}}
 async function readPlan(auth){const [status,binding]=await Promise.all([api('status',undefined,auth,false),api('binding',undefined,auth,false)]);return {status,binding}}
-function showPlan(plan){fill(plan.status);$('ns-bound-code').textContent=plan.binding.pushCode;$('ns-binding').hidden=false}
-async function load(){if(phoneApp&&pendingSwitch())await finishPhoneSwitch();if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}const auth=token,epoch=identityRevision,plan=await readPlan(auth);await syncPhone().catch(()=>{});if(currentIdentity(auth,epoch))showPlan(plan)}
+let shownCode='';
+function showPlan(plan){fill(plan.status);shownCode=plan.binding.pushCode;$('ns-bound-code').textContent=shownCode;$('ns-binding').hidden=false;document.dispatchEvent(new CustomEvent('radar-profile-ready',{detail:{suffix:shownCode.slice(-2),profileId:plan.status.profileId}}));}
+const copyCode=document.createElement('button');copyCode.type='button';copyCode.textContent='复制';copyCode.onclick=async()=>{try{await navigator.clipboard.writeText(shownCode);copyCode.textContent='已复制';setTimeout(()=>copyCode.textContent='复制',1500);}catch{message('复制失败，请长按或选中推送码手动复制',true);}};$('ns-binding').append(copyCode);
+async function load(){if(phoneApp&&pendingSwitch())await finishPhoneSwitch();if(!token){$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;message('连接后即可修改手机推送。');renderNotification();return}const auth=token,epoch=identityRevision;try{const plan=await readPlan(auth);await syncPhone().catch(()=>{});if(currentIdentity(auth,epoch))showPlan(plan)}catch(e){if(e.status===401&&currentIdentity(auth,epoch)){localStorage.setItem('radar-settings-signed-out','1');localStorage.removeItem('radar-settings-token');selectIdentity('');shownCode='';$('ns-binding').hidden=true;$('ns-bound-code').textContent='';$('ns-pair').hidden=false;$('ns-form').hidden=true;$('ns-actions').hidden=true;notificationReady=false;renderNotification();}throw e;}}
 function closeSwitch(){ $('ns-switch').hidden=true;$('ns-switch-open').setAttribute('aria-expanded','false');$('ns-switch-code').value='';$('ns-switch-error').textContent='' }
 async function activatePlan(result,movePhone=false){
+ const changing=new Event('radar-before-profile-change',{cancelable:true});document.dispatchEvent(changing);if(changing.defaultPrevented)throw Error('已取消切换，草稿保持不变');
  // Verify both responses before changing the current identity or form. A failed
  // switch must leave the original token, revision and unsaved edits intact.
  let plan=await readPlan(result.token);
  if(movePhone&&phoneApp){const moved=await switchPhone(result.token,plan);if(moved)plan=moved}
  if(!deviceToken){localStorage.setItem('radar-test-token',result.token);deviceToken=result.token}
- localStorage.setItem('radar-settings-token',result.token);selectIdentity(result.token);
+ localStorage.removeItem('radar-settings-signed-out');localStorage.setItem('radar-settings-token',result.token);selectIdentity(result.token);
  showPlan(plan);closeSwitch();$('ns-created').hidden=true;
  dialog.querySelector('.ns-body').scrollTop=0;
 }
@@ -225,7 +229,15 @@ if(integrated){
  let desktopToken='';
  async function loadDesktop(){if(desktopToken===token||!token)return;const auth=token,epoch=identityRevision;document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:'正在连接本推送码的电脑规则…'}));try{const data=await scopedApi('desktop-settings');if(!currentIdentity(auth,epoch))return;desktopToken=auth;document.dispatchEvent(new CustomEvent('radar-desktop-loaded',{detail:data}));}catch(e){if(currentIdentity(auth,epoch)){desktopToken='';document.dispatchEvent(new CustomEvent('radar-desktop-error',{detail:e.status===403?'当前推送码无法读取本方案规则，请重新连接。':e.message}));}}}
  document.addEventListener('radar-profile-changing',()=>{desktopToken='';});
- window.addEventListener('storage',e=>{if(!['radar-settings-token','radar-test-token',null].includes(e.key))return;const next=localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';if(next===token)return;selectIdentity(next);if(busy)reloadRequested=true;else task(load);});
+ window.addEventListener('storage',e=>{if(!['radar-settings-token','radar-test-token','radar-settings-signed-out',null].includes(e.key))return;const next=localStorage.getItem('radar-settings-signed-out')?'':localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';if(next===token)return;selectIdentity(next);if(busy)reloadRequested=true;else task(load);});
  document.addEventListener('radar-mobile-loaded',loadDesktop);
  task(load);
 }
+
+// Shared identity controller: the center uses the same guarded PWA transfer path.
+window.RadarIdentity={
+ token:()=>token,
+ code:()=>token?shownCode:'',
+ connect:async(code)=>{if(busy)throw Error('正在处理推送码，请稍后再试');return task(async()=>{const r=await api('pair',{code},token,false);await activatePlan(r,true);},true);},
+ create:async()=>{if(busy)throw Error('正在处理推送码，请稍后再试');return task(async()=>{let requestId=sessionStorage.getItem('radar-create-code-request');if(!requestId){requestId=crypto.randomUUID().replaceAll('-','');sessionStorage.setItem('radar-create-code-request',requestId);}const r=await api('create-code',{requestId});await activatePlan(r);sessionStorage.removeItem('radar-create-code-request');return r;},true);}
+};

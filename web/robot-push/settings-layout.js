@@ -3,6 +3,7 @@ function attachLayout() {
   const toolbar=document.querySelector('.feed-tools');
   const dialog=document.getElementById('notification-settings');
   if(!toolbar||!dialog)return false;
+  if(dialog.closest('#radar-account-dialog'))return true;
   toolbar.classList.add('ns-toolbar');
   if(dialog.classList.contains('ns-compact'))return true;
   dialog.classList.add('ns-compact');
