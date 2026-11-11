@@ -42,3 +42,7 @@ scripts/deploy-alarm-smooth.py在guard.lock内校验实时基线和候选、复�
 功能源码5752cd84b44bade808acbb84ae527198eb81635a；静态release 20261111-alarm-cache-1794404644523692700；报警后端/opt/radar-alarms/releases/5752cd84b44bade808acbb84ae527198eb81635a。前版静态20261111-alarm-smooth-1794403847040466376、报警后端bbf85cbe4fcb0caf1af73cf0b383d6b54f9a039b。webpush server.py原文件备份在/opt/funding-radar-web/backups/20261111-alarm-cache-1794404644523692700/webpush-server.py。
 
 部署scripts/deploy-alarm-cache.py校验文件基线与候选、备份/回滚，重启webpush及alarms但不重启publisher；用户配置/订阅摘要保持。回滚只恢复代码和current链接，不回滚用户数据。上线全部静态/报警后端/webpush server哈希匹配；健康version=5、notificationLevel=critical、ringingSeconds=30，既有强提醒循环保持。代码与发布记录同步PR #64，待合并。
+
+## PR #64 合并前一致性核对
+
+已将线上保留的紧凑字体样式及 settings CSS 版本引用补入仓库，报警页面文件可与线上逐一对照，不再依赖未入库的报警页面样式差异。CI 授权测试补装现有 web/push-test/requirements.txt 依赖，解决干净运行环境缺少 requests 的失败；不改变线上依赖或推送行为。合并时再次核对生产文件哈希、主分支源码和服务健康。

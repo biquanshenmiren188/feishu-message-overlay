@@ -6,6 +6,15 @@
  .alarm-list-heading{flex-direction:column;gap:4px}.alarm-list-heading>span:last-child{max-width:none;text-align:left}
 }
 
+/* Compact text stays consistent across the outer and inner screens. */
+@media(max-width:1024px){
+ .alarm-layout input:not([type=checkbox]):not([type=radio]),.alarm-layout select,
+ .alarm-dialog input:not([type=checkbox]):not([type=radio]),.alarm-dialog select{font-size:13px}
+ .alarm-heading h1,.alarm-dialog h2{font-size:14px;line-height:22px}
+ .alarm-heading h2{font-size:13px}
+ .alarm-layout button,.alarm-dialog button:not(.icon-button){font-size:12px}
+}
+
 /* Keep device actions together, wrapping on narrow screens. */
 .device-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}.device-controls>button{min-height:44px}.device-controls .device-summary{white-space:normal;text-align:left;max-width:100%}#test-bark-inline{color:var(--alarm-blue)}.bark-test-result{margin:0;padding:10px 16px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--alarm-muted)}.bark-test-result[data-state="accepted"]{color:#168261}.bark-test-result[data-state="failed"],.bark-test-result[data-state="unknown"]{color:var(--alarm-danger)}
 
