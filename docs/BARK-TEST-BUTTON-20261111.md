@@ -20,3 +20,9 @@ GitHub PR #64 待合并。回滚时原子切回前版静态目录，不恢复用
 前版静态 20261111-bark-test-1794402075579567925；前版后台 c08f64e1ae1fe72a07c9399a62199a55833bf4c6。回滚只切换两处 current 链接并重启 radar-alarms，不回滚用户数据库。
 
 38 项后台测试本地及生产隔离候选均通过；1440/393/320px 真实 Chrome 合成 API 测试覆盖简化表单保存参数、测试请求、错误、幂等重试、状态及切码。手机视口截图已检查。部署仅重启 radar-alarms，未重启 BOT、Web Push、桌面；其他静态文件、PWA fallback 和现有设置保持。部署后全部目标文件哈希匹配，运行健康接口 version=2、notificationLevel=critical。未人工发送手机通知，不宣称实体手机响铃已验收。PR #64 同步，待合并。
+
+## 2026-11-11 循环响铃 30 秒（已上线）
+
+用户明确要求所有报警与测试均强提醒并循环响铃30秒。统一发送层强制 level=critical、volume=5、call="1"，覆盖旧规则、旧队列和测试入口；不靠浏览器选择参数。页面同步告知循环时长。依据 Bark 官方 docs/params.md 的 call 参数约定；未额外发送人工通知，实体设备播放时长未代用户确认。
+
+本地和服务器候选38项测试通过，测试请求和旧载荷均断言 call="1"；旧载荷即使 call="0"也由发送策略覆盖。部署源码 411a6c05ffba1f24ea45fa4ba6bd785674357635；静态 release 20261111-bark-ring30-1794402886784921208；后台 /opt/radar-alarms/releases/411a6c05ffba1f24ea45fa4ba6bd785674357635。前版静态 20261111-simple-critical-1794402399205899748，后台 76d5464b36af55af289e123eba0df9132eaa1f13。仅重启报警服务；其他服务、绑定、用户规则保持。部署后静态及后台所有目标文件哈希匹配，健康接口 version=3、notificationLevel=critical、ringingSeconds=30。PR #64 已同步，待合并。
