@@ -2,7 +2,7 @@ const {chromium}=require('playwright'),fs=require('fs'),path=require('path'),ass
 const assets=process.env.ALARM_ASSETS||__dirname;
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true}),page=await browser.newPage({viewport:{width:393,height:852}});let requests=0,delay=300;
 const state={revision:1,enabled:true,device:{label:'iPhone'},events:[],rules:[{id:'a',exchange:'binance',market:'future',priceType:'last',symbol:'BTCUSDT',condition:'above',target:'90000',enabled:true,repeat:false,state:{price:'73000',status:'watching',sampleAt:Date.now()/1000}}]};
-await page.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic-a'));
+await page.addInitScript(()=>{if(!localStorage.getItem('radar-settings-token'))localStorage.setItem('radar-settings-token','synthetic-a');});
 await page.route('**/*',async r=>{const u=new URL(r.request().url());if(u.pathname.endsWith('/state')){requests++;assert.equal(u.searchParams.get('events'),'latest-test');await new Promise(ok=>setTimeout(ok,delay));return r.fulfill({json:state});}const name=u.pathname.split('/').pop()||'index.html';let file=path.join(assets,name);if(name==='search.js')file=path.join(__dirname,'search.js');if(!fs.existsSync(file))return r.fulfill({body:'',contentType:'text/css'});return r.fulfill({body:fs.readFileSync(file),contentType:name.endsWith('html')?'text/html':name.endsWith('css')?'text/css':'text/javascript'});});
 await page.goto('https://fixture.test/radar/robot-push/alarms/',{waitUntil:'domcontentloaded'});
 assert.match(await page.locator('#alarm-status').innerText(),/正在同步/);assert.doesNotMatch(await page.locator('main').innerText(),/未连接|未绑定|规则 0/);
@@ -17,4 +17,5 @@ await page.fill('#alarm-search','BTC');assert.equal(await page.locator('[data-ac
 await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
 await page.evaluate(()=>{sessionStorage.clear();});await page.reload({waitUntil:'domcontentloaded'});assert.equal(await page.locator('.alarm-row').count(),0);assert.equal(await page.locator('.is-loading .alarm-toolbar').isVisible(),false);
 await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
-console.log(JSON.stringify({initialRequests:1,parallelClicks:5,coalescedRequests:1,rowAndButtonPreserved:true,noFalseDisconnectedFlash:true,cachedReadOnlyUntilVerified:true,compactColdStart:true}));await browser.close();})().catch(e=>{console.error(e);process.exitCode=1});
+await page.evaluate(()=>localStorage.setItem('radar-settings-token','synthetic-b'));await page.reload({waitUntil:'domcontentloaded'});assert.equal(await page.locator('.alarm-row').count(),0);assert.doesNotMatch(await page.locator('#alarm-status').innerText(),/上次数据/);await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);
+console.log(JSON.stringify({initialRequests:1,parallelClicks:5,coalescedRequests:1,rowAndButtonPreserved:true,noFalseDisconnectedFlash:true,cachedReadOnlyUntilVerified:true,compactColdStart:true,cacheIsolatedByIdentity:true}));await browser.close();})().catch(e=>{console.error(e);process.exitCode=1});

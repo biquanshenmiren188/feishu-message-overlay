@@ -24,3 +24,21 @@
 scripts/deploy-alarm-smooth.py在guard.lock内校验实时基线和候选、复制当前release保留无关静态资产、原子切换；仅重启radar-alarms。未重写用户规则/设备，数据库增加两项查询索引。PWA fallback、原BOT/Web Push服务PID和既有配置摘要保持。部署后7个静态文件及5个后台文件哈希匹配，实际服务健康version=4、notificationLevel=critical、ringingSeconds=30。
 
 回滚仅切换静态和后台current并重启报警服务；不恢复用户数据库。保留索引兼容旧后台。GitHub PR #64包含本次代码与记录，尚未合并。
+
+## 2026-11-11 刷新快照和轻量身份认证（已上线）
+
+刷新优先读取当前浏览器标签页的sessionStorage快照（最多30分钟），用当前bearer的SHA-256分桶，快照不含认证token或Bark密钥。展示上次读取时间，认证/状态回读完成前禁用新增、编辑、删除、启停、设备管理和测试；事件处理及提交函数同时保护，搜索重绘也保持禁用。空缓存只显示紧凑同步区域，隐藏大块占位工具栏。401清缓存，切码隔离，过期/损坏/不可用存储按无缓存处理；后台失败保留上次数据并提示，不能据此修改。
+
+已定位一项服务端冗余：报警认证原先调用完整/api/status，读取68342字节，其中public_status会获取消息预览、历史与账户锁。新增仅回环可用、仍逐次bearer鉴权的/internal/alarm-identity，返回profileId约23字节，不缓存认证结果、不生成预览。报警响应增加Server-Timing（auth/app/total），便于区分后端和网络等待。
+
+服务器内网连续各5次、当前legacy身份只读抽样（不输出凭据或消息）：旧认证1258.5/516.8/85.1/7.1/6.8ms，中位85.1ms；新认证21.0/1.0/0.7/0.6/0.6ms，中位0.7ms。旧报警接口28.3/61.9/48.1/200.6/1182.4ms，中位61.9ms；新18.9/65.1/21.7/82.3/19.2ms，中位21.7ms。属于不同时间窗口的小样本，不代表所有用户或P95。
+
+在用户既有Chrome报警页只读刷新验证：首次无快照为紧凑占位；再次刷新直接显示上次数据/设备和禁用按钮，随后验证成功恢复操作。一次新页面请求总耗时1812ms、服务端18ms；下一次刷新434ms、服务端18.5ms；后续样本仍有认证338–348ms波动。网络和调度耗时尚有波动，不宣称所有等待已消除，快照使等待不再阻塞内容展示。
+
+验证：39项报警后台测试、12项推送server测试（验证轻量接口鉴权、非回环拒绝、不调用重状态），服务器隔离候选同样通过；1440/393/320px浏览器原流程；缓存回显/只读/搜索仍禁用/冷启动紧凑/按身份隔离的延迟API专项通过。没有发人工通知。
+
+首次部署冒烟发现推送服务尚未就绪导致503，自动回退至原静态/报警后端并恢复webpush server.py，未发布新页面。随后补充轻量认证就绪等待，二次发布成功。
+
+功能源码5752cd84b44bade808acbb84ae527198eb81635a；静态release 20261111-alarm-cache-1794404644523692700；报警后端/opt/radar-alarms/releases/5752cd84b44bade808acbb84ae527198eb81635a。前版静态20261111-alarm-smooth-1794403847040466376、报警后端bbf85cbe4fcb0caf1af73cf0b383d6b54f9a039b。webpush server.py原文件备份在/opt/funding-radar-web/backups/20261111-alarm-cache-1794404644523692700/webpush-server.py。
+
+部署scripts/deploy-alarm-cache.py校验文件基线与候选、备份/回滚，重启webpush及alarms但不重启publisher；用户配置/订阅摘要保持。回滚只恢复代码和current链接，不回滚用户数据。上线全部静态/报警后端/webpush server哈希匹配；健康version=5、notificationLevel=critical、ringingSeconds=30，既有强提醒循环保持。代码与发布记录同步PR #64，待合并。
