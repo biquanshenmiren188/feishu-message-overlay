@@ -47,6 +47,15 @@ class Store:
         CREATE TABLE IF NOT EXISTS requests (profile TEXT NOT NULL, id TEXT NOT NULL, digest TEXT NOT NULL, response TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY(profile,id));
         ''')
         with self.db:
+            # Preserve effective pauses when retiring the account-wide switch.
+            for profile in self.db.execute('SELECT id FROM profiles WHERE enabled=0').fetchall():
+                for row in self.db.execute('SELECT id,config,state FROM rules WHERE profile=?', (profile['id'],)).fetchall():
+                    rule, state = json.loads(row['config']), json.loads(row['state'])
+                    rule['enabled'] = False
+                    state.update(gap=True, pending=None, status='paused')
+                    self.db.execute('UPDATE rules SET config=?,state=? WHERE id=?', (dump(rule), dump(state), row['id']))
+                self.cancel(profile['id'])
+                self.db.execute('UPDATE profiles SET enabled=1,revision=revision+1 WHERE id=?', (profile['id'],))
             self.db.execute("UPDATE events SET status='unknown',error='发送过程中服务重启，结果未知' WHERE status='sending'")
             for row in self.db.execute('SELECT id,state FROM rules').fetchall():
                 state = json.loads(row['state'])
@@ -64,7 +73,7 @@ class Store:
             rules = [dict(id=r['id'], **json.loads(r['config']), state=json.loads(r['state'])) for r in self.db.execute('SELECT * FROM rules WHERE profile=? ORDER BY created DESC', (profile,))]
             event_sql = "SELECT * FROM events WHERE profile=?" + (" AND rule_id='test' ORDER BY at DESC LIMIT 1" if compact else " ORDER BY at DESC LIMIT 100")
             events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status=r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile,))]
-            return dict(revision=p['revision'], enabled=bool(p['enabled']), device=dict(label=d['label'], suffix=d['fingerprint'][-6:]) if d else None, rules=rules, events=events)
+            return dict(revision=p['revision'], enabled=True, device=dict(label=d['label'], suffix=d['fingerprint'][-6:]) if d else None, rules=rules, events=events)
 
     def history(self, profile, query):
         def arg(name, default=''): return query.get(name, [default])[0]
@@ -147,14 +156,7 @@ class Store:
                     state.update(gap=True, pending=None, status='waiting' if rule['enabled'] else 'paused')
                     self.db.execute('UPDATE rules SET config=?,state=? WHERE id=?', (dump(rule), dump(state), identity))
             elif action == 'enabled':
-                if type(data.get('enabled')) is not bool:
-                    raise ValueError('开关格式错误')
-                self.db.execute('UPDATE profiles SET enabled=? WHERE id=?', (int(data['enabled']), profile))
-                self.cancel(profile)
-                for row in self.db.execute('SELECT id,state FROM rules WHERE profile=?', (profile,)).fetchall():
-                    state = json.loads(row['state'])
-                    state.update(gap=True, pending=None)
-                    self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['id']))
+                raise ValueError('请在单条报警的编辑窗口中启用或暂停')
             elif action == 'bind':
                 value = data.get('key', '')
                 if not isinstance(value, str):
@@ -211,11 +213,9 @@ class Store:
     def tick(self, quotes, now):
         active = set()
         with self.lock, self.db:
-            rows = self.db.execute('SELECT r.*,p.enabled AS master FROM rules r JOIN profiles p ON p.id=r.profile').fetchall()
+            rows = self.db.execute('SELECT * FROM rules').fetchall()
             for row in rows:
                 rule = json.loads(row['config'])
-                if not row['master']:
-                    continue
                 previous = json.loads(row['state'])
                 key = rule['exchange'], rule['market'], rule['symbol']
                 state, event = evaluate(rule, previous, quotes.get(key), now)

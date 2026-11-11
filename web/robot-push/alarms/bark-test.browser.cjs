@@ -35,6 +35,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   });
   await page.clock.install();await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');
   await page.waitForFunction(()=>!document.querySelector('#bind-device').disabled);
+  assert.equal(await page.locator('#master-enabled').count(),0);
   assert.equal(await page.locator('#bark-test-result').isVisible(),false);
   assert.equal(await page.locator('#test-bark-inline').isDisabled(),true);
   const loaded=page.waitForResponse(r=>r.url().includes('/catalog'));await page.click('#add-alarm');await loaded;await page.waitForTimeout(100);
