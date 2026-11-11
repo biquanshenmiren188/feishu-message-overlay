@@ -33,6 +33,15 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  try:
   shutil.copyfile(stage/'pushbackend/server.py',push);push.chmod(0o644)
   subprocess.run(['systemctl','restart','radar-webpush-test'],check=True)
+  from urllib.request import Request,urlopen
+  credential=json.loads(Path('/var/lib/radar-webpush-test/state.json').read_text())['token']
+  for attempt in range(30):
+   try:
+    with urlopen(Request('http://127.0.0.1:18885/internal/alarm-identity',headers={'Authorization':'Bearer '+credential}),timeout=2) as response:
+     assert 'profileId' in json.load(response)
+    break
+   except Exception:time.sleep(.5)
+  else:raise RuntimeError('Identity service readiness failed')
   base.switch(Path('/opt/radar-alarms/current'),newb)
   subprocess.run(['systemctl','restart','radar-alarms'],check=True)
   from urllib.request import urlopen
