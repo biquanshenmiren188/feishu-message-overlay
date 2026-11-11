@@ -6,7 +6,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
  const browser=await chromium.launch({headless:true,channel:'chrome'});
  try{for(const width of [1440,393,320]){
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
-  let state={revision:1,enabled:true,device:null,rules:[],events:[]},writes=[],fail=false,reject=false,detailReads=0;
+  let state={revision:1,enabled:true,device:null,rules:[],events:[{id:'old-test',ruleId:'test',at:1700000000,status:'accepted'}]},writes=[],fail=false,reject=false,detailReads=0;
   await page.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic-a'));
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',async route=>{
@@ -21,7 +21,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
     assert.equal(req.headers().authorization,'Bearer synthetic-a');
     if(fail){fail=false;return route.abort();}
     if(reject){reject=false;return json({error:'请间隔一分钟再发送测试通知'},400);}
-    if(body.action==='save'){state.revision++;return json({ok:true});}
+    if(body.action==='save'){state.rules=[{...body.rule,id:'synthetic-rule',state:{status:'watching',price:'73000',sampleAt:Date.now()/1000}}];state.revision++;return json({ok:true});}
     state.events=[{id:'test-event',ruleId:'test',at:Date.now()/1000,status:'queued',attempts:0,title:'测试',body:'合成测试'}];state.revision++;
     return json({ok:true,revision:state.revision});
    }
@@ -33,8 +33,9 @@ const assets=process.env.ALARM_ASSETS||__dirname;
    }
    try{return route.fulfill({contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html',body:await fs.readFile(path.join(dir,file))});}catch{return route.fulfill({status:404,body:''});}
   });
-  await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');
+  await page.clock.install();await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');
   await page.waitForFunction(()=>!document.querySelector('#bind-device').disabled);
+  assert.equal(await page.locator('#bark-test-result').isVisible(),false);
   assert.equal(await page.locator('#test-bark-inline').isDisabled(),true);
   const loaded=page.waitForResponse(r=>r.url().includes('/catalog'));await page.click('#add-alarm');await loaded;await page.waitForTimeout(100);
   assert.equal(await page.locator('#alarm-symbols option').count(),0);
@@ -48,6 +49,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   assert.equal(await page.locator('#alarm-form input:visible,#alarm-form select:visible').count(),5);
   if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`simple-alarm-${width}.png`),fullPage:true});
   await page.click('#save-alarm');await page.waitForFunction(()=>!document.querySelector('#alarm-editor').open);
+  assert.deepEqual(await page.locator('.alarm-actions button').allTextContents(),['编辑','删除']);assert.doesNotMatch(await page.locator('.alarm-row').innerText(),/最近采样/);
   const rule=writes.pop().rule;assert.equal(rule.level,'critical');assert.equal(rule.hold,0);assert.equal(rule.immediate,true);assert.equal(rule.hysteresis,'0');assert.equal(rule.market,'future');assert.equal(rule.expiresAt,null);
   state.device={label:'我的 iPhone',suffix:'000001'};await page.click('#refresh-alarms');
   await page.waitForFunction(()=>!document.querySelector('#test-bark-inline').disabled);
@@ -56,7 +58,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   for(const status of ['sending','retry','accepted','failed','unknown','expired','cancelled']){
    state.events[0].status=status;state.events[0].error=status==='failed'?'Bark 拒绝请求':null;
    await page.click('#refresh-alarms');await page.waitForFunction(s=>document.querySelector('#bark-test-result').dataset.state===s,status);
-   if(status==='accepted')assert.match(await page.locator('#bark-test-result').innerText(),/不代表手机已显示/);
+   if(status==='accepted')assert.match(await page.locator('#bark-test-result').innerText(),/Bark 已接受/);
    if(status==='failed')assert.match(await page.locator('#bark-test-result').innerText(),/Bark 拒绝请求/);
   }
   reject=true;await page.click('#test-bark-inline');await page.waitForFunction(()=>document.querySelector('#alarm-notice').textContent.includes('一分钟'));
@@ -64,6 +66,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   const failed=writes.at(-1);assert.equal(await page.locator('#test-bark-inline').isDisabled(),true);
   await page.click('#retry-action');await page.waitForFunction(()=>document.querySelector('#pending-action').hidden);assert.deepEqual(writes.at(-1),failed);
   state.events[0].status='accepted';await page.click('#refresh-alarms');await page.waitForFunction(()=>document.querySelector('#bark-test-result').dataset.state==='accepted');
+  await page.click('#refresh-alarms');await page.clock.runFor(8001);assert.equal(await page.locator('#bark-test-result').isVisible(),false);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no overflow '+width);
   if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`bark-test-${width}.png`),fullPage:true});
   await page.click('a[href="history.html"]');await page.waitForFunction(()=>document.querySelectorAll('#event-list details').length===20);

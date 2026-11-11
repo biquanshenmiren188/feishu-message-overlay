@@ -32,13 +32,14 @@ function connected(enabled){
   button.setAttribute('aria-busy',String(!!sending||(busy&&testSubmitting)));
  }
 }
-let testSubmitting=false;
+let testSubmitting=false,showTestResult=false,testFeedbackTimer;
 function renderTestResult(){
  const event=current?.events.find(e=>e.ruleId==='test'),output=$('#bark-test-result');
- output.hidden=!event;if(!event){output.textContent='';return;}
- const status={queued:'测试消息已加入后台队列，等待发送。',sending:'后台正在向 Bark 发送测试消息…',retry:'暂未发送成功，后台等待重试。',accepted:'Bark 已接受测试消息，请查看手机通知；接口接受不代表手机已显示。',failed:'测试推送失败。',unknown:'发送结果未知，请先查看手机和报警记录，避免重复发送。',expired:'测试消息已过期，未完成发送。',cancelled:'测试推送已取消。',no_device:'未绑定 Bark 设备，无法发送。'};
+ clearTimeout(testFeedbackTimer);output.hidden=!event||!showTestResult;if(output.hidden){output.textContent='';return;}
+ const status={queued:'等待发送',sending:'发送中…',retry:'等待重试',accepted:'Bark 已接受',failed:'发送失败',unknown:'结果未知，请查看手机或报警记录',expired:'已过期',cancelled:'已取消',no_device:'请先绑定设备'};
  output.dataset.state=event.status;
- output.textContent='最近测试 · '+new Date(event.at*1000).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+' · '+(status[event.status]||'请查看报警记录。')+(event.error?' 原因：'+event.error:'');
+ output.textContent=(status[event.status]||'请查看报警记录')+(event.error?' · '+event.error:'');
+ if(event.status==='accepted')testFeedbackTimer=setTimeout(()=>{showTestResult=false;renderTestResult();},8000);
 }
 function syncPlanLabel(){const code=window.RadarIdentity?.code();$('#plan-label').textContent=!token()?'未连接推送码':!verified?'正在核对当前推送码':code?'当前推送码 · 尾号 '+code.slice(-2):'当前推送码 · 已连接';}
 function safeStatus(r){if(!r.enabled)return 'paused';if(r.expiresAt&&r.expiresAt<Date.now()/1000)return 'expired';if(r.state?.status==='triggered')return 'triggered';if(r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt>12)return 'stale';return r.state?.status||'waiting';}
@@ -53,7 +54,7 @@ function renderRules(){
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
  const markup=rows.length?rows.map(r=>{
   const status=current.enabled?safeStatus(r):'paused',fresh=r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12;
-  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''}"><div><strong>${esc(r.symbol)}</strong><span class="alarm-badge ${['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'} · ${r.priceType==='last'?'最新成交价':'标记价格'}</small><small>${r.repeat?'重复触发':'仅一次'}${r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</div><div class="alarm-condition">${esc(description(r))}</div><small>${fresh?'最近采样 '+new Date(r.state.sampleAt*1000).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'}):'等待新鲜行情'}</small></div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="toggle" data-id="${r.id}">${r.enabled?'暂停':'启用'}</button><button data-action="copy" data-id="${r.id}">复制</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
+  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''}"><div><strong>${esc(r.symbol)}</strong><span class="alarm-badge ${['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'} · ${r.priceType==='last'?'最新成交价':'标记价格'}</small><small>${r.repeat?'重复触发':'仅一次'}${r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</div><div class="alarm-condition">${esc(description(r))}</div>${fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
  }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'尝试其他币种或切换状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
@@ -64,7 +65,7 @@ function render(){
  connection(verified);document.querySelector('main').classList.remove('is-loading');$('#alarm-list').setAttribute('aria-busy','false');
  syncPlanLabel();
  connected(true);renderTestResult();$('#master-enabled').checked=current.enabled;
- $('#alarm-status').textContent=!verified?'显示上次数据（'+new Date(cachedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+'），正在更新…':current.enabled?'规则保存后生效，当前推送码独立运行。':'当前推送码的全部价格报警已暂停。';
+ $('#alarm-status').textContent=!verified?'显示上次数据（'+new Date(cachedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+'），正在更新…':current.enabled?'':'当前推送码的全部价格报警已暂停。';
  $('#device-label').textContent=current.device?current.device.label+' · 已绑定':'Bark 未绑定';$('#bind-device').classList.toggle('is-bound',!!current.device);
  if(!current.device)notice('先绑定 Bark 接收设备。未绑定时，触发事件只会记入报警记录。');else notice('');
  renderRules();
@@ -95,7 +96,7 @@ async function commit(data){
   const id=$('#bark-editor').open?'#bark-form-error':$('#alarm-editor').open?'#alarm-form-error':null;if(id)$(id).textContent=e.message;else notice(e.message);return false;
  }finally{busy=false;connected(!!current);$('#save-alarm').disabled=false;$('#save-bark').disabled=false;}
 }
-$('#retry-action').onclick=async()=>{if(pending&&await commit(pending.data)){draft=false;$('#alarm-editor').close();$('#bark-editor').close();toast('原操作已确认完成');}};
+$('#retry-action').onclick=async()=>{const testing=pending?.data.action==='test';if(pending&&await commit(pending.data)){if(testing){showTestResult=true;renderTestResult();}draft=false;$('#alarm-editor').close();$('#bark-editor').close();toast('原操作已确认完成');}};
 function updateForm(){
  const repeat=field('repeat').value==='true',q=catalog.find(q=>q.symbol===field('symbol').value);
  $('#repeat-help').hidden=!repeat;
@@ -113,14 +114,15 @@ async function loadCatalog(){
  catalog=[];$('#alarm-symbols').replaceChildren();field('symbol').removeAttribute('list');$('#quote-preview').textContent='正在载入交易对…';
  try{const key=auth+':'+exchange,cached=catalogCache.get(key);const data=cached&&Date.now()-cached.at<60000?cached.data:await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(auth===token())catalogCache.set(key,{at:Date.now(),data});if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>a.symbol.localeCompare(b.symbol));renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
 }
-function openRule(rule=null,copy=false){
- if(!verified||!current)return;form.reset();editing=rule&&!copy?rule.id:null;draft=false;$('#alarm-form-error').textContent='';$('#alarm-editor-title').textContent=editing?'编辑报警':copy?'复制报警':'新增报警';
+function openRule(rule=null){
+ if(!verified||!current)return;form.reset();editing=rule?rule.id:null;draft=false;$('#alarm-form-error').textContent='';$('#alarm-editor-title').textContent=editing?'编辑报警':'新增报警';
  let exchange='binance';try{exchange=localStorage.getItem('radar-alarm-exchange')||exchange;}catch{}
  const initial={exchange,condition:'above',repeat:false,...rule};
  for(const name of ['exchange','symbol','condition','target','repeat'])if(initial[name]!==undefined&&initial[name]!==null)field(name).value=String(initial[name]);
  if(!field('exchange').value)field('exchange').value='binance';
  if(!field('condition').value)field('condition').value='above';
  $('#legacy-rule-help').hidden=!rule;
+ $('#rule-enabled-row').hidden=!rule;field('enabled').checked=rule?.enabled??true;
  updateForm();$('#alarm-editor').showModal();loadCatalog();
 }
 $('#add-alarm').onclick=()=>openRule();
@@ -129,7 +131,7 @@ form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){fie
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
  const q=catalog.find(q=>q.symbol===field('symbol').value);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
- const rule={exchange:field('exchange').value,market:'future',symbol:field('symbol').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:300,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:editing?(current.rules.find(r=>r.id===editing)?.enabled??true):true};
+ const rule={exchange:field('exchange').value,market:'future',symbol:field('symbol').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:300,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:field('enabled').checked};
  if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
 function openDevice(){if(!verified||!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}
@@ -140,6 +142,7 @@ async function testBark(){
  testSubmitting=true;
  const auth=token(),generation=epoch;
  try{if(await commit({action:'test'})&&auth===token()&&generation===epoch){
+  showTestResult=true;renderTestResult();
   $('#bark-form-error').textContent='测试请求已提交，发送结果会显示在页面及报警记录中。';
   toast('测试请求已提交，请查看发送结果');
  }}finally{testSubmitting=false;connected(!!current);}
@@ -147,15 +150,15 @@ async function testBark(){
 $('#test-bark').onclick=testBark;$('#test-bark-inline').onclick=testBark;
 $('#unbind-bark').onclick=async()=>{if(confirm('解除当前 Bark 绑定？报警规则会保留，尚未发送的通知将取消。')&&await commit({action:'unbind'})){draft=false;$('#bark-editor').close();toast('已解除 Bark 绑定');}};
 $('#master-enabled').onchange=async e=>{const enabled=e.target.checked;if(!await commit({action:'enabled',enabled}))e.target.checked=current?.enabled||false;else toast(enabled?'已恢复云端报警':'已暂停当前推送码的全部报警');};
-$('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy||!verified)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit'||action==='copy')openRule(r,action==='copy');else if(action==='toggle')await commit({action:'toggle',id:r.id,enabled:!r.enabled});else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
+$('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy||!verified)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit')openRule(r);else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;if(draft&&!confirm('放弃尚未保存的修改？'))return;draft=false;$('#'+b.dataset.close).close();};
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy||(draft&&!confirm('放弃尚未保存的修改？')))e.preventDefault();else draft=false;});
 $('#alarm-search').oninput=renderRules;$('#alarm-filter').onchange=renderRules;$('#refresh-alarms').onclick=()=>load();
-document.addEventListener('radar-profile-changing',()=>{epoch++;catalogEpoch++;clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
+document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
 document.addEventListener('radar-profile-ready',async e=>{lastToken=token();await load(true,true);if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});
 window.addEventListener('beforeunload',e=>{if(draft||pending){e.preventDefault();e.returnValue='';}});
 let refreshTimer;
-function scheduleRefresh(){clearTimeout(refreshTimer);if(document.visibilityState==='visible')refreshTimer=setTimeout(refreshLoop,5000);}
+function scheduleRefresh(){clearTimeout(refreshTimer);if(document.visibilityState==='visible')refreshTimer=setTimeout(refreshLoop,10000);}
 async function refreshLoop(){clearTimeout(refreshTimer);if(document.visibilityState!=='visible')return;await load(false);scheduleRefresh();}
 document.addEventListener('visibilitychange',()=>{clearTimeout(refreshTimer);if(document.visibilityState==='visible')refreshLoop();});
 async function start(){
