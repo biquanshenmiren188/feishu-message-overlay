@@ -21,7 +21,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
     assert.equal(req.headers().authorization,'Bearer synthetic-a');
     if(fail){fail=false;return route.abort();}
     if(reject){reject=false;return json({error:'请间隔一分钟再发送测试通知'},400);}
-    if(body.action==='save'){state.revision++;return json({ok:true});}
+    if(body.action==='save'){state.rules=[{...body.rule,id:'synthetic-rule',state:{status:'watching',price:'73000',sampleAt:Date.now()/1000}}];state.revision++;return json({ok:true});}
     state.events=[{id:'test-event',ruleId:'test',at:Date.now()/1000,status:'queued',attempts:0,title:'测试',body:'合成测试'}];state.revision++;
     return json({ok:true,revision:state.revision});
    }
@@ -48,6 +48,7 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   assert.equal(await page.locator('#alarm-form input:visible,#alarm-form select:visible').count(),5);
   if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`simple-alarm-${width}.png`),fullPage:true});
   await page.click('#save-alarm');await page.waitForFunction(()=>!document.querySelector('#alarm-editor').open);
+  assert.deepEqual(await page.locator('.alarm-actions button').allTextContents(),['编辑','删除']);assert.doesNotMatch(await page.locator('.alarm-row').innerText(),/最近采样/);
   const rule=writes.pop().rule;assert.equal(rule.level,'critical');assert.equal(rule.hold,0);assert.equal(rule.immediate,true);assert.equal(rule.hysteresis,'0');assert.equal(rule.market,'future');assert.equal(rule.expiresAt,null);
   state.device={label:'我的 iPhone',suffix:'000001'};await page.click('#refresh-alarms');
   await page.waitForFunction(()=>!document.querySelector('#test-bark-inline').disabled);
