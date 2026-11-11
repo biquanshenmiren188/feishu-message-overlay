@@ -241,15 +241,17 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(json.loads(request.data)['device_key'],'synthetic_device_12345')
             self.assertEqual(json.loads(request.data)['level'],'critical')
             self.assertEqual(json.loads(request.data)['volume'],5)
+            self.assertEqual(json.loads(request.data)['call'],'1')
         self.assertEqual(self.store.view('a')['events'][0]['status'],'accepted')
 
     def test_legacy_queued_payload_forced_critical(self):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test');event=dict(self.store.claim())
-        payload=json.loads(event['payload']);payload['level']='active';event['payload']=json.dumps(payload)
+        payload=json.loads(event['payload']);payload['level']='active';payload['call']='0';event['payload']=json.dumps(payload)
         with patch('server.build_opener') as opener:
             opener.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
             send_event(self.store,event)
             self.assertEqual(json.loads(opener.return_value.open.call_args.args[0].data)['level'],'critical')
+            self.assertEqual(json.loads(opener.return_value.open.call_args.args[0].data)['call'],'1')
 
     def test_retry_limit(self):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')

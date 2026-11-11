@@ -16,7 +16,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
  for n,h in m['baseline'].items():assert base.sha((old/n).read_bytes())==h,n
  for n,h in m['backendBaseline'].items():assert base.sha((oldb/n).read_bytes())==h,n
  if '--apply' not in sys.argv:print('Preflight passed');sys.exit(0)
- label='20261111-simple-critical-'+str(time.time_ns());new=base.ROOT/'releases'/label
+ label='20261111-bark-ring30-'+str(time.time_ns());new=base.ROOT/'releases'/label
  newb=Path('/opt/radar-alarms/releases')/m['source'];backup=base.ROOT/'backups'/label;backup.mkdir()
  (backup/'manifest.json').write_text(json.dumps(m,indent=2))
  before,links=base.inventory(old);pids=base.pids();states=base.state_digest();fallback=base.FALLBACK.read_bytes()
@@ -32,7 +32,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   for _ in range(30):
    try:
     health=json.load(urlopen('http://127.0.0.1:18886/radar/alarms-api/health',timeout=2))
-    assert health['notificationLevel']=='critical';break
+    assert health['notificationLevel']=='critical' and health['ringingSeconds']==30;break
    except Exception:time.sleep(.5)
   else:raise RuntimeError('health failed')
   assert base.CURRENT.resolve()==old
