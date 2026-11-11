@@ -23,7 +23,9 @@ const assets=process.env.ALARM_ASSETS||__dirname;
    if(p.endsWith('/shared-account.js'))return route.fulfill({contentType:'text/javascript',body:"window.testToken='synthetic-a';window.RadarAccount={token:()=>window.testToken};window.RadarIdentity={code:()=> '12345688'};"});
    let file=p.split('/').at(-1)||'index.html';
    let dir=['index.html','app.js','style.css'].includes(file)&&p.includes('/alarms/')?assets:__dirname;
-   if(!p.includes('/alarms/'))return route.fulfill({contentType:'text/css',body:''});
+   if(!p.includes('/alarms/')){
+    try{return route.fulfill({contentType:p.endsWith('.svg')?'image/svg+xml':'text/css',body:await fs.readFile(path.join(assets,'site',p.replace(/^\/radar\//,'')))});}catch{return route.fulfill({contentType:'text/css',body:''});}
+   }
    try{return route.fulfill({contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html',body:await fs.readFile(path.join(dir,file))});}catch{return route.fulfill({status:404,body:''});}
   });
   await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');
