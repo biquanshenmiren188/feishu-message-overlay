@@ -104,8 +104,22 @@ class EngineTests(unittest.TestCase):
         for value in [None,True,0,-1,'NaN','Infinity','1e9999','x']:
             with self.subTest(value=value),self.assertRaises(ValueError):number(value)
 
+    def test_all_rules_use_critical(self):
+        for level in ['active', 'timeSensitive', 'critical']:
+            self.assertEqual(rule(level=level)['level'], 'critical')
+
+    def test_simple_repeat_rearms_after_leaving(self):
+        r=rule(repeat=True,immediate=True,hold=0,cooldown=300,hysteresis='0')
+        state,event=evaluate(r,{},quote(100,1000),1000)
+        self.assertIsNotNone(event)
+        state,event=evaluate(r,state,quote(101,1001),1001)
+        self.assertIsNone(event)
+        state,event=evaluate(r,state,quote(99,1002),1002)
+        state,event=evaluate(r,state,quote(100,1003),1003)
+        self.assertIsNone(event)
+
     def test_validation(self):
-        for change in [dict(hold=-1),dict(cooldown=0),dict(hysteresis='NaN'),dict(expiresAt=float('inf')),dict(level='critical'),dict(enabled='yes')]:
+        for change in [dict(hold=-1),dict(cooldown=0),dict(hysteresis='NaN'),dict(expiresAt=float('inf')),dict(enabled='yes')]:
             with self.subTest(change=change),self.assertRaises(ValueError):rule(**change)
         r=rule();r.update(market='spot',priceType='mark')
         with self.assertRaises(ValueError):validate(r)
@@ -195,6 +209,27 @@ class StoreTests(unittest.TestCase):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')
         with self.assertRaises(ValueError):self.change(action='test')
 
+    def test_history_pages_filters_and_detail_scope(self):
+        now=time.time()
+        with self.store.db:
+            for i in range(45):
+                self.store.event('a','r',dict(title='BTCUSDT 上穿 100',body='private body'),None,now-i)
+            self.store.event('b','r',dict(title='BTCUSDT 上穿 100',body='other profile'),None,now)
+            self.store.event('a','r',dict(title='WBTCUSDT 上穿 100',body='wrapped'),None,now-50)
+        query=dict(q=['btc'],before=[str(now+1)])
+        first=self.store.history('a',query)
+        self.assertEqual(first['total'],45);self.assertEqual(len(first['items']),20)
+        self.assertNotIn('body',first['items'][0])
+        second=self.store.history('a',dict(query,page=['2']))
+        self.assertFalse({r['id'] for r in first['items']} & {r['id'] for r in second['items']})
+        identity=first['items'][0]['id']
+        self.assertEqual(self.store.event_detail('a',identity)['body'],'private body')
+        with self.assertRaises(ValueError):self.store.event_detail('b',identity)
+        self.assertEqual(self.store.history('a',dict(q=['BT']))['total'],0)
+        self.assertEqual(self.store.history('a',dict(status=['accepted']))['total'],0)
+        self.assertEqual(self.store.view('a',compact=True)['events'],[])
+        self.assertEqual(len(self.store.view('a')['events']),46)
+
     def test_http_scope(self):
         market=Market();market.quotes=self.catalog
         http=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.store,market,lambda token:token if token in ('a','b') else None))
@@ -205,6 +240,8 @@ class StoreTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as result:urlopen(base+'state')
             self.assertEqual(result.exception.code,401)
             with urlopen(Request(base+'state',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['rules'],[])
+            with urlopen(Request(base+'history',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['items'],[])
+            with urlopen(Request(base+'state?events=latest-test',headers={'Authorization':'Bearer a'})) as res:self.assertEqual(json.load(res)['events'],[])
             with self.assertRaises(HTTPError) as result:urlopen(Request(base+'state',headers={'Authorization':'Bearer a','Origin':'https://evil.test'}))
             self.assertEqual(result.exception.code,403)
         finally:http.shutdown();http.server_close();market.pool.shutdown()
@@ -225,7 +262,19 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(request.full_url,'https://api.day.app/push')
             self.assertNotIn('synthetic_device',request.full_url)
             self.assertEqual(json.loads(request.data)['device_key'],'synthetic_device_12345')
+            self.assertEqual(json.loads(request.data)['level'],'critical')
+            self.assertEqual(json.loads(request.data)['volume'],5)
+            self.assertEqual(json.loads(request.data)['call'],'1')
         self.assertEqual(self.store.view('a')['events'][0]['status'],'accepted')
+
+    def test_legacy_queued_payload_forced_critical(self):
+        self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test');event=dict(self.store.claim())
+        payload=json.loads(event['payload']);payload['level']='active';payload['call']='0';event['payload']=json.dumps(payload)
+        with patch('server.build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
+            send_event(self.store,event)
+            self.assertEqual(json.loads(opener.return_value.open.call_args.args[0].data)['level'],'critical')
+            self.assertEqual(json.loads(opener.return_value.open.call_args.args[0].data)['call'],'1')
 
     def test_retry_limit(self):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')

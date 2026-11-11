@@ -18,10 +18,10 @@ ORIGIN = 'https://leida.shenmiren.work'
 def authenticate(token):
     if not re.fullmatch('[A-Za-z0-9_-]{20,100}', token):
         return None
-    req = Request('http://127.0.0.1:18885/radar/push-test/api/status', headers={'Authorization': 'Bearer ' + token})
+    req = Request('http://127.0.0.1:18885/internal/alarm-identity', headers={'Authorization': 'Bearer ' + token})
     try:
         with build_opener(NoRedirect).open(req, timeout=5) as response:
-            profile = json.loads(response.read(2000000)).get('profileId')
+            profile = json.loads(response.read(4096)).get('profileId')
             return profile if profile == 'legacy' or isinstance(profile, str) and re.fullmatch('[a-f0-9]{32}', profile) else None
     except HTTPError as exc:
         if exc.code == 401:
@@ -32,6 +32,7 @@ def authenticate(token):
 def send_event(store, event):
     payload = json.loads(event['payload'])
     body = {k: payload[k] for k in ('id', 'title', 'body', 'group', 'level', 'url')}
+    body.update(level='critical', volume=5, call='1')
     body.update(device_key=store.cipher.decrypt(event['secret'].encode()).decode(), isArchive='1')
     req = Request('https://api.day.app/push', data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
     try:
@@ -64,6 +65,10 @@ def make_handler(store, market, auth=authenticate):
             self.send_response(status)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-store')
+            if hasattr(self, 'started'):
+                total=(time.perf_counter()-self.started)*1000
+                auth_ms=getattr(self,'auth_ms',0)
+                self.send_header('Server-Timing',f'auth;dur={auth_ms:.1f}, app;dur={max(0,total-auth_ms):.1f}, total;dur={total:.1f}')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Length', str(len(raw)))
             self.end_headers()
@@ -73,17 +78,26 @@ def make_handler(store, market, auth=authenticate):
                 pass
 
         def dispatch(self, post=False):
+            self.started=time.perf_counter();self.auth_ms=0
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=1))
+                return self.reply(200, dict(ok=True, version=5, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
-            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change'):
+            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event'):
                 return self.reply(404, dict(error='接口不存在'))
             try:
                 profile = auth(self.headers.get('Authorization', '').removeprefix('Bearer '))
+                self.auth_ms=(time.perf_counter()-self.started)*1000
                 if not profile:
                     return self.reply(401, dict(error='请先连接推送码'))
+                query = parse_qs(route.query)
+                if not post and route.path == BASE + 'history':
+                    return self.reply(200, store.history(profile, query))
+                if not post and route.path == BASE + 'event':
+                    return self.reply(200, store.event_detail(profile, query.get('id',[''])[0]))
+                if not post and route.path == BASE + 'state' and query.get('events') == ['latest-test']:
+                    return self.reply(200, store.view(profile, compact=True))
                 quotes, health = market.snapshot()
                 if not post and route.path == BASE + 'state':
                     value = store.view(profile)

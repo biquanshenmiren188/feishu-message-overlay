@@ -289,6 +289,13 @@ def handler(trial):
                 self.close_connection = True
 
         def do_GET(self):
+            if self.path == '/internal/alarm-identity':
+                if self.client_address[0] != '127.0.0.1':
+                    return self.reply(404, {'error': 'not_found'})
+                account = self.authorized_account()
+                if account is None:
+                    return self.reply(401, {'error': 'unauthorized'})
+                return self.reply(200, {'profileId': getattr(account, 'profile_id', 'legacy')})
             # This path is deliberately outside every public /radar proxy route.
             if self.path == '/internal/desktop-state' and self.client_address[0] == '127.0.0.1' and desktop:
                 try:return self.reply(200, desktop.evaluate())

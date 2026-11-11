@@ -17,6 +17,27 @@ class TrialTests(unittest.TestCase):
         self.sent = []
         self.app = Trial(self.root / 'state', config, lambda sub,payload:self.sent.append(payload) or 201)
 
+    def test_internal_alarm_identity_is_small_and_authenticated(self):
+        from server import handler
+        from http.server import ThreadingHTTPServer
+        from urllib.request import Request,urlopen
+        from urllib.error import HTTPError
+        import threading
+        token=self.app.pair('12345678')
+        cls=handler(self.app)
+        http=ThreadingHTTPServer(('127.0.0.1',0),cls)
+        threading.Thread(target=http.serve_forever,daemon=True).start()
+        try:
+            url=f'http://127.0.0.1:{http.server_port}/internal/alarm-identity'
+            with patch.object(self.app,'public_status',side_effect=AssertionError('heavy status must not run')):
+                with urlopen(Request(url,headers={'Authorization':'Bearer '+token})) as r:
+                    self.assertEqual(json.load(r),{'profileId':'legacy'})
+                with self.assertRaises(HTTPError) as caught:urlopen(url)
+                self.assertEqual(caught.exception.code,401)
+            fake=object.__new__(cls);fake.path='/internal/alarm-identity';fake.client_address=('192.0.2.1',1000);result=[];fake.reply=lambda status,body:result.append(status)
+            fake.do_GET();self.assertEqual(result,[404])
+        finally:http.shutdown();http.server_close()
+
     def test_resend_one_four_entry_notification(self):
         self.app.state['subscription'] = {'test': True}
         self.app.state['seq'] = 7
