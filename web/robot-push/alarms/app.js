@@ -6,7 +6,7 @@ const $=s=>document.querySelector(s),form=$('#alarm-form'),barkForm=$('#bark-for
 const field=n=>form.elements.namedItem(n),API='/radar/alarms-api/';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 const venue={binance:'Binance',bybit:'Bybit',okx:'OKX',bitget:'Bitget',gate:'Gate',aster:'Aster'};
-const conditions={above:'上穿',below:'下穿',enter:'进入区间',exit:'离开区间'};
+const conditions={above:'涨到',below:'跌到',enter:'进入区间',exit:'离开区间'};
 const labels={watching:'监控中',waiting:'等待下次穿越',confirming:'持续确认中',paused:'已暂停',expired:'已到期',triggered:'已触发',stale:'行情中断',unavailable:'价格暂缺'};
 const deliveries={queued:'等待发送',sending:'发送中',accepted:'接口接受',retry:'等待重试',failed:'发送失败',unknown:'结果未知',expired:'已过期',cancelled:'已取消',no_device:'未绑定设备'};
 let verified=false,cachedAt=0;
@@ -54,7 +54,7 @@ function renderRules(){
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
  const markup=rows.length?rows.map(r=>{
   const status=current.enabled?safeStatus(r):'paused',fresh=r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12;
-  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''}"><div><strong>${esc(r.symbol)}</strong><span class="alarm-badge ${['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'} · ${r.priceType==='last'?'最新成交价':'标记价格'}</small><small>${r.repeat?'重复触发':'仅一次'}${r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</div><div class="alarm-condition">${esc(description(r))}</div>${fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
+  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''}"><div class="alarm-identity"><div class="alarm-rule-title"><strong>${esc(r.symbol)}</strong><span class="alarm-badge ${['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span></div><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small><small class="alarm-repeat">${r.repeat?'重复提醒':'仅一次'}${r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-condition">${esc(description(r))}</div><div class="alarm-current">当前价 <span class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</span></div>${fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
  }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'尝试其他币种或切换状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
