@@ -5,3 +5,6 @@
  .alarm-toolbar{flex-wrap:wrap}.alarm-toolbar input{flex:1 0 100%;width:100%}.alarm-toolbar select{flex:1;width:auto;min-width:0}
  .alarm-list-heading{flex-direction:column;gap:4px}.alarm-list-heading>span:last-child{max-width:none;text-align:left}
 }
+
+/* Keep device actions together, wrapping on narrow screens. */
+.device-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}.device-controls>button{min-height:44px}.device-controls .device-summary{white-space:normal;text-align:left;max-width:100%}#test-bark-inline{color:var(--alarm-blue)}.bark-test-result{margin:0;padding:10px 16px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--alarm-muted)}.bark-test-result[data-state="accepted"]{color:#168261}.bark-test-result[data-state="failed"],.bark-test-result[data-state="unknown"]{color:var(--alarm-danger)}

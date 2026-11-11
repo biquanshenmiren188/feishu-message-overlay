@@ -17,7 +17,24 @@ async function api(route,data,auth=token()){
  let result;try{result=await response.json();}catch{throw Error('未取得服务响应，请检查网站登录状态后重试');}
  if(!response.ok){const e=Error(result.error||'操作失败');e.status=response.status;throw e;}return result;
 }
-function connected(enabled){for(const id of ['add-alarm','bind-device','master-enabled'])$('#'+id).disabled=!enabled||busy;}
+function connected(enabled){
+ for(const id of ['add-alarm','bind-device','master-enabled'])$('#'+id).disabled=!enabled||busy;
+ const latest=current?.events.find(e=>e.ruleId==='test');
+ const sending=latest&&['queued','sending','retry'].includes(latest.status);
+ for(const id of ['test-bark-inline','test-bark']){
+  const button=$('#'+id);button.disabled=!enabled||busy||!!pending||!current?.device||!!sending;
+  button.textContent=busy&&testSubmitting?'提交中…':sending?'发送中…':'测试推送';
+  button.setAttribute('aria-busy',String(!!sending||(busy&&testSubmitting)));
+ }
+}
+let testSubmitting=false;
+function renderTestResult(){
+ const event=current?.events.find(e=>e.ruleId==='test'),output=$('#bark-test-result');
+ output.hidden=!event;if(!event){output.textContent='';return;}
+ const status={queued:'测试消息已加入后台队列，等待发送。',sending:'后台正在向 Bark 发送测试消息…',retry:'暂未发送成功，后台等待重试。',accepted:'Bark 已接受测试消息，请查看手机通知；接口接受不代表手机已显示。',failed:'测试推送失败。',unknown:'发送结果未知，请先查看手机和报警记录，避免重复发送。',expired:'测试消息已过期，未完成发送。',cancelled:'测试推送已取消。',no_device:'未绑定 Bark 设备，无法发送。'};
+ output.dataset.state=event.status;
+ output.textContent='最近测试 · '+new Date(event.at*1000).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+' · '+(status[event.status]||'请查看报警记录。')+(event.error?' 原因：'+event.error:'');
+}
 function syncPlanLabel(){const code=window.RadarIdentity?.code();$('#plan-label').textContent=!token()?'未连接推送码':code?'当前推送码 · 尾号 '+code.slice(-2):'当前推送码 · 已连接';}
 function safeStatus(r){if(!r.enabled)return 'paused';if(r.expiresAt&&r.expiresAt<Date.now()/1000)return 'expired';if(r.state?.status==='triggered')return 'triggered';if(r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt>12)return 'stale';return r.state?.status||'waiting';}
 function price(value){if(!value)return '—';const n=Number(value);return n>=1?n.toLocaleString('en-US',{maximumFractionDigits:10}):value;}
@@ -37,7 +54,7 @@ function renderRules(){
 }
 function render(){
  syncPlanLabel();
- connected(true);$('#master-enabled').checked=current.enabled;
+ connected(true);renderTestResult();$('#master-enabled').checked=current.enabled;
  $('#alarm-status').textContent=current.enabled?'规则保存后生效，当前推送码独立运行。':'当前推送码的全部价格报警已暂停。';
  $('#device-label').textContent=current.device?current.device.label+' · 已绑定':'Bark 未绑定';$('#bind-device').classList.toggle('is-bound',!!current.device);
  if(!current.device)notice('先绑定 Bark 接收设备。未绑定时，触发事件只会记入报警记录。');else notice('');
@@ -46,7 +63,7 @@ function render(){
  $('#event-list').innerHTML=current.events.length?current.events.map(e=>`<details data-id="${e.id}" ${opened.has(e.id)?'open':''}><summary><span>${esc(e.title)}<time>${new Date(e.at*1000).toLocaleString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})} 北京时间</time></span><span class="alarm-badge ${e.status==='accepted'?'is-live':['unknown','failed','no_device'].includes(e.status)?'is-warning':''}">${deliveries[e.status]||e.status}</span></summary><pre>${esc(e.body)}</pre>${e.error?'<p class="event-error">'+esc(e.error)+'</p>':''}<p class="event-error">发送尝试 ${e.attempts} 次 · ${esc(e.id.slice(-8))}</p></details>`).join(''):'<p class="alarm-empty-small">暂无触发记录。达到条件后，会在这里显示触发价格和发送结果。</p>';
 }
 async function load(showError=true){
- const auth=token(),generation=epoch,sequence=++loadSequence;if(!auth){current=null;connected(false);return;}
+ const auth=token(),generation=epoch,sequence=++loadSequence;if(!auth){current=null;connected(false);renderTestResult();return;}
  try{const next=await api('state',undefined,auth);if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;current=next;render();}
  catch(e){if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;connected(false);if(showError)notice(e.message);}
 }
@@ -106,14 +123,23 @@ form.onsubmit=async e=>{
 function openDevice(){if(!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}
 $('#bind-device').onclick=openDevice;barkForm.oninput=()=>{draft=true;};
 barkForm.onsubmit=async e=>{e.preventDefault();if(await commit({action:'bind',key:barkForm.elements.key.value,label:barkForm.elements.label.value})){barkForm.elements.key.value='';draft=false;$('#bark-editor').close();toast('Bark 已绑定，可发送一条测试通知检查手机');}};
-$('#test-bark').onclick=async()=>{if(await commit({action:'test'})){$('#bark-form-error').textContent='测试通知已加入发送队列，请查看报警记录及手机。';toast('已创建一条测试通知');}};
+async function testBark(){
+ if(testSubmitting||busy||pending||!current?.device)return;
+ testSubmitting=true;
+ const auth=token(),generation=epoch;
+ try{if(await commit({action:'test'})&&auth===token()&&generation===epoch){
+  $('#bark-form-error').textContent='测试请求已提交，发送结果会显示在页面及报警记录中。';
+  toast('测试请求已提交，请查看发送结果');
+ }}finally{testSubmitting=false;connected(!!current);}
+}
+$('#test-bark').onclick=testBark;$('#test-bark-inline').onclick=testBark;
 $('#unbind-bark').onclick=async()=>{if(confirm('解除当前 Bark 绑定？报警规则会保留，尚未发送的通知将取消。')&&await commit({action:'unbind'})){draft=false;$('#bark-editor').close();toast('已解除 Bark 绑定');}};
 $('#master-enabled').onchange=async e=>{const enabled=e.target.checked;if(!await commit({action:'enabled',enabled}))e.target.checked=current?.enabled||false;else toast(enabled?'已恢复云端报警':'已暂停当前推送码的全部报警');};
 $('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit'||action==='copy')openRule(r,action==='copy');else if(action==='toggle')await commit({action:'toggle',id:r.id,enabled:!r.enabled});else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;if(draft&&!confirm('放弃尚未保存的修改？'))return;draft=false;$('#'+b.dataset.close).close();};
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy||(draft&&!confirm('放弃尚未保存的修改？')))e.preventDefault();else draft=false;});
 $('#alarm-search').oninput=renderRules;$('#alarm-filter').onchange=renderRules;$('#refresh-alarms').onclick=()=>load();$('#empty-connect').onclick=()=>window.RadarAccount?.open();
-document.addEventListener('radar-profile-changing',()=>{epoch++;catalogEpoch++;current=null;catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';$('#event-list').innerHTML='<p class="alarm-empty-small">正在载入记录…</p>';});
+document.addEventListener('radar-profile-changing',()=>{epoch++;catalogEpoch++;current=null;catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';$('#event-list').innerHTML='<p class="alarm-empty-small">正在载入记录…</p>';});
 document.addEventListener('radar-profile-ready',async e=>{$('#plan-label').textContent='当前推送码 · 尾号 '+e.detail.suffix;lastToken=token();await load();if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});
 window.addEventListener('beforeunload',e=>{if(draft||pending){e.preventDefault();e.returnValue='';}});
 setInterval(()=>{if(document.visibilityState==='visible'&&token()&&!busy){if(token()!==lastToken){lastToken=token();epoch++;}load(false);}},5000);
