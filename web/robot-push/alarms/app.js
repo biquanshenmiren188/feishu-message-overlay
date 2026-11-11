@@ -85,16 +85,17 @@ $('#retry-action').onclick=async()=>{if(pending&&await commit(pending.data)){dra
 function updateForm(){
  const repeat=field('repeat').value==='true',q=catalog.find(q=>q.symbol===field('symbol').value);
  $('#repeat-help').hidden=!repeat;
- $('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'选择币种后显示当前价格。';
- $('#rule-preview').textContent=field('symbol').value&&field('target').value?`${field('symbol').value} ${field('condition').value==='above'?'涨到':'跌到'} ${field('target').value} USDT，${repeat?'每次重新达到时强提醒':'强提醒一次'}。`:'填写价格后预览报警。';
+ $('#quote-preview').hidden=!q;$('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'';
 }
 function renderCatalog(){
- const rows=catalog.filter(q=>matchesInstrument(field('symbol').value,q));
+ const query=field('symbol').value.trim();
+ const rows=query?catalog.filter(q=>matchesInstrument(query,q)):[];
+ if(rows.length)field('symbol').setAttribute('list','alarm-symbols');else field('symbol').removeAttribute('list');
  $('#alarm-symbols').innerHTML=rows.map(q=>`<option value="${esc(q.symbol)}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');
 }
 async function loadCatalog(){
  const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market='future';
- catalog=[];$('#alarm-symbols').replaceChildren();$('#quote-preview').textContent='正在载入交易对…';
+ catalog=[];$('#alarm-symbols').replaceChildren();field('symbol').removeAttribute('list');$('#quote-preview').textContent='正在载入交易对…';
  try{const data=await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>a.symbol.localeCompare(b.symbol));renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
 }
 function openRule(rule=null,copy=false){
