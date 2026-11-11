@@ -200,10 +200,42 @@ class StoreTests(unittest.TestCase):
         self.catalog={}
         with self.assertRaises(ValueError):self.create()
 
-    def test_total_pause_preserves_settings(self):
-        self.create();self.change(action='enabled',enabled=False)
+    def test_monitoring_uses_only_rule_enabled(self):
+        active=self.create(immediate=True);paused=self.create(enabled=False,immediate=True)
+        self.assertTrue(self.store.view('a')['enabled'])
         self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now)},self.now)
-        v=self.store.view('a');self.assertFalse(v['enabled']);self.assertEqual(len(v['rules']),1);self.assertFalse(v['events'])
+        events=self.store.view('a')['events']
+        self.assertEqual([e['ruleId'] for e in events],[active])
+        self.assertEqual(next(r for r in self.store.view('a')['rules'] if r['id']==paused)['state']['status'],'paused')
+        self.change(action='save',id=paused,rule=rule(enabled=True,immediate=True))
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+1)},self.now+1)
+        self.assertEqual({e['ruleId'] for e in self.store.view('a')['events']},{active,paused})
+
+    def test_retired_master_action_cannot_pause_rules(self):
+        identity=self.create(immediate=True);before=self.store.view('a')['revision']
+        for enabled in (False,True):
+            with self.assertRaisesRegex(ValueError,'单条报警'):
+                self.change(action='enabled',enabled=enabled)
+        self.assertEqual(self.store.view('a')['revision'],before)
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now)},self.now)
+        self.assertEqual(self.store.view('a')['events'][0]['ruleId'],identity)
+
+    def test_legacy_total_pause_becomes_individual_pause_once(self):
+        self.create(immediate=True,note='preserve');self.create(enabled=False)
+        other=self.create('b',immediate=True)
+        original={r['id']:r for r in self.store.view('a')['rules']};revision=self.store.view('a')['revision']
+        with self.store.db:self.store.db.execute("UPDATE profiles SET enabled=0 WHERE id='a'")
+        self.store.db.close();self.store=Store(self.temp.name)
+        view=self.store.view('a');self.assertTrue(view['enabled']);self.assertEqual(view['revision'],revision+1)
+        self.assertEqual(len(view['rules']),2)
+        for r in view['rules']:
+            self.assertFalse(r['enabled']);self.assertEqual(r['state']['status'],'paused')
+            self.assertEqual(r['note'],original[r['id']]['note']);self.assertEqual(r['target'],original[r['id']]['target'])
+        self.assertTrue(self.store.view('b')['rules'][0]['enabled'])
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now)},self.now)
+        self.assertFalse(self.store.view('a')['events']);self.assertEqual(self.store.view('b')['events'][0]['ruleId'],other)
+        self.store.db.close();self.store=Store(self.temp.name)
+        self.assertEqual(self.store.view('a')['revision'],revision+1)
 
     def test_test_notification_rate_limit(self):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')

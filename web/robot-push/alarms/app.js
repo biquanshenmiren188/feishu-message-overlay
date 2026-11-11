@@ -23,7 +23,7 @@ async function api(route,data,auth=token()){
 }
 function connected(enabled){
  enabled=enabled&&verified;
- for(const id of ['add-alarm','bind-device','master-enabled'])$('#'+id).disabled=!enabled||busy;
+ for(const id of ['add-alarm','bind-device'])$('#'+id).disabled=!enabled||busy;
  const latest=current?.events.find(e=>e.ruleId==='test');
  const sending=latest&&['queued','sending','retry'].includes(latest.status);
  for(const id of ['test-bark-inline','test-bark']){
@@ -53,7 +53,7 @@ function renderRules(){
  const selected=new URLSearchParams(location.search).get('rule');
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
  const markup=rows.length?rows.map(r=>{
-  const status=current.enabled?safeStatus(r):'paused',fresh=r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12;
+  const status=safeStatus(r),fresh=r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12;
   return `<article class="alarm-row ${r.id===selected?'is-highlighted':''}"><div class="alarm-identity"><div class="alarm-rule-title"><strong>${esc(r.symbol)}</strong><span class="alarm-badge ${['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span></div><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small><small class="alarm-repeat">${r.repeat?'重复提醒':'仅一次'}${r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-condition">${esc(description(r))}</div><div class="alarm-current">当前价 <span class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</span></div>${fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
  }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'尝试其他币种或切换状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
@@ -64,8 +64,8 @@ function render(){
  const signature=JSON.stringify([verified,current,current.rules.map(r=>[safeStatus(r),!!r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12])]);if(signature===renderedSignature)return;renderedSignature=signature;
  connection(verified);document.querySelector('main').classList.remove('is-loading');$('#alarm-list').setAttribute('aria-busy','false');
  syncPlanLabel();
- connected(true);renderTestResult();$('#master-enabled').checked=current.enabled;
- $('#alarm-status').textContent=!verified?'显示上次数据（'+new Date(cachedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+'），正在更新…':current.enabled?'':'当前推送码的全部价格报警已暂停。';
+ connected(true);renderTestResult();
+ $('#alarm-status').textContent=!verified?'显示上次数据（'+new Date(cachedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+'），正在更新…':'';
  $('#device-label').textContent=current.device?current.device.label+' · 已绑定':'Bark 未绑定';$('#bind-device').classList.toggle('is-bound',!!current.device);
  if(!current.device)notice('先绑定 Bark 接收设备。未绑定时，触发事件只会记入报警记录。');else notice('');
  renderRules();
@@ -149,7 +149,6 @@ async function testBark(){
 }
 $('#test-bark').onclick=testBark;$('#test-bark-inline').onclick=testBark;
 $('#unbind-bark').onclick=async()=>{if(confirm('解除当前 Bark 绑定？报警规则会保留，尚未发送的通知将取消。')&&await commit({action:'unbind'})){draft=false;$('#bark-editor').close();toast('已解除 Bark 绑定');}};
-$('#master-enabled').onchange=async e=>{const enabled=e.target.checked;if(!await commit({action:'enabled',enabled}))e.target.checked=current?.enabled||false;else toast(enabled?'已恢复云端报警':'已暂停当前推送码的全部报警');};
 $('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy||!verified)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit')openRule(r);else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;if(draft&&!confirm('放弃尚未保存的修改？'))return;draft=false;$('#'+b.dataset.close).close();};
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy||(draft&&!confirm('放弃尚未保存的修改？')))e.preventDefault();else draft=false;});
