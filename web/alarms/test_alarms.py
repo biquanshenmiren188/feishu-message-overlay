@@ -104,8 +104,22 @@ class EngineTests(unittest.TestCase):
         for value in [None,True,0,-1,'NaN','Infinity','1e9999','x']:
             with self.subTest(value=value),self.assertRaises(ValueError):number(value)
 
+    def test_all_rules_use_critical(self):
+        for level in ['active', 'timeSensitive', 'critical']:
+            self.assertEqual(rule(level=level)['level'], 'critical')
+
+    def test_simple_repeat_rearms_after_leaving(self):
+        r=rule(repeat=True,immediate=True,hold=0,cooldown=300,hysteresis='0')
+        state,event=evaluate(r,{},quote(100,1000),1000)
+        self.assertIsNotNone(event)
+        state,event=evaluate(r,state,quote(101,1001),1001)
+        self.assertIsNone(event)
+        state,event=evaluate(r,state,quote(99,1002),1002)
+        state,event=evaluate(r,state,quote(100,1003),1003)
+        self.assertIsNone(event)
+
     def test_validation(self):
-        for change in [dict(hold=-1),dict(cooldown=0),dict(hysteresis='NaN'),dict(expiresAt=float('inf')),dict(level='critical'),dict(enabled='yes')]:
+        for change in [dict(hold=-1),dict(cooldown=0),dict(hysteresis='NaN'),dict(expiresAt=float('inf')),dict(enabled='yes')]:
             with self.subTest(change=change),self.assertRaises(ValueError):rule(**change)
         r=rule();r.update(market='spot',priceType='mark')
         with self.assertRaises(ValueError):validate(r)
@@ -225,7 +239,17 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(request.full_url,'https://api.day.app/push')
             self.assertNotIn('synthetic_device',request.full_url)
             self.assertEqual(json.loads(request.data)['device_key'],'synthetic_device_12345')
+            self.assertEqual(json.loads(request.data)['level'],'critical')
+            self.assertEqual(json.loads(request.data)['volume'],5)
         self.assertEqual(self.store.view('a')['events'][0]['status'],'accepted')
+
+    def test_legacy_queued_payload_forced_critical(self):
+        self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test');event=dict(self.store.claim())
+        payload=json.loads(event['payload']);payload['level']='active';event['payload']=json.dumps(payload)
+        with patch('server.build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
+            send_event(self.store,event)
+            self.assertEqual(json.loads(opener.return_value.open.call_args.args[0].data)['level'],'critical')
 
     def test_retry_limit(self):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')

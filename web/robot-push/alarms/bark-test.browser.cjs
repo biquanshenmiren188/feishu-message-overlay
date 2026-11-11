@@ -12,11 +12,13 @@ const assets=process.env.ALARM_ASSETS||__dirname;
    const req=route.request(),p=new URL(req.url()).pathname;
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(p.endsWith('/state'))return json(state);
+   if(p.endsWith('/catalog'))return json({items:[{symbol:'BTCUSDT',last:'73000',unit:'BTC'}]});
    if(p.endsWith('/change')){
     const body=req.postDataJSON();writes.push(body);
     assert.equal(req.headers().authorization,'Bearer synthetic-a');
     if(fail){fail=false;return route.abort();}
     if(reject){reject=false;return json({error:'请间隔一分钟再发送测试通知'},400);}
+    if(body.action==='save'){state.revision++;return json({ok:true});}
     state.events=[{id:'test-event',ruleId:'test',at:Date.now()/1000,status:'queued',attempts:0,title:'测试',body:'合成测试'}];state.revision++;
     return json({ok:true,revision:state.revision});
    }
@@ -31,6 +33,12 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');
   await page.waitForFunction(()=>!document.querySelector('#bind-device').disabled);
   assert.equal(await page.locator('#test-bark-inline').isDisabled(),true);
+  await page.click('#add-alarm');await page.fill('[name=symbol]','BTCUSDT');await page.fill('[name=target]','68000');await page.selectOption('[name=condition]','below');
+  await page.waitForFunction(()=>document.querySelector('#alarm-symbols option'));
+  assert.equal(await page.locator('#alarm-form input:visible,#alarm-form select:visible').count(),5);
+  if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`simple-alarm-${width}.png`),fullPage:true});
+  await page.click('#save-alarm');await page.waitForFunction(()=>!document.querySelector('#alarm-editor').open);
+  const rule=writes.pop().rule;assert.equal(rule.level,'critical');assert.equal(rule.hold,0);assert.equal(rule.immediate,true);assert.equal(rule.hysteresis,'0');assert.equal(rule.market,'future');assert.equal(rule.expiresAt,null);
   state.device={label:'我的 iPhone',suffix:'000001'};await page.click('#refresh-alarms');
   await page.waitForFunction(()=>!document.querySelector('#test-bark-inline').disabled);
   await page.click('#test-bark-inline');await page.waitForFunction(()=>document.querySelector('#bark-test-result').textContent.includes('等待发送'));

@@ -32,6 +32,7 @@ def authenticate(token):
 def send_event(store, event):
     payload = json.loads(event['payload'])
     body = {k: payload[k] for k in ('id', 'title', 'body', 'group', 'level', 'url')}
+    body.update(level='critical', volume=5)
     body.update(device_key=store.cipher.decrypt(event['secret'].encode()).decode(), isArchive='1')
     req = Request('https://api.day.app/push', data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
     try:
@@ -75,7 +76,7 @@ def make_handler(store, market, auth=authenticate):
         def dispatch(self, post=False):
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=1))
+                return self.reply(200, dict(ok=True, version=2, notificationLevel="critical"))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
             if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change'):

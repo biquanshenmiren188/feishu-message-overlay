@@ -51,9 +51,8 @@ def validate(raw):
     rule['expiresAt'] = raw.get('expiresAt')
     if rule['expiresAt'] is not None and (type(rule['expiresAt']) not in (int, float) or not 0 < rule['expiresAt'] < 4102444800):
         raise ValueError('有效期不正确')
-    rule['level'] = raw.get('level', 'active')
-    if rule['level'] not in ('active', 'timeSensitive'):
-        raise ValueError('提醒方式不正确')
+    # Delivery policy applies equally to new rules and legacy clients.
+    rule['level'] = 'critical'
     rule['note'] = raw.get('note', '')
     if not isinstance(rule['note'], str) or len(rule['note']) > 100:
         raise ValueError('备注最多 100 字')

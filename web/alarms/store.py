@@ -156,7 +156,7 @@ class Store:
                     raise ValueError('请先绑定 Bark')
                 if self.db.execute("SELECT 1 FROM events WHERE profile=? AND rule_id='test' AND at>?", (profile, now - 60)).fetchone():
                     raise ValueError('请间隔一分钟再发送测试通知')
-                self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。收到后，当前 Bark 设备即可用于价格报警。', group='雷达报警测试', level='active', url='https://leida.shenmiren.work/radar/robot-push/alarms/'), device, now)
+                self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。收到后，当前 Bark 设备即可用于价格报警。', group='雷达报警测试', level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/'), device, now)
             else:
                 raise ValueError('不支持的操作')
             self.db.execute('UPDATE profiles SET revision=revision+1 WHERE id=?', (profile,))
@@ -204,7 +204,7 @@ class Store:
                     body = f"{rule['exchange'].upper()} · {'永续' if rule['market']=='future' else '现货'} · {price_kind}\n触发价格：{event['price']} USDT\n{reason} · 持续 {rule['hold']} 秒\n{clock}（北京时间）"
                     if rule['note']:
                         body += '\n' + rule['note']
-                    payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level=rule['level'], url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'])
+                    payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'])
                     device = self.db.execute('SELECT * FROM devices WHERE profile=?', (row['profile'],)).fetchone()
                     self.event(row['profile'], row['id'], payload, device, now)
             self.db.execute("UPDATE events SET status='expired',error='超过两分钟发送时效' WHERE status IN ('queued','retry') AND expires<?", (now,))

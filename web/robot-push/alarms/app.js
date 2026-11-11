@@ -83,42 +83,38 @@ async function commit(data){
 }
 $('#retry-action').onclick=async()=>{if(pending&&await commit(pending.data)){draft=false;$('#alarm-editor').close();$('#bark-editor').close();toast('原操作已确认完成');}};
 function updateForm(){
- const range=['enter','exit'].includes(field('condition').value),repeat=field('repeat').value==='true',spot=field('market').value==='spot';
- $('#upper-field').hidden=!range;field('upper').required=range;$('#target-label').textContent=range?'区间下限（USDT）':'目标价格（USDT）';
- $('#repeat-fields').hidden=!repeat;$('#repeat-help').hidden=!repeat;$('#expiry-field').hidden=field('validity').value!=='until';field('expiresAt').required=field('validity').value==='until';
- field('priceType').options[1].disabled=spot;if(spot)field('priceType').value='last';
- const q=catalog.find(q=>q.symbol===field('symbol').value);
- $('#quote-preview').textContent=q?`当前${field('priceType').value==='last'?'最新成交价':'标记价格'}：${price(q[field('priceType').value])} USDT / ${q.unit}。按交易对原始报价，不自动缩放。`:'请选择列表中的完整交易对；不同交易所、千倍合约分别设置。';
- $('#rule-preview').textContent=field('symbol').value&&field('target').value?`${venue[field('exchange').value]} ${field('symbol').value} ${field('market').value==='future'?'永续':'现货'}的${field('priceType').value==='last'?'最新成交价':'标记价格'}${conditions[field('condition').value]} ${field('target').value}${range?' ～ '+field('upper').value:''} USDT${field('hold').value!=='0'?'，连续采样确认 '+field('hold').value+' 秒':''}，通过 Bark ${repeat?'重复报警':'报警一次'}。`:'填写条件后预览报警规则。';
+ const repeat=field('repeat').value==='true',q=catalog.find(q=>q.symbol===field('symbol').value);
+ $('#repeat-help').hidden=!repeat;
+ $('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'选择币种后显示当前价格。';
+ $('#rule-preview').textContent=field('symbol').value&&field('target').value?`${field('symbol').value} ${field('condition').value==='above'?'涨到':'跌到'} ${field('target').value} USDT，${repeat?'每次重新达到时强提醒':'强提醒一次'}。`:'填写价格后预览报警。';
 }
 function renderCatalog(){
  const rows=catalog.filter(q=>matchesInstrument(field('symbol').value,q));
  $('#alarm-symbols').innerHTML=rows.map(q=>`<option value="${esc(q.symbol)}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');
 }
 async function loadCatalog(){
- const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market=field('market').value;
+ const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market='future';
  catalog=[];$('#alarm-symbols').replaceChildren();$('#quote-preview').textContent='正在载入交易对…';
  try{const data=await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>a.symbol.localeCompare(b.symbol));renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
 }
 function openRule(rule=null,copy=false){
  if(!current)return;form.reset();editing=rule&&!copy?rule.id:null;draft=false;$('#alarm-form-error').textContent='';$('#alarm-editor-title').textContent=editing?'编辑报警':copy?'复制报警':'新增报警';
- const initial={exchange:'binance',market:'future',priceType:'last',condition:'above',hold:0,cooldown:300,hysteresis:'0.2',repeat:false,level:'active',...rule};
- for(const name of ['exchange','market','symbol','priceType','condition','target','upper','repeat','hold','cooldown','hysteresis','level','note'])if(initial[name]!==undefined&&initial[name]!==null)field(name).value=String(initial[name]);
- for(const name of ['immediate','recovery'])field(name).checked=!!initial[name];
- if(initial.expiresAt){field('validity').value='until';const d=new Date(initial.expiresAt*1000);field('expiresAt').value=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
+ let exchange='binance';try{exchange=localStorage.getItem('radar-alarm-exchange')||exchange;}catch{}
+ const initial={exchange,condition:'above',repeat:false,...rule};
+ for(const name of ['exchange','symbol','condition','target','repeat'])if(initial[name]!==undefined&&initial[name]!==null)field(name).value=String(initial[name]);
+ if(!field('exchange').value)field('exchange').value='binance';
+ if(!field('condition').value)field('condition').value='above';
+ $('#legacy-rule-help').hidden=!rule;
  updateForm();$('#alarm-editor').showModal();loadCatalog();
 }
 $('#add-alarm').onclick=()=>openRule();
 form.addEventListener('input',e=>{draft=true;if(e.target.name==='symbol')renderCatalog();updateForm();});
-form.addEventListener('change',e=>{draft=true;if(['exchange','market'].includes(e.target.name)){field('symbol').value='';loadCatalog();}updateForm();});
+form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){field('symbol').value='';loadCatalog();}updateForm();});
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
  const q=catalog.find(q=>q.symbol===field('symbol').value);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
- const rule={};for(const n of ['exchange','market','symbol','priceType','condition','target','upper','hysteresis','level','note'])rule[n]=field(n).value.trim();
- for(const n of ['hold','cooldown'])rule[n]=Number(field(n).value);
- rule.repeat=field('repeat').value==='true';for(const n of ['immediate','recovery'])rule[n]=field(n).checked;
- rule.enabled=editing?(current.rules.find(r=>r.id===editing)?.enabled??true):true;rule.expiresAt=field('validity').value==='until'?new Date(field('expiresAt').value).getTime()/1000:null;
- if(await commit({action:'save',id:editing,rule})){draft=false;$('#alarm-editor').close();toast('报警已保存到当前推送码');}
+ const rule={exchange:field('exchange').value,market:'future',symbol:field('symbol').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:300,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:editing?(current.rules.find(r=>r.id===editing)?.enabled??true):true};
+ if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
 function openDevice(){if(!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}
 $('#bind-device').onclick=openDevice;barkForm.oninput=()=>{draft=true;};
