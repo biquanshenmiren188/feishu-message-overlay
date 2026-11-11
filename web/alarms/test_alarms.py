@@ -209,6 +209,27 @@ class StoreTests(unittest.TestCase):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')
         with self.assertRaises(ValueError):self.change(action='test')
 
+    def test_history_pages_filters_and_detail_scope(self):
+        now=time.time()
+        with self.store.db:
+            for i in range(45):
+                self.store.event('a','r',dict(title='BTCUSDT 上穿 100',body='private body'),None,now-i)
+            self.store.event('b','r',dict(title='BTCUSDT 上穿 100',body='other profile'),None,now)
+            self.store.event('a','r',dict(title='WBTCUSDT 上穿 100',body='wrapped'),None,now-50)
+        query=dict(q=['btc'],before=[str(now+1)])
+        first=self.store.history('a',query)
+        self.assertEqual(first['total'],45);self.assertEqual(len(first['items']),20)
+        self.assertNotIn('body',first['items'][0])
+        second=self.store.history('a',dict(query,page=['2']))
+        self.assertFalse({r['id'] for r in first['items']} & {r['id'] for r in second['items']})
+        identity=first['items'][0]['id']
+        self.assertEqual(self.store.event_detail('a',identity)['body'],'private body')
+        with self.assertRaises(ValueError):self.store.event_detail('b',identity)
+        self.assertEqual(self.store.history('a',dict(q=['BT']))['total'],0)
+        self.assertEqual(self.store.history('a',dict(status=['accepted']))['total'],0)
+        self.assertEqual(self.store.view('a',compact=True)['events'],[])
+        self.assertEqual(len(self.store.view('a')['events']),46)
+
     def test_http_scope(self):
         market=Market();market.quotes=self.catalog
         http=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.store,market,lambda token:token if token in ('a','b') else None))
@@ -219,6 +240,8 @@ class StoreTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as result:urlopen(base+'state')
             self.assertEqual(result.exception.code,401)
             with urlopen(Request(base+'state',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['rules'],[])
+            with urlopen(Request(base+'history',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['items'],[])
+            with urlopen(Request(base+'state?events=latest-test',headers={'Authorization':'Bearer a'})) as res:self.assertEqual(json.load(res)['events'],[])
             with self.assertRaises(HTTPError) as result:urlopen(Request(base+'state',headers={'Authorization':'Bearer a','Origin':'https://evil.test'}))
             self.assertEqual(result.exception.code,403)
         finally:http.shutdown();http.server_close();market.pool.shutdown()

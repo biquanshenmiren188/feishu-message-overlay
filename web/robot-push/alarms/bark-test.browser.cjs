@@ -6,12 +6,15 @@ const assets=process.env.ALARM_ASSETS||__dirname;
  const browser=await chromium.launch({headless:true,channel:'chrome'});
  try{for(const width of [1440,393,320]){
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
-  let state={revision:1,enabled:true,device:null,rules:[],events:[]},writes=[],fail=false,reject=false;
+  let state={revision:1,enabled:true,device:null,rules:[],events:[]},writes=[],fail=false,reject=false,detailReads=0;
+  await page.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic-a'));
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',async route=>{
    const req=route.request(),p=new URL(req.url()).pathname;
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(p.endsWith('/state'))return json(state);
+   if(p.endsWith('/history')){const n=Number(new URL(req.url()).searchParams.get('page')||1);return json({items:Array.from({length:n===3?5:20},(_,i)=>({id:String((n-1)*20+i),title:'BTCUSDT 上穿 100',at:1700000000,status:'accepted'})),total:45,page:n,before:1700000001});}
+   if(p.endsWith('/event')){detailReads++;return json({body:'测试详情',attempts:1});}
    if(p.endsWith('/catalog'))return json({items:[{symbol:'BTCUSDT',base:'BTC',last:'73000',unit:'BTC'}]});
    if(p.endsWith('/change')){
     const body=req.postDataJSON();writes.push(body);
@@ -63,7 +66,15 @@ const assets=process.env.ALARM_ASSETS||__dirname;
   state.events[0].status='accepted';await page.click('#refresh-alarms');await page.waitForFunction(()=>document.querySelector('#bark-test-result').dataset.state==='accepted');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no overflow '+width);
   if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`bark-test-${width}.png`),fullPage:true});
-  await page.evaluate(()=>{window.testToken='';document.dispatchEvent(new Event('radar-profile-changing'));});
+  await page.click('a[href="history.html"]');await page.waitForFunction(()=>document.querySelectorAll('#event-list details').length===20);
+  assert.equal(detailReads,0);await page.locator('#event-list summary').first().click();await page.waitForFunction(()=>document.querySelector('.history-body').textContent.includes('测试详情'));assert.equal(detailReads,1);
+  await page.click('#history-next');await page.waitForFunction(()=>document.querySelector('#history-page').textContent.includes('第 2'));assert.equal(await page.locator('#event-list details').count(),20);
+  await page.click('#history-next');await page.waitForFunction(()=>document.querySelectorAll('#event-list details').length===5);assert.equal(await page.locator('#history-next').isDisabled(),true);
+  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('#event-list details').length===20);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'history fits '+width);
+  if(process.env.ALARM_SCREENSHOTS)await page.screenshot({path:path.join(process.env.ALARM_SCREENSHOTS,`alarm-history-${width}.png`),fullPage:true});
+  await page.goto('https://bark-fixture.test/radar/robot-push/alarms/');await page.waitForFunction(()=>!document.querySelector('#bind-device').disabled);
+  await page.evaluate(()=>{localStorage.removeItem('radar-settings-token');document.dispatchEvent(new Event('radar-profile-changing'));});
   assert.equal(await page.locator('#bark-test-result').isVisible(),false);assert.equal(await page.locator('#test-bark-inline').isDisabled(),true);
   assert.deepEqual(errors,[]);console.log(JSON.stringify({width,passed:true,writes:writes.length}));await page.close();
  }}finally{await browser.close();}

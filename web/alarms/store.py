@@ -56,14 +56,43 @@ class Store:
     def ensure(self, profile):
         self.db.execute('INSERT OR IGNORE INTO profiles(id) VALUES (?)', (profile,))
 
-    def view(self, profile):
+    def view(self, profile, compact=False):
         with self.lock, self.db:
             self.ensure(profile)
             p = dict(self.db.execute('SELECT * FROM profiles WHERE id=?', (profile,)).fetchone())
             d = self.db.execute('SELECT label,fingerprint FROM devices WHERE profile=?', (profile,)).fetchone()
             rules = [dict(id=r['id'], **json.loads(r['config']), state=json.loads(r['state'])) for r in self.db.execute('SELECT * FROM rules WHERE profile=? ORDER BY created DESC', (profile,))]
-            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status=r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute('SELECT * FROM events WHERE profile=? ORDER BY at DESC LIMIT 100', (profile,))]
+            event_sql = "SELECT * FROM events WHERE profile=?" + (" AND rule_id='test' ORDER BY at DESC LIMIT 1" if compact else " ORDER BY at DESC LIMIT 100")
+            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status=r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile,))]
             return dict(revision=p['revision'], enabled=bool(p['enabled']), device=dict(label=d['label'], suffix=d['fingerprint'][-6:]) if d else None, rules=rules, events=events)
+
+    def history(self, profile, query):
+        def arg(name, default=''): return query.get(name, [default])[0]
+        page=max(1,min(100000,int(arg('page','1'))));days=int(arg('days','30'))
+        if days not in (1,7,30): raise ValueError('时间范围不正确')
+        anchor=float(arg('before',str(time.time())))
+        if not 0 < anchor <= time.time()+60: raise ValueError('时间范围不正确')
+        where=['profile=?','at>=?','at<=?'];args=[profile,anchor-days*86400,anchor]
+        status=arg('status');q=arg('q').strip().upper()
+        if len(q)>64: raise ValueError('搜索内容过长')
+        if status:
+            if status not in ('queued','sending','accepted','retry','failed','unknown','expired','cancelled','no_device'): raise ValueError('状态不正确')
+            where.append('status=?');args.append(status)
+        if q:
+            title="json_extract(payload,'$.title')"
+            symbol=f"upper(substr({title},1,instr({title},' ')-1))"
+            where.append(f'({symbol}=? OR {symbol}=?)');args.extend([q,q+'USDT'])
+        sql=' FROM events WHERE '+' AND '.join(where)
+        with self.lock:
+            total=self.db.execute('SELECT count(*)'+sql,args).fetchone()[0]
+            rows=self.db.execute("SELECT id,at,status,attempts,json_extract(payload,'$.title') AS title"+sql+' ORDER BY at DESC,id DESC LIMIT 20 OFFSET ?',[*args,(page-1)*20]).fetchall()
+            return dict(items=[dict(r) for r in rows],total=total,page=page,pageSize=20,before=anchor)
+
+    def event_detail(self, profile, identity):
+        with self.lock:
+            r=self.db.execute('SELECT * FROM events WHERE profile=? AND id=?',(profile,identity)).fetchone()
+            if not r: raise ValueError('记录不存在')
+            return dict(id=r['id'],body=json.loads(r['payload']).get('body',''),error=r['error'],attempts=r['attempts'])
 
     def mutate(self, profile, data, catalog):
         request_id = data.get('requestId', '')

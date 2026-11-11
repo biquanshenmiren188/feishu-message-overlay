@@ -1,0 +1,13 @@
+const {chromium}=require('playwright'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const assets=process.env.ALARM_ASSETS||__dirname;
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true}),page=await browser.newPage({viewport:{width:393,height:852}});let requests=0;
+const state={revision:1,enabled:true,device:{label:'iPhone'},events:[],rules:[{id:'a',exchange:'binance',market:'future',priceType:'last',symbol:'BTCUSDT',condition:'above',target:'90000',enabled:true,repeat:false,state:{price:'73000',status:'watching',sampleAt:Date.now()/1000}}]};
+await page.addInitScript(()=>localStorage.setItem('radar-settings-token','synthetic-a'));
+await page.route('**/*',async r=>{const u=new URL(r.request().url());if(u.pathname.endsWith('/state')){requests++;assert.equal(u.searchParams.get('events'),'latest-test');await new Promise(ok=>setTimeout(ok,300));return r.fulfill({json:state});}const name=u.pathname.split('/').pop()||'index.html';let file=path.join(assets,name);if(name==='search.js')file=path.join(__dirname,'search.js');if(!fs.existsSync(file))return r.fulfill({body:'',contentType:'text/css'});return r.fulfill({body:fs.readFileSync(file),contentType:name.endsWith('html')?'text/html':name.endsWith('css')?'text/css':'text/javascript'});});
+await page.goto('https://fixture.test/radar/robot-push/alarms/',{waitUntil:'domcontentloaded'});
+assert.match(await page.locator('#alarm-status').innerText(),/正在读取/);assert.doesNotMatch(await page.locator('main').innerText(),/未连接|未绑定|规则 0/);
+await page.waitForFunction(()=>!document.querySelector('#add-alarm').disabled);assert.equal(requests,1);
+await page.evaluate(()=>{window.savedRow=document.querySelector('.alarm-row');window.savedButton=document.querySelector('[data-action=edit]');window.savedButton.focus();for(let i=0;i<5;i++)document.querySelector('#refresh-alarms').click();});
+await page.waitForTimeout(400);assert.equal(requests,2);assert.equal(await page.evaluate(()=>window.savedRow===document.querySelector('.alarm-row')),true);
+state.rules[0].state.price='74000';await page.click('#refresh-alarms');await page.waitForFunction(()=>document.querySelector('.alarm-price').textContent==='74,000');assert.equal(await page.evaluate(()=>window.savedRow===document.querySelector('.alarm-row')&&window.savedButton===document.querySelector('[data-action=edit]')),true);
+console.log(JSON.stringify({initialRequests:1,parallelClicks:5,coalescedRequests:1,rowAndButtonPreserved:true,noFalseDisconnectedFlash:true}));await browser.close();})().catch(e=>{console.error(e);process.exitCode=1});

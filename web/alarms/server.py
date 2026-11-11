@@ -76,15 +76,22 @@ def make_handler(store, market, auth=authenticate):
         def dispatch(self, post=False):
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=3, notificationLevel="critical", ringingSeconds=30))
+                return self.reply(200, dict(ok=True, version=4, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
-            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change'):
+            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event'):
                 return self.reply(404, dict(error='接口不存在'))
             try:
                 profile = auth(self.headers.get('Authorization', '').removeprefix('Bearer '))
                 if not profile:
                     return self.reply(401, dict(error='请先连接推送码'))
+                query = parse_qs(route.query)
+                if not post and route.path == BASE + 'history':
+                    return self.reply(200, store.history(profile, query))
+                if not post and route.path == BASE + 'event':
+                    return self.reply(200, store.event_detail(profile, query.get('id',[''])[0]))
+                if not post and route.path == BASE + 'state' and query.get('events') == ['latest-test']:
+                    return self.reply(200, store.view(profile, compact=True))
                 quotes, health = market.snapshot()
                 if not post and route.path == BASE + 'state':
                     value = store.view(profile)
