@@ -57,7 +57,7 @@ function renderRules(){
 }
 let renderedSignature='';
 function render(){
- const signature=JSON.stringify([current,current.rules.map(safeStatus)]);if(signature===renderedSignature)return;renderedSignature=signature;
+ const signature=JSON.stringify([current,current.rules.map(r=>[safeStatus(r),!!r.state?.sampleAt&&Date.now()/1000-r.state.sampleAt<=12])]);if(signature===renderedSignature)return;renderedSignature=signature;
  connection(true);document.querySelector('main').classList.remove('is-loading');$('#alarm-list').setAttribute('aria-busy','false');
  syncPlanLabel();
  connected(true);renderTestResult();$('#master-enabled').checked=current.enabled;
@@ -74,7 +74,7 @@ async function readState(showError=true){
 }
 let reading=null;
 async function load(showError=true,force=false){
- if(reading){await reading;if(!force)return;}
+ while(reading){await reading;if(!force)return;}
  const request=readState(showError);reading=request;try{await request;}finally{if(reading===request)reading=null;}
 }
 async function commit(data){
