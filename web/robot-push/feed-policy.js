@@ -50,7 +50,7 @@ export class FeedPolicyState {
   }
   project(now){
     const visible=message=>['public','allow','mute'].includes(this.outcome(message,now));
-    return {messages:this.source.messages.filter(visible),pinned:this.source.pinned&&visible(this.source.pinned)?this.source.pinned:null};
+    const annotate=m=>({...m,groupOutcomes:this.data?.decisions?.[m.id]?.groups||[]});return {messages:this.source.messages.filter(visible).map(annotate),pinned:this.source.pinned&&visible(this.source.pinned)?annotate(this.source.pinned):null};
   }
   blockedSnapshot(now){
     const ready=!!this.token&&!!this.data&&now-this.receivedAt<DECISION_TTL;

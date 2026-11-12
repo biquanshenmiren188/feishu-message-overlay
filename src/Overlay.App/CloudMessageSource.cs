@@ -91,7 +91,7 @@ internal sealed class CloudMessageSource : IMessageSource
                     TransportConnected=true;
                     foreach(var key in seen.Where(p=>DateTimeOffset.UtcNow-p.Value>TimeSpan.FromMinutes(30)).Select(p=>p.Key).ToArray())seen.Remove(key);
                     foreach(var message in normal.OrderBy(m=>m.SentAt))
-                    {if(DateTimeOffset.UtcNow-message.SentAt>=TimeSpan.FromMinutes(30)||seen.ContainsKey(message.Id))continue;if(seen.Count>=10000)throw new JsonException();seen[message.Id]=DateTimeOffset.UtcNow;if(pending.Count==100)pending.Dequeue();pending.Enqueue(message);}
+                    {if(seen.ContainsKey(message.Id))continue;if(seen.Count>=10000)throw new JsonException();seen[message.Id]=DateTimeOffset.UtcNow;if(pending.Count==100)pending.Dequeue();pending.Enqueue(message);}
                     var connected=root.GetProperty("sourceConnected").GetBoolean();
                     if(connected && State!=LinkState.Connected)ConnectionRevision++;
                     State=connected?LinkState.Connected:LinkState.Reconnecting;

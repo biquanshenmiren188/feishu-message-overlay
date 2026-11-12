@@ -57,7 +57,10 @@ class CloudReceiver:
             if p.db.execute('SELECT count(*) FROM cloud_seen').fetchone()[0]>=10000:raise ValueError('bounded_dedup_limit')
             p.db.execute('INSERT INTO cloud_seen VALUES (?,?)',(m['id'],now));p.db.commit()
             if m['groupId']==p.pin_group:
-                if p.pin is None or utc(m['sentAt'])>=utc(p.pin['sentAt']):p.pin=m
+                if p.pin is None or utc(m['sentAt'])>=utc(p.pin['sentAt']):
+                    if p.pin and '强信号聚集' in p.pin.get('title',''):p.normal[p.pin['id']]=p.pin
+                    p.pin=m
+                elif '强信号聚集' in m.get('title',''):p.normal[m['id']]=m
             else:p.normal[m['id']]=m
             p.accepted+=1
         elif kind=='closed':raise ValueError('bridge_closed')

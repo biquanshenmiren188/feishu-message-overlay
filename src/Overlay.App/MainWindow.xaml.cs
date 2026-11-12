@@ -176,7 +176,7 @@ public partial class MainWindow : Window
             foreach (var message in messages)
             {
                 try {
-                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow,latestOnly:message.SourceId==pinnedChatId))
+                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow,latestOnly:message.SourceId==pinnedChatId && !(message.Card?.Title.Contains("强信号聚集")??false)))
                     {
                         if(current is not CloudMessageSource cloudMessage || message.SentAt>cloudMessage.StartedAt && cloudMessage.Rules.SoundMessage(message.Id))added=true;acceptedGroups.Add(message.SourceId);
                         if(current.IsRealConnection){realMessages++;lastMessageChatId=message.SourceId;lastAcceptedType=message.MessageType;lastReadable=message.Text.Length>0 && !message.Text.StartsWith("[该消息类型") && !message.Text.StartsWith("[正文格式") && !message.Text.StartsWith("[接口未提供");reception.RecordAccepted(message,true,lastReadable,DateTimeOffset.UtcNow);}
@@ -223,7 +223,7 @@ public partial class MainWindow : Window
         WindowAlpha.Set(this,OpacityScale.Value/100);
         
         PinnedStatus.Text=pinnedChatId.Length==0?"未选择置顶群":!pinnedAuthorized?"该群当前不在已核实的监听列表，已暂停展示":pinned is null?"等待该群新消息（不读取历史）":"顶部仅保留该群最新一条";
-        readingQueue=items.Where(m=>m.SourceId!=pinnedChatId && selectedChats.Contains(m.SourceId)).OrderBy(m=>m.SentAt).ToArray();
+        readingQueue=items.Where(m=>(m.SourceId!=pinnedChatId || (m.Card?.Title.Contains("强信号聚集")==true && m.Id!=pinnedLatest?.Id)) && selectedChats.Contains(m.SourceId)).OrderBy(m=>m.SentAt).ToArray();
         reader.Synchronize(readingQueue.Select(m=>m.Id),DateTimeOffset.UtcNow);
         if(focusCloudLatest && readingQueue.Length>0)
         {

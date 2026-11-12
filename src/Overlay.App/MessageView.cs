@@ -102,7 +102,8 @@ public sealed class MessageView : Grid
             var body=Block(message.Text,2);MarkTitle(body);body.Margin=new Thickness(0,0,3,0);row.Children.Add(body);var clock=Clock(message);SetColumn(clock,1);row.Children.Add(clock);outer.Child=row;return;
         }
         var stack=new StackPanel();outer.Child=stack;
-        var displayTitle=RankFirstTitle(compact?summary.Title:card.Title);
+        var cluster=card.Title.Contains("强信号聚集");
+        var displayTitle=cluster?card.Title.Replace("🚨","").Trim():RankFirstTitle(compact?summary.Title:card.Title);
         if(TopicSpreadMessage.Summary(card.Title,card.Body) is not null)displayTitle="专题｜"+displayTitle;
         if(displayTitle.Length>0)
         {
@@ -124,7 +125,17 @@ public sealed class MessageView : Grid
                 foreach(var action in card.Buttons.Where(a=>a.Label=="查看雷达")){var button=ActionButton(action);button.Margin=new Thickness(4,0,0,0);inlineActions.Children.Add(button);}
                 stack.Children.Add(spread);
             }
-            if(summary.Signals.Length>0)stack.Children.Add(Block(summary.Signals));
+            if(cluster)
+            {
+                var lines=card.Body.Split('\n').Select(x=>x.Trim()).Where(x=>x.Length>0).ToArray();
+                foreach(var intro in lines.Where(x=>x.StartsWith("涉及")||x.StartsWith("各组合")))stack.Children.Add(Block(intro));
+                for(var i=0;i<lines.Length;i++)if(System.Text.RegularExpressions.Regex.IsMatch(lines[i],@"^R\d+\+?\s*[|｜]"))
+                {
+                    var group=new StackPanel{Margin=new Thickness(0,5,0,5)};group.Children.Add(Block(lines[i],1));
+                    if(i+1<lines.Length)group.Children.Add(Block(lines[i+1]));stack.Children.Add(group);
+                }
+            }
+            else if(summary.Signals.Length>0)stack.Children.Add(Block(summary.Signals));
             if(summary.Warning){var warning=Block(summary.Risk);warning.Foreground=new SolidColorBrush(Color.FromRgb(163,62,37));stack.Children.Add(warning);}
             if(card.Body.Length>0)
             {

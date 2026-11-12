@@ -1,3 +1,4 @@
+import {clusterCard} from './cluster-card.js';
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
 import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261011-session';
@@ -69,6 +70,7 @@ function bodyText(p,text){
  p.append(document.createTextNode(text.slice(offset)));
 }
 function card(message,pinned=false,detail=false){
+ const aggregate=clusterCard(message,pinned,detail,openDetail);if(aggregate)return aggregate;
  const article=document.createElement('article');article.className='message'+(pinned?' pin':'');article.dataset.id=message.id;
  const header=document.createElement('div');header.className='message-head';header.dataset.tone=message.headerTone||'grey';const title=document.createElement('h2');title.className='message-title';title.textContent=mobileSummary(message).title||message.title||(pinned?'置顶群最新一条':'机器人消息');
  const time=document.createElement('time');time.dateTime=message.sentAt;time.textContent=timeUTC8(message.sentAt);time.title=new Date(Date.parse(message.sentAt)+8*3600000).toISOString().slice(0,19).replace('T',' ')+' UTC+8';header.append(title,time);article.append(header);

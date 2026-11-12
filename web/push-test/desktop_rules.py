@@ -121,7 +121,11 @@ class DesktopRules:
         return desktop_rows(message,now)
 
     def decision(self, channel, identity, rows, now, oi_evidence=None, *, record=True):
-        policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide'
+        if channel=='desktop' and rows and all(r.get('aggregate') for r in rows) and len(rows)>1:
+            outcomes=[self.decision(channel,identity,[row],now,record=False) or 'allow' for row in rows]
+            if 'allow' in outcomes:return None
+            if 'mute' in outcomes:return 'mute'
+        policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide' 
         if not settings['notify_enabled']:reasons=['接收已关闭']
         else:
             candidates=[('hide',policy['rules']['hide']),('mute',policy['rules']['mute'])] if channel=='desktop' else [('hide',settings)]
@@ -274,7 +278,7 @@ class DesktopRules:
                 if fingerprint is None:continue
                 identity=message['id']
                 action=self.decision('desktop',identity,self.rows(message,now),now,record=False) or 'allow'
-                decisions[identity]=dict(action=action,fingerprint=fingerprint)
+                decisions[identity]=dict(action=action,fingerprint=fingerprint,groups=[self.decision('desktop',identity,[row],now,record=False) or 'allow' for row in self.rows(message,now)] if '强信号聚集' in message.get('title','') else [])
             return dict(revision=self.data['revision'],desktopEnabled=self.data['desktop']['settings']['notify_enabled'],decisions=decisions)
 
     def evaluate(self):

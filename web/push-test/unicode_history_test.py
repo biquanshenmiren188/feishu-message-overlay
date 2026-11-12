@@ -76,14 +76,14 @@ class UnicodeHistoryTests(unittest.TestCase):
         legacy=dict(message,body=message['body'].replace('V2收敛 · 180秒 · ',''))
         self.assertEqual(rows,parse_messages(legacy,self.now))
         self.app.data['desktop']['rules']['hide']['excluded_ranks']=['R6+']
-        self.assertEqual(self.decision(message),'hide')
+        self.assertIsNone(self.decision(message))
 
     def test_strong_v2_rejects_incomplete_groups_and_unconfirmed_prefixes(self):
         message=self.strong_v2_message();body=message['body']
         variants=[body.replace('V2收敛 · 180秒 · 净均 +0.43% · ACTIVE 2s',''),
                   body.replace('V2收敛 · 180秒 · ', '其他说明 · 180秒 · ',1),
                   body.replace('V2收敛 · 180秒 · ', 'V3收敛 · 180秒 · ',1),
-                  body.replace('V2收敛 · 180秒 · ', 'V2收敛 · 181秒 · ',1),
+                  body.replace('V2收敛 · 180秒 · ', 'V2收敛 · 0秒 · ',1),
                   body.replace('净均 +0.43%', '资金费 +0.43%',1),
                   body.replace('净均 +0.43%', '净均 +0.43',1),
                   body.replace('买 OKX → 卖 ASTER','买 OKX → 卖 UNKNOWN',1),

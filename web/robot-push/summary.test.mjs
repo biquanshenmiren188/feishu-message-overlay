@@ -120,7 +120,7 @@ test('strong signals retain each V2 convergence routes own 180-second net mean',
  assert.equal(JSON.stringify(message),before);
 });
 test('strong signals reject unverified detail prefixes and never borrow a later yield',()=>{
- for(const detail of ['V3收敛 · 180秒 · 净均 +9.99%','V2收敛 · 181秒 · 净均 +9.99%','其他说明 · 净均 +9.99%','V2收敛 · 180秒 · 净均 未知','V2收敛 · 180秒 · 盘口差 +9.99%']){
+ for(const detail of ['V3收敛 · 180秒 · 净均 +9.99%','V2收敛 · 0秒 · 净均 +9.99%','其他说明 · 净均 +9.99%','V2收敛 · 180秒 · 净均 未知','V2收敛 · 180秒 · 盘口差 +9.99%']){
   const x=mobileSummary({title:'强信号聚集｜TOKEN｜2 组同时 ACTIVE',body:`最高净均 +9.99%\nR1｜SF｜买 GATE → 卖 BITGET\n${detail}\n净均 +8.88%\nR2｜FF｜买 ASTER → 卖 BINANCE\nV2收敛 · 180秒 · 净均 -0.12% · ACTIVE 7s`});
   assert.equal(x.signals,'R1｜SF｜GT→BG\nR2｜FF｜AS→BN｜-0.12%');
  }
