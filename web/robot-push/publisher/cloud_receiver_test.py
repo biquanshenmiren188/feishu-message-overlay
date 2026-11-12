@@ -17,7 +17,7 @@ def run():
         with patch.object(server.subprocess,'run',crypto_command):
             p=server.Publisher(root/'state',public);r=CloudReceiver(p,private,'not-started','not-started')
             group=digest('oc_fixture');other=digest('oc_other')
-            def msg(number,source=group):return {'id':digest(str(number)),'groupId':source,'senderType':'bot','sentAt':server.iso(now),'title':'Synthetic','body':'Fixture only','actions':[]}
+            def msg(number,source=group):return {'id':digest(str(number)),'groupId':source,'senderType':'bot','sentAt':server.iso(now),'title':'强信号聚集 | Synthetic | 1组','body':'Fixture only','actions':[]}
             r.apply({'kind':'membership','verified':True,'groups':[{'id':'oc_fixture','groupId':group,'name':'Synthetic'},{'id':'oc_other','groupId':other,'name':'Other'}]},now)
             r.apply({'kind':'status','connected':True},now)
             r.apply({'kind':'message','message':msg(1)},now);r.apply({'kind':'message','message':msg(1)},now)

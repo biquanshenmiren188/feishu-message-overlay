@@ -24,3 +24,9 @@ test('blocked latest does not erase five eligible older pins; latest below',()=>
  assert.deepEqual(visiblePins(row('new',6),rows).map(m=>m.id),['1','2','3','4','new']);
  assert.equal(visiblePins(null,[]).length,0);
 });
+
+test('ordinary live pin does not occupy a strong-signal history slot',()=>{
+ const rows=Array.from({length:5},(_,i)=>row(String(i),i));
+ assert.equal(visiblePins({...row('ordinary',6),title:'R1 | FF | TOKEN'},rows).length,5);
+ assert.equal(visiblePins({...row('ordinary',6),title:'R1 | FF | TOKEN'},rows).at(-1).id,'4');
+});

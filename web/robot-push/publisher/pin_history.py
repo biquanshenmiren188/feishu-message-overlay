@@ -10,7 +10,7 @@ class PinHistory:
         db.commit()
 
     def remember(self, message, stamp):
-        if message is None:
+        if message is None or '强信号聚集' not in message.get('title',''):
             return
         payload = json.dumps(message, ensure_ascii=False, separators=(',', ':'))
         with self.db:

@@ -12,7 +12,8 @@ class PinHistoryTest(unittest.TestCase):
     def test_public_bound_isolation_and_no_delivery_side_effects(self):
         self.bindings.coins(dict(self.data(),request=dict(op='block',request=dict(requestId='history-fixture',coins=['BTC'],exchange='all'))))
         first=json.loads(self.feed.read_text())['messages'][0]
-        second=dict(first,id='b'*64,title='ETH | FF | R2 +1.13%')
+        first=dict(first,title='强信号聚集 | BTC | 1 组同时 ACTIVE',body='R2 | FF | 买 GATE → 卖 ASTER\nV2收敛 · 60秒 · 净均 +1.13% · ACTIVE 1s')
+        second=dict(first,id='b'*64,title='强信号聚集 | ETH | 1 组同时 ACTIVE')
         envelope=dict(messages=[first,second],currentId=first['id'],limit=5)
         before={p:p.read_bytes() for p in self.profiles.directory.rglob('*') if p.is_file()}
         with patch('desktop_rules.DesktopRules',return_value=self.legacy):app=ThreadingHTTPServer(('127.0.0.1',0),handler(self.profiles))
@@ -26,7 +27,7 @@ class PinHistoryTest(unittest.TestCase):
                 self.assertEqual(len(get()[1]['messages']),2)
                 code,value=get(self.codes[0]['token']);self.assertEqual(code,200);self.assertEqual([m['id'] for m in value['messages']],['b'*64]);self.assertEqual(value['hiddenCount'],1)
                 self.assertEqual(len(get(self.codes[1]['token'])[1]['messages']),2)
-                envelope['messages']=[first]+[dict(second,id=str(n)*64) for n in range(1,7)]
+                envelope['messages']=[dict(second,id='ordinary',title='ETH | FF | R2 +1.13%'),first]+[dict(second,id=str(n)*64) for n in range(1,7)]
                 code,value=get(self.codes[0]['token']);self.assertEqual(code,200)
                 self.assertEqual([m['id'] for m in value['messages']],[str(n)*64 for n in range(1,6)])
                 self.assertEqual(value['currentId'],'1'*64);self.assertEqual(value['sourceCurrentId'],first['id'])

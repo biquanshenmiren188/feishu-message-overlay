@@ -13,6 +13,7 @@ def visible_history(policy=None):
         nonlocal hidden
         now=time.time()
         for row in rows:
+            if '强信号聚集' not in row.get('title',''):continue
             action=(policy.decision('desktop',row['id'],policy.rows(row,now),now,record=False) or 'allow') if policy else 'allow'
             if action=='hide':hidden+=1;continue
             visible.append(row)

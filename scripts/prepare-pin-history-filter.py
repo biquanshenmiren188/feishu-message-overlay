@@ -1,5 +1,5 @@
 """Prepare incremental filtered-pin history fix from verified production code."""
-import pathlib,json,hashlib,base64,subprocess,sys
+import pathlib,json,hashlib,base64,subprocess,sys,re
 P=pathlib.Path
 repo=P(__file__).resolve().parents[1]
 def sha(raw):return hashlib.sha256(raw).hexdigest()
@@ -14,13 +14,13 @@ def prepare(snapshot,out):
    target=('/opt/robot-push/' if folder=='publisher' else '/opt/radar-webpush-test/')+name
    prior=data['files'][target]
    if prior is not None:
-    expected=subprocess.check_output(['git','show','2d2836a:'+source],cwd=repo).decode().replace('\r\n','\n')
+    expected=subprocess.check_output(['git','show',data.get('sourceBase','2d2836a')+':'+source],cwd=repo).decode().replace('\r\n','\n')
     assert base64.b64decode(prior).decode().replace('\r\n','\n')==expected,target
    staged='backend/'+folder+'-'+name;files[staged]=(repo/source).read_bytes();targets[staged]=target
- oldbundle='performance-20261017/bot-pin-history-2997cdc8b79ad276.js'
+ oldbundle=re.search(r'performance-20261017/bot-pin-history-[a-f0-9]+\.js',base64.b64decode(data['files'][root+'/robot-push/index.html']).decode())[0]
  s=base64.b64decode(data['files'][root+'/'+oldbundle]).decode()
- assert s.count('180秒')==1
- s=s.replace('180秒',r'[1-9]\d{0,5}秒').replace('pin-history.js?v=20261112-history2','pin-history.js?v=20261112-history3')
+ assert s.count('180秒')<=1
+ s=s.replace('180秒',r'[1-9]\d{0,5}秒').replace('pin-history.js?v=20261112-history2','pin-history.js?v=20261112-history4').replace('pin-history.js?v=20261112-history3','pin-history.js?v=20261112-history4')
  bundle='performance-20261017/bot-pin-history-'+sha(s.encode())[:16]+'.js';files['static/'+bundle]=s.encode()
  files['static/robot-push/pin-history.js']=(repo/'web/robot-push/pin-history.js').read_bytes()
  files['static/robot-push/pin-history.css']=(repo/'web/robot-push/pin-history.css').read_bytes()

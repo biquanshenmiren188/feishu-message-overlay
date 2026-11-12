@@ -21,7 +21,7 @@ export function historySignals(message){
  return rows.join('\n');
 }
 export function visiblePins(current,rows){
- const unique=new Map(rows.map(m=>[m.id,m]));if(current)unique.set(current.id,current);
+ const unique=new Map(rows.map(m=>[m.id,m]));if(current?.title.includes('强信号聚集'))unique.set(current.id,current);
  return [...unique.values()].sort((a,b)=>Date.parse(b.sentAt)-Date.parse(a.sentAt)).slice(0,5).reverse();
 }
 const token=()=>{try{return localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';}catch{return '';}};

@@ -71,7 +71,7 @@ internal static class CompactSummaryContract
                     Check(Math.Abs(radarButton.TranslatePoint(new Point(radarButton.ActualWidth,0),row).X-row.ActualWidth)<2,"radar aligns to row right edge");
                 }
                 else Check(radarButton.Parent==footer,"no spread keeps radar in bottom-right footer");
-                Check(Children<TextBlock>(view).Any(t=>t.Text==(view.Message!.Card!.Title.Contains("强信号聚集")?view.Message.Card.Title.Replace("🚨","").Trim():MessageView.RankFirstTitle(CompactMessage.From(view.Message.Card.Title,view.Message.Card.Body).Title))),"rank and value lead rendered title");
+                Check(Children<TextBlock>(view).Any(t=>t.Text==MessageView.RankFirstTitle(CompactMessage.From(view.Message!.Card!.Title,view.Message.Card.Body).Title)),"rank and value lead rendered title");
             }
             const string raw="[Dex 套利监控命中][最高P3]\n价格最大延迟: 45s\nsymbol黑名单: MEME, ONE\n1. [P3][现期] TOKEN | 多 Bitget 现货 / 空 OKX 合约\ntake: 0.9107% / 1.3489%, 30m 0.9107% (1)\n资金费: OKX 0.0825% / 4h\n质量: 瞬时，价差强\n查看详情: https://example.invalid/radar/?tab=SF&mode=SF&q=token";
             var plain=new MessageView{Message=new IncomingMessage("plain-dex","fixture","",raw,DateTimeOffset.UtcNow,SenderKind.Bot)};
