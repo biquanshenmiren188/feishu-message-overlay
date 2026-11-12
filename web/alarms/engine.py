@@ -1,5 +1,7 @@
-"""Decimal price crossings. No network, delivery or wall clock inside evaluation."""
+"""Decimal price conditions and one-shot crossings. No network, delivery or wall clock inside evaluation."""
 from decimal import Decimal, InvalidOperation
+
+REPEAT_SECONDS = 30
 
 
 def number(value):
@@ -48,6 +50,8 @@ def validate(raw):
         if type(raw.get(key, default)) is not bool:
             raise ValueError('报警开关格式错误')
         rule[key] = raw.get(key, default)
+    if rule['repeat']:
+        rule.update(hold=0, cooldown=REPEAT_SECONDS, hysteresis='0', immediate=True, recovery=True)
     rule['expiresAt'] = raw.get('expiresAt')
     if rule['expiresAt'] is not None and (type(rule['expiresAt']) not in (int, float) or not 0 < rule['expiresAt'] < 4102444800):
         raise ValueError('有效期不正确')
@@ -102,15 +106,23 @@ def evaluate(rule, previous, quote, now, max_age=12):
     stamp = quote.get(rule['priceType'] + 'At') or quote['observedAt']
     if now - stamp > max_age or stamp > now + 2:
         return dict(state, status='stale', pending=None, gap=True), None
-    if stamp <= state.get('sampleAt', 0):
+    if stamp < state.get('sampleAt', 0) or (stamp == state.get('sampleAt', 0) and not rule['repeat']):
         return state, None
     gap = state.get('gap', False) or bool(state.get('sampleAt') and stamp - state['sampleAt'] > max_age)
     hit = matches(rule, price)
     first = 'sampleAt' not in state
     state.update(price=str(price), sampleAt=stamp, observedAt=quote['observedAt'], gap=False)
+    if rule['repeat']:
+        # Apply to existing rules too: old cooldown/arming settings must not
+        # prevent a satisfied condition from continuing after restart or gaps.
+        state.update(armed=not hit, pending=None, status='alarming' if hit else 'watching')
+        if hit and (not state.get('fired') or now >= max(state.get('lastFire', 0), state.get('lastDispatch', 0)) + REPEAT_SECONDS):
+            state.update(lastFire=now, fired=True)
+            return state, dict(price=str(price), sampleAt=stamp, at=now, reason='continuous')
+        return state, None
     if first or gap:
         state.update(armed=not hit, pending=None)
-        if hit and ((first and rule['immediate']) or (gap and rule['recovery'])):
+        if hit and ((first and rule['immediate']) or (gap and (rule['recovery'] or rule['immediate']))):
             state.update(armed=True, pending=now, reason='recovery' if gap else 'initial')
     if not hit:
         state['pending'] = None

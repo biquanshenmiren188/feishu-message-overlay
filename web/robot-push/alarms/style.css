@@ -38,3 +38,5 @@
 @media(max-width:700px){.alarm-row{grid-template-columns:minmax(0,1fr);gap:14px;margin:0 12px 12px;padding:14px}.alarm-row .alarm-price-block{max-width:none;text-align:left;padding-top:12px;border-top:1px solid #dce6f1}.alarm-row .alarm-actions{grid-column:1;justify-content:flex-start}.alarm-row .alarm-actions button{min-height:44px}.alarm-row .alarm-condition{font-size:20px}}
 
 .alarm-toolbar{flex-wrap:nowrap}.alarm-toolbar input{flex:1 1 0;width:auto}.alarm-toolbar button{flex:none}
+
+.alarm-row.is-alarming{border-color:#f3c1bd;border-left-color:#c4332b;background:#fff8f7}.alarm-rule-title .alarm-badge.is-alarming{color:#a91d18;background:#ffe1dd;font-weight:650}

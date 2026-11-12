@@ -29,7 +29,10 @@ def authenticate(token):
         raise
 
 
-def send_event(store, event):
+def send_event(store, event, market=None):
+    quotes = market.snapshot()[0] if market is not None else None
+    if not store.begin_send(event, quotes):
+        return
     payload = json.loads(event['payload'])
     body = {k: payload[k] for k in ('id', 'title', 'body', 'group', 'level', 'url')}
     body.update(level='critical', volume=5, call='1')
@@ -43,7 +46,7 @@ def send_event(store, event):
             else:
                 store.finish(event, 'failed', 'Bark 拒绝请求，请检查设备绑定')
     except HTTPError as exc:
-        store.finish(event, 'retry' if exc.code == 429 or exc.code >= 500 else 'failed', 'Bark HTTP ' + str(exc.code))
+        store.finish(event, 'retry' if not payload.get('repeatInterval') and (exc.code == 429 or exc.code >= 500) else 'failed', 'Bark HTTP ' + str(exc.code))
     except (TimeoutError, URLError, OSError, ValueError):
         # Timeout/invalid responses may follow successful acceptance. Do not blindly resend.
         store.finish(event, 'unknown', '未取得明确响应，结果未知；未自动重复发送')
@@ -81,7 +84,7 @@ def make_handler(store, market, auth=authenticate):
             self.started=time.perf_counter();self.auth_ms=0
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=6, monitoringMode="per-rule", notificationLevel="critical", ringingSeconds=30))
+                return self.reply(200, dict(ok=True, version=7, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
             if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event'):
@@ -150,7 +153,7 @@ def main():
             try:
                 event = store.claim()
                 if event:
-                    send_event(store, event)
+                    send_event(store, event, market)
                     continue
             except Exception as exc:
                 print('delivery:', type(exc).__name__, flush=True)

@@ -10,7 +10,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
-from engine import evaluate, validate
+from engine import evaluate, validate, matches, number, REPEAT_SECONDS
 
 
 def dump(value):
@@ -57,6 +57,7 @@ class Store:
                 self.cancel(profile['id'])
                 self.db.execute('UPDATE profiles SET enabled=1,revision=revision+1 WHERE id=?', (profile['id'],))
             self.db.execute("UPDATE events SET status='unknown',error='发送过程中服务重启，结果未知' WHERE status='sending'")
+            self.db.execute("UPDATE events SET status='cancelled',error='服务重启，取消尚未发送的消息' WHERE status='claimed'")
             for row in self.db.execute('SELECT id,state FROM rules').fetchall():
                 state = json.loads(row['state'])
                 state.update(gap=True, pending=None)
@@ -72,7 +73,7 @@ class Store:
             d = self.db.execute('SELECT label,fingerprint FROM devices WHERE profile=?', (profile,)).fetchone()
             rules = [dict(id=r['id'], **json.loads(r['config']), state=json.loads(r['state'])) for r in self.db.execute('SELECT * FROM rules WHERE profile=? ORDER BY created DESC', (profile,))]
             event_sql = "SELECT * FROM events WHERE profile=?" + (" AND rule_id='test' ORDER BY at DESC LIMIT 1" if compact else " ORDER BY at DESC LIMIT 100")
-            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status=r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile,))]
+            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status='queued' if r['status']=='claimed' else r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile,))]
             return dict(revision=p['revision'], enabled=True, device=dict(label=d['label'], suffix=d['fingerprint'][-6:]) if d else None, rules=rules, events=events)
 
     def history(self, profile, query):
@@ -86,7 +87,8 @@ class Store:
         if len(q)>64: raise ValueError('搜索内容过长')
         if status:
             if status not in ('queued','sending','accepted','retry','failed','unknown','expired','cancelled','no_device'): raise ValueError('状态不正确')
-            where.append('status=?');args.append(status)
+            where.append("status IN ('queued','claimed')" if status=='queued' else 'status=?')
+            if status!='queued':args.append(status)
         if q:
             title="json_extract(payload,'$.title')"
             symbol=f"upper(substr({title},1,instr({title},' ')-1))"
@@ -95,7 +97,7 @@ class Store:
         with self.lock:
             total=self.db.execute('SELECT count(*)'+sql,args).fetchone()[0]
             rows=self.db.execute("SELECT id,at,status,attempts,json_extract(payload,'$.title') AS title"+sql+' ORDER BY at DESC,id DESC LIMIT 20 OFFSET ?',[*args,(page-1)*20]).fetchall()
-            return dict(items=[dict(r) for r in rows],total=total,page=page,pageSize=20,before=anchor)
+            return dict(items=[{**dict(r),'status':'queued' if r['status']=='claimed' else r['status']} for r in rows],total=total,page=page,pageSize=20,before=anchor)
 
     def event_detail(self, profile, identity):
         with self.lock:
@@ -132,7 +134,10 @@ class Store:
                     old_rule = self.db.execute('SELECT * FROM rules WHERE id=? AND profile=?', (identity, profile)).fetchone()
                     if not old_rule:
                         raise ValueError('报警不存在或不属于当前推送码')
-                    self.db.execute('UPDATE rules SET config=?,state=? WHERE id=? AND profile=?', (dump(rule), '{}', identity, profile))
+                    old_state = json.loads(old_rule['state'])
+                    # Editing a repeating rule must not bypass the 30-second interval.
+                    state = {k: old_state[k] for k in ('lastFire', 'lastDispatch', 'fired') if k in old_state} if rule['repeat'] else {}
+                    self.db.execute('UPDATE rules SET config=?,state=? WHERE id=? AND profile=?', (dump(rule), dump(state), identity, profile))
                     self.cancel(profile, identity)
                 else:
                     if self.db.execute('SELECT count(*) FROM rules WHERE profile=?', (profile,)).fetchone()[0] >= 100:
@@ -197,9 +202,9 @@ class Store:
             self.db.execute('DELETE FROM requests WHERE at<?', (now - 7 * 86400,))
             return result
 
-    def cancel(self, profile, identity=None):
-        sql = "UPDATE events SET status='cancelled',error='规则或设备已变更' WHERE profile=? AND status IN ('queued','retry')"
-        args = [profile]
+    def cancel(self, profile, identity=None, reason='规则或设备已变更'):
+        sql = "UPDATE events SET status='cancelled',error=? WHERE profile=? AND status IN ('queued','retry','claimed')"
+        args = [reason, profile]
         if identity:
             sql += ' AND rule_id=?'
             args.append(identity)
@@ -208,7 +213,7 @@ class Store:
     def event(self, profile, identity, payload, device, now):
         event_id = secrets.token_hex(16)
         payload['id'] = event_id
-        self.db.execute('INSERT INTO events VALUES (?,?,?,?,?,?,0,?,?,?,?)', (event_id, profile, identity, now, dump(payload), 'queued' if device else 'no_device', now, now + 120, device['fingerprint'] if device else None, None if device else '未绑定 Bark，事件已记录'))
+        self.db.execute('INSERT INTO events VALUES (?,?,?,?,?,?,0,?,?,?,?)', (event_id, profile, identity, now, dump(payload), 'queued' if device else 'no_device', now, now + payload.get('repeatInterval', 120), device['fingerprint'] if device else None, None if device else '未绑定 Bark，事件已记录'))
 
     def tick(self, quotes, now):
         active = set()
@@ -223,21 +228,27 @@ class Store:
                     active.add(key[:2])
                 if state != previous:
                     self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['id']))
+                if rule['repeat'] and state['status'] != 'alarming':
+                    self.cancel(row['profile'], row['id'], '价格条件已解除、行情失效或报警已停止')
                 if event:
-                    names = dict(above='上穿', below='下穿', enter='进入区间', exit='离开区间')
+                    if rule['repeat']:
+                        self.cancel(row['profile'], row['id'], '已由本轮报警替代')
+                    names = dict(above='涨到', below='跌到', enter='进入区间', exit='离开区间')
                     price_kind = '最新成交价' if rule['priceType'] == 'last' else '标记价格'
                     clock = time.strftime('%m-%d %H:%M:%S', time.gmtime(now + 8 * 3600))
                     condition = rule['target'] + ('～' + rule['upper'] if rule['upper'] else '')
                     title = rule['symbol'] + ' ' + names[rule['condition']] + ' ' + condition
-                    reason = '行情恢复时满足条件' if event['reason'] == 'recovery' else '启用时已满足条件' if event['reason'] == 'initial' else '价格穿越'
-                    body = f"{rule['exchange'].upper()} · {'永续' if rule['market']=='future' else '现货'} · {price_kind}\n触发价格：{event['price']} USDT\n{reason} · 持续 {rule['hold']} 秒\n{clock}（北京时间）"
+                    reason = '价格仍满足条件，每 30 秒提醒' if event['reason'] == 'continuous' else '行情恢复时满足条件' if event['reason'] == 'recovery' else '启用时已满足条件' if event['reason'] == 'initial' else '价格穿越'
+                    body = f"{rule['exchange'].upper()} · {'永续' if rule['market']=='future' else '现货'} · {price_kind}\n触发价格：{event['price']} USDT\n{reason}\n{clock}（北京时间）"
                     if rule['note']:
                         body += '\n' + rule['note']
                     payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'])
+                    if rule['repeat']:
+                        payload['repeatInterval'] = REPEAT_SECONDS
                     device = self.db.execute('SELECT * FROM devices WHERE profile=?', (row['profile'],)).fetchone()
                     self.event(row['profile'], row['id'], payload, device, now)
-            self.db.execute("UPDATE events SET status='expired',error='超过两分钟发送时效' WHERE status IN ('queued','retry') AND expires<?", (now,))
-            self.db.execute("DELETE FROM events WHERE at<? AND status NOT IN ('queued','retry','sending')", (now - 30 * 86400,))
+            self.db.execute("UPDATE events SET status='expired',error='超过发送时效' WHERE status IN ('queued','retry') AND expires<?", (now,))
+            self.db.execute("DELETE FROM events WHERE at<? AND status NOT IN ('queued','retry','claimed','sending')", (now - 30 * 86400,))
         return active
 
     def claim(self):
@@ -246,12 +257,44 @@ class Store:
             row = self.db.execute("SELECT e.*,d.secret FROM events e JOIN devices d ON e.profile=d.profile AND e.fingerprint=d.fingerprint WHERE e.status IN ('queued','retry') AND e.next_at<=? AND e.expires>? ORDER BY e.at LIMIT 1", (now, now)).fetchone()
             if not row:
                 return None
-            self.db.execute("UPDATE events SET status='sending',attempts=attempts+1 WHERE id=?", (row['id'],))
+            self.db.execute("UPDATE events SET status='claimed' WHERE id=?", (row['id'],))
             return dict(row)
+
+    def begin_send(self, event, quotes=None, now=None):
+        """Recheck immediately before HTTP; queued work is revocable, sent work is not."""
+        now = time.time() if now is None else now
+        with self.lock, self.db:
+            row = self.db.execute('SELECT * FROM events WHERE id=?', (event['id'],)).fetchone()
+            if not row or row['status'] != 'claimed':
+                return False
+            device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=?', (row['profile'],)).fetchone()
+            valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            if valid and row['rule_id'] != 'test':
+                saved = self.db.execute('SELECT config,state FROM rules WHERE id=? AND profile=?', (row['rule_id'], row['profile'])).fetchone()
+                valid = bool(saved)
+                if saved:
+                    rule, state = json.loads(saved['config']), json.loads(saved['state'])
+                    valid = rule['enabled'] and (not rule['expiresAt'] or now < rule['expiresAt'])
+                    if valid and rule['repeat']:
+                        key = rule['exchange'], rule['market'], rule['symbol']
+                        q = quotes.get(key) if quotes is not None else {rule['priceType']: state.get('price'), 'observedAt': state.get('observedAt', 0), rule['priceType']+'At': state.get('sampleAt', 0)}
+                        try:
+                            stamp = q.get(rule['priceType']+'At') or q['observedAt']
+                            valid = now >= state.get('lastDispatch', 0) + REPEAT_SECONDS and -2 <= now-q['observedAt'] <= 12 and -2 <= now-stamp <= 12 and matches(rule, number(q.get(rule['priceType'])))
+                        except (ValueError, TypeError, KeyError, AttributeError):
+                            valid = False
+            if not valid:
+                self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
+                return False
+            if row['rule_id'] != 'test' and rule['repeat']:
+                state['lastDispatch'] = now
+                self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['rule_id']))
+            self.db.execute("UPDATE events SET status='sending',attempts=attempts+1 WHERE id=?", (row['id'],))
+            return True
 
     def finish(self, event, status, error=None):
         with self.lock, self.db:
             attempt = event['attempts'] + 1
             if status == 'retry' and attempt >= 3:
                 status = 'failed'
-            self.db.execute('UPDATE events SET status=?,error=?,next_at=? WHERE id=?', (status, error, time.time() + 5 * 2 ** attempt, event['id']))
+            self.db.execute("UPDATE events SET status=?,error=?,next_at=? WHERE id=? AND status='sending'", (status, error, time.time() + 5 * 2 ** attempt, event['id']))
