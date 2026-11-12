@@ -49,14 +49,14 @@ class EngineTests(unittest.TestCase):
         _, events = self.run_prices(rule(hold=3), [(100,99),(101,100),(102,101),(103,99),(104,101),(106,102),(107,103)])
         self.assertEqual([e['at'] for e in events],[107])
 
-    def test_repeat_requires_recovery_and_cooldown(self):
+    def test_repeat_uses_thirty_seconds_without_recovery(self):
         _, events = self.run_prices(rule(repeat=True,cooldown=30), [(100,99),(101,100),(110,101),(120,99.9),(130,100),(132,99.7),(133,100)])
         self.assertEqual([e['at'] for e in events],[101,133])
 
-    def test_cooldown_does_not_generate_event(self):
+    def test_repeat_continues_while_condition_holds(self):
         samples=[(100,99),(101,100)]+[(i,101) for i in range(102,150)]
         _, events=self.run_prices(rule(repeat=True,cooldown=30),samples)
-        self.assertEqual(len(events),1)
+        self.assertEqual([e['at'] for e in events],[101,131])
 
     def test_stale_cancels_confirmation(self):
         r=rule(hold=3);s,_=evaluate(r,{},quote(99,100),100);s,_=evaluate(r,s,quote(101,101),101)
@@ -108,7 +108,7 @@ class EngineTests(unittest.TestCase):
         for level in ['active', 'timeSensitive', 'critical']:
             self.assertEqual(rule(level=level)['level'], 'critical')
 
-    def test_simple_repeat_rearms_after_leaving(self):
+    def test_simple_repeat_does_not_spam_on_price_oscillation(self):
         r=rule(repeat=True,immediate=True,hold=0,cooldown=300,hysteresis='0')
         state,event=evaluate(r,{},quote(100,1000),1000)
         self.assertIsNotNone(event)
@@ -123,6 +123,48 @@ class EngineTests(unittest.TestCase):
             with self.subTest(change=change),self.assertRaises(ValueError):rule(**change)
         r=rule();r.update(market='spot',priceType='mark')
         with self.assertRaises(ValueError):validate(r)
+
+    def test_continuous_all_conditions_boundary_recovery(self):
+        for condition, hit, restored in [('above','100','99.99'),('below','100','100.01'),('enter','100','99.99'),('exit','111','110')]:
+            with self.subTest(condition=condition):
+                r=rule(repeat=True);r.update(condition=condition,upper='110' if condition in ('enter','exit') else None)
+                # Legacy values are ignored without rewriting saved settings.
+                r.update(hold=60,cooldown=86400,immediate=False,recovery=False,hysteresis='10')
+                state,events=self.run_prices(r,[(t,hit) for t in range(100,162,2)])
+                self.assertEqual([e['at'] for e in events],[100,130,160]);self.assertEqual(state['status'],'alarming')
+                state,event=evaluate(r,state,quote(restored,162),162)
+                self.assertIsNone(event);self.assertEqual(state['status'],'watching')
+
+    def test_continuous_stale_restart_resume_and_old_waiting(self):
+        r=rule(repeat=True)
+        state={'fired':True,'lastFire':100,'sampleAt':100,'armed':False,'gap':True,'status':'waiting'}
+        state,event=evaluate(r,state,quote(101,110),110);self.assertIsNone(event)
+        state,event=evaluate(r,state,quote(101,110),130);self.assertIsNone(event);self.assertEqual(state['status'],'stale')
+        state,event=evaluate(r,state,quote(101,131),131);self.assertIsNotNone(event);self.assertEqual(state['status'],'alarming')
+        state,event=evaluate(r,state,quote(101,132),132);self.assertIsNone(event)
+
+    def test_once_immediate_resumes_after_gap_but_never_repeats(self):
+        r=rule(immediate=True)
+        s,_=evaluate(r,{},quote(99,100),100)
+        s,e=evaluate(r,s,None,120);self.assertIsNone(e)
+        s,e=evaluate(r,s,quote(101,121),121);self.assertIsNotNone(e)
+        s,e=evaluate(r,s,quote(102,160),160);self.assertIsNone(e);self.assertEqual(s['status'],'triggered')
+
+    def test_repeat_clock_uses_fresh_quote_not_only_new_stamp(self):
+        r=rule(repeat=True);state,event=evaluate(r,{},quote(101,100),100)
+        state,event=evaluate(r,state,quote(101,129),129);self.assertIsNone(event)
+        state,event=evaluate(r,state,quote(101,129),130);self.assertIsNotNone(event)
+        state,event=evaluate(r,state,quote(101,128),131);self.assertIsNone(event)
+
+    def test_delayed_dispatch_spaces_next_event(self):
+        r=rule(repeat=True);s={'fired':True,'lastFire':100,'lastDispatch':110,'sampleAt':120}
+        s,e=evaluate(r,s,quote(101,130),130);self.assertIsNone(e)
+        s,e=evaluate(r,s,quote(101,140),140);self.assertIsNotNone(e)
+
+    def test_repeat_pause_expiry_and_missing_mark(self):
+        for enabled,expiry,kind,expected in [(False,None,'last','paused'),(True,99,'last','expired'),(True,None,'mark','unavailable')]:
+            r=rule(repeat=True,enabled=enabled,expiresAt=expiry);r['priceType']=kind;q=quote(101,100);q['mark']=None
+            s,e=evaluate(r,{},q,100);self.assertIsNone(e);self.assertEqual(s['status'],expected)
 
 
 class StoreTests(unittest.TestCase):
@@ -192,7 +234,7 @@ class StoreTests(unittest.TestCase):
         self.assertIsNone(self.store.claim())
 
     def test_restart_inflight_unknown(self):
-        self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test');self.store.claim()
+        self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test');event=self.store.claim();self.store.begin_send(event)
         self.store.db.close();self.store=Store(self.temp.name)
         self.assertEqual(self.store.view('a')['events'][0]['status'],'unknown');self.assertIsNone(self.store.claim())
 
@@ -312,7 +354,7 @@ class StoreTests(unittest.TestCase):
         self.change(action='bind',key='synthetic_device_12345',label='设备');self.change(action='test')
         for attempt in range(3):
             with self.store.db:self.store.db.execute('UPDATE events SET next_at=0')
-            event=self.store.claim();self.assertIsNotNone(event);self.store.finish(event,'retry','HTTP 429')
+            event=self.store.claim();self.assertIsNotNone(event);self.assertTrue(self.store.begin_send(event));self.store.finish(event,'retry','HTTP 429')
         self.assertEqual(self.store.view('a')['events'][0]['status'],'failed');self.assertIsNone(self.store.claim())
 
     def test_expired_outbox_never_sends(self):
@@ -320,6 +362,82 @@ class StoreTests(unittest.TestCase):
         with self.store.db:self.store.db.execute('UPDATE events SET expires=0')
         self.assertIsNone(self.store.claim());self.store.tick({},self.now)
         self.assertEqual(self.store.view('a')['events'][0]['status'],'expired')
+
+    def repeat_fixture(self):
+        self.change(action='bind',key='synthetic_device_12345',label='设备')
+        identity=self.create(repeat=True)
+        quotes={('binance','future','BTCUSDT'):quote(101,self.now)}
+        self.store.tick(quotes,self.now)
+        return identity,quotes
+
+    def test_continuous_cancels_pending_and_claimed_on_recovery(self):
+        for claimed in (False,True):
+            with self.subTest(claimed=claimed):
+                identity,quotes=self.repeat_fixture();event=self.store.claim() if claimed else None
+                self.store.tick({('binance','future','BTCUSDT'):quote(99,self.now+1)},self.now+1)
+                self.assertIsNone(self.store.claim())
+                if event:self.assertFalse(self.store.begin_send(event,quotes,self.now+1))
+                self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
+                self.change(action='delete',id=identity)
+
+    def test_continuous_rechecks_latest_quote_before_http(self):
+        identity,quotes=self.repeat_fixture();event=self.store.claim()
+        self.assertFalse(self.store.begin_send(event,{('binance','future','BTCUSDT'):quote(99,self.now+1)},self.now+1))
+        self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
+
+    def test_claimed_cannot_send_after_pause_delete_edit_or_unbind(self):
+        for action in ('pause','delete','edit','unbind'):
+            with self.subTest(action=action):
+                identity,quotes=self.repeat_fixture();event=self.store.claim()
+                if action=='pause':self.change(action='save',id=identity,rule=rule(repeat=True,enabled=False))
+                elif action=='edit':self.change(action='save',id=identity,rule={**rule(repeat=True),'target':'200'})
+                elif action=='delete':self.change(action='delete',id=identity)
+                else:self.change(action='unbind')
+                self.assertFalse(self.store.begin_send(event,quotes,self.now+1))
+                if action!='delete':self.change(action='delete',id=identity)
+
+    def test_repeat_restart_preserves_interval_and_cancels_claim(self):
+        identity,quotes=self.repeat_fixture();self.store.claim()
+        self.store.db.close();self.store=Store(self.temp.name)
+        self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
+        for delta in (1,29):
+            self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+delta)},self.now+delta)
+            self.assertEqual(len(self.store.view('a')['events']),1)
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+30)},self.now+30)
+        self.assertEqual(len(self.store.view('a')['events']),2)
+
+    def test_repeat_outbox_superseded_no_backlog(self):
+        identity,quotes=self.repeat_fixture()
+        for delta in range(2,62,2):self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+delta)},self.now+delta)
+        events=self.store.view('a')['events'];self.assertEqual(len(events),3)
+        self.assertEqual(sum(e['status']=='queued' for e in events),1)
+        self.assertEqual(sum(e['status']=='cancelled' for e in events),2)
+
+    def test_repeat_edit_preserves_dispatch_interval(self):
+        identity,quotes=self.repeat_fixture();event=self.store.claim()
+        self.assertTrue(self.store.begin_send(event,quotes,self.now))
+        self.change(action='save',id=identity,rule=rule(repeat=True))
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+1)},self.now+1)
+        self.assertEqual(len(self.store.view('a')['events']),1)
+        self.assertEqual(self.store.view('a')['rules'][0]['state']['lastDispatch'],self.now)
+
+    def test_continuous_http_failure_waits_for_next_slot(self):
+        identity,quotes=self.repeat_fixture();event=self.store.claim()
+        with patch('server.build_opener') as opener:
+            opener.return_value.open.side_effect=HTTPError('https://api.day.app/push',429,'rate limit',{},None)
+            send_event(self.store,event)
+        self.assertEqual(self.store.view('a')['events'][0]['status'],'failed');self.assertIsNone(self.store.claim())
+
+    def test_continuous_critical_loop_payload_and_stale_cancellation(self):
+        identity,quotes=self.repeat_fixture();event=self.store.claim()
+        with patch('server.build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
+            send_event(self.store,event)
+            payload=json.loads(opener.return_value.open.call_args.args[0].data)
+            self.assertEqual((payload['level'],payload['volume'],payload['call']),('critical',5,'1'))
+        self.store.tick({('binance','future','BTCUSDT'):quote(101,self.now+32)},self.now+32)
+        self.store.tick({},self.now+33)
+        self.assertIsNone(self.store.claim());self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
 
 
 if __name__=='__main__':unittest.main()

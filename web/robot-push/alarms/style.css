@@ -36,3 +36,7 @@
 .alarm-row small{color:#59697c;margin-top:6px}.alarm-row .alarm-repeat{display:inline-block;margin-top:8px;padding:2px 8px;background:#eaf0f7;color:#42566d;border-radius:5px}
 .alarm-row .alarm-condition{font-size:20px;font-weight:750;line-height:1.4;color:#1456a0;margin-top:0;font-variant-numeric:tabular-nums}.alarm-current{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:baseline;color:#59697c;font-size:12px}.alarm-row .alarm-price{color:#34465a;font-size:14px;font-weight:550}.alarm-row .alarm-actions{gap:8px;max-width:none}.alarm-row .alarm-actions button{min-height:40px;padding:7px 12px;background:#fff}.alarm-row.is-highlighted{outline:2px solid var(--alarm-blue);outline-offset:2px}
 @media(max-width:700px){.alarm-row{grid-template-columns:minmax(0,1fr);gap:14px;margin:0 12px 12px;padding:14px}.alarm-row .alarm-price-block{max-width:none;text-align:left;padding-top:12px;border-top:1px solid #dce6f1}.alarm-row .alarm-actions{grid-column:1;justify-content:flex-start}.alarm-row .alarm-actions button{min-height:44px}.alarm-row .alarm-condition{font-size:20px}}
+
+.alarm-toolbar{flex-wrap:nowrap}.alarm-toolbar input{flex:1 1 0;width:auto}.alarm-toolbar button{flex:none}
+
+.alarm-row.is-alarming{border-color:#f3c1bd;border-left-color:#c4332b;background:#fff8f7}.alarm-rule-title .alarm-badge.is-alarming{color:#a91d18;background:#ffe1dd;font-weight:650}
