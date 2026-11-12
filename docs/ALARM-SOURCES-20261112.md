@@ -29,3 +29,13 @@
 - 发布使用 scripts/deploy-alarm-sources.py：锁内基线校验、只替换 3 个静态文件，克隆现行后端；只重启 radar-alarms，校验报警配置和设备哈希完全未变。支持原子回滚，不恢复覆盖用户数据库。
 
 正式发布与三端回归结果在完成后追加。
+
+## 正式发布与验收
+
+- 功能源码 `3754023e0d80a5b100f8edce26beeada756a5503` 已推送。正式网页 `/opt/funding-radar-web/releases/20261112-alarm-sources-1794494007889713504`；后端 `/opt/radar-alarms/releases/3754023e0d80a5b100f8edce26beeada756a5503`。
+- 回滚网页 `/opt/funding-radar-web/releases/20261112-pin-scroll-1794469624371215264`；后端 `/opt/radar-alarms/releases/efbbf93d051d31d0202e3430fead4e7400354c90`。保留其他 3556 个静态文件，未动无关消息服务；用户报警配置和绑定哈希完全一致。
+- 线上健康版本 8，same-asset-spot-v1；只读核验两条启用规则均已统一币种、价格新鲜、正常主源监控，每条已有 4 个合格备用。日志无报警服务运行异常。
+- 正式已登录 Chrome：app.js?sources1 加载，BTC/USDT 两条显示正确。1440px 桌面、393px/320px 手机视口无横溢，截图留在任务 outputs/alarm-sources-live-desktop.png 与 alarm-sources-live-mobile.png。页面布局/CSS未改；用户在此期间自行调整过其中一条阈值，发布保留真实配置，不恢复旧截图阈值。
+- 手机检查是浏览器手机视口，不是实体 iPhone 实测。切源故障验证在隔离数据上完成，没有中断生产行情、发送测试通知或改真实规则。
+- 桌面小窗无独立价格报警引擎，云端更新不要求安装或打开。为核验主动启动过现有软件，用户认为多余；已解释并停止窗口操作。此后仅静态核对版本和代码，不声称已完成本次原生窗口视觉验收。
+- PR #70 已推送更新，尚未合并。已安装小窗版本不变。
