@@ -29,6 +29,25 @@ def run():
             r.apply({'kind':'membership','verified':False,'groups':[]},now);assert p.pin is None and not r.state()['sourceConnected'];checks.append('membership_failure_closes_scope')
             r.apply({'kind':'message','message':msg(4)},now);assert p.accepted==3;checks.append('unverified_event_ignored')
             assert r.process is None;checks.append('test_never_starts_sdk')
+            r.apply({'kind':'membership','verified':True,'groups':[{'id':'oc_fixture','groupId':group,'name':'Synthetic'}]},now)
+            for n in range(10,17):
+                item=msg(n);item['sentAt']=server.iso(now+n)
+                r.apply({'kind':'message','message':item},now+n)
+            history=r.history();assert len(history['messages'])==5
+            assert [x['id'] for x in history['messages']]==[digest(str(n)) for n in range(16,11,-1)]
+            assert history['currentId']==digest('16') and not p.normal
+            r.apply({'kind':'message','message':item},now+17);assert len(r.history()['messages'])==5
+            live=json.loads((root/'state'/'feed.json').read_text());assert live['messages']==[] and live['pinned']['id']==digest('16')
+            checks.append('five_pins_newest_first_dedup_separate_from_normal')
+            p.db.close();p=server.Publisher(root/'state',public);r=CloudReceiver(p,private,'not-started','not-started')
+            try:r.history();raise AssertionError('unverified history exposed')
+            except server.Rejected:pass
+            r.apply({'kind':'membership','verified':True,'groups':[{'id':'oc_fixture','groupId':group,'name':'Synthetic'}]},now+18)
+            assert len(r.history()['messages'])==5
+            p.pin_group=other
+            try:r.history();raise AssertionError('other group history exposed')
+            except server.Rejected:pass
+            checks.append('history_persists_restart_and_membership_guard')
             p.db.close()
     return {'passed':True,'checks':checks,'syntheticOnly':True}
 

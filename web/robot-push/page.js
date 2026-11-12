@@ -1,3 +1,4 @@
+import {createPinHistory} from './pin-history.js';
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
 import {FeedStore,safeUrl,timeUTC8} from './feed-color.js?v=20261011-session';
@@ -7,6 +8,7 @@ import {demoData} from './demo.js';
 import {createFeedPolicy} from './feed-policy.js?v=20261028-1';
 const $=id=>document.getElementById(id),store=new FeedStore(),reader=new CarouselReader();
 const board=$('board'),feed=$('feed'),pin=$('pinned');let timer=null,poll=null,newCount=0,lastPinKey=null,lastWindowKey=null,manualHeld=false;
+const pinHistory=createPinHistory({element:pin,renderCard:message=>card(message,true)});
 const demo=new URLSearchParams(location.search).get('mode')==='demo';
 let soundWanted=false,audio=null,primed=false,lastTone=-Infinity,toneRequests=0,audioBuffer=null,soundBusy=false,soundFailed=false;const activeSounds=new Set();const openedAt=Date.now();
 try{const p=JSON.parse(localStorage.getItem('robot-push-ui')||'{}');reader.configure(p.enabled!==false,p.seconds||5,Date.now());soundWanted=p.sound===true;}catch{}
@@ -157,7 +159,7 @@ function renderFeed(anchor){
  if(!anchor&&lastWindowKey){const item=[...feed.children].find(el=>el.dataset.id===firstVisible());if(item)anchor={id:item.dataset.id,top:item.getBoundingClientRect().top,scroll:board.scrollTop,delta:0};}
  let layoutChanged=false;const ids=reader.ids,key=String(mobile.matches)+'|'+store.revision+'|'+ids.join('|');
  const pinKey=store.pinned?JSON.stringify(store.pinned):'';
- if(pinKey!==lastPinKey){layoutChanged=true;guardScroll();pin.replaceChildren(...(store.pinned?[card(store.pinned,true)]:[]));lastPinKey=pinKey;}
+ if(pinKey!==lastPinKey){layoutChanged=true;guardScroll();pinHistory.setCurrent(store.pinned);lastPinKey=pinKey;}
  if(key!==lastWindowKey){
   layoutChanged=true;guardScroll();
   const byId=new Map(store.messages.map(m=>[m.id,m]));
@@ -187,8 +189,8 @@ function acceptFeed(batch,{audible,emptyMessage}){
  // Remove only disallowed DOM now; normal layout/scroll work keeps its gate.
  const allowed=new Set(store.messages.map(message=>message.id));
  for(const node of [...feed.children])if(!allowed.has(node.dataset.id))node.remove();
- for(const node of [...pin.children])if(node.dataset.id!==store.pinned?.id)node.remove();
- if(detailOpen&&!allowed.has(detailOpen.focus)&&store.pinned?.id!==detailOpen.focus){detailOpen=null;$('detail-content').replaceChildren();$('message-detail').close();}
+ pinHistory.setCurrent(store.pinned);
+ if(detailOpen&&!allowed.has(detailOpen.focus)&&!pinHistory.contains(detailOpen.focus)){detailOpen=null;$('detail-content').replaceChildren();$('message-detail').close();}
  reader.synchronize(store.messages.map(message=>message.id),Date.now());
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
  const initialJump=initialPositionPending&&reader.ids.length>0;

@@ -305,6 +305,27 @@ def handler(trial):
             if self.path == BASE + 'api/card-oi' and desktop:
                 try:return self.reply(200, desktop.public_card_oi())
                 except Exception:return self.reply(503, {'error':'双边 OI 暂不可用'})
+            if self.path == BASE + 'api/pinned-history' and desktop:
+                account = self.authorized_account() if self.headers.get('Authorization') else None
+                if self.headers.get('Authorization') and account is None:
+                    return self.reply(401, {'error':'请重新连接自己的推送码'})
+                try:
+                    from urllib.request import urlopen
+                    with urlopen('http://127.0.0.1:18883/pinned-history', timeout=5) as response:
+                        raw=response.read(2*1024*1024+1)
+                    if len(raw)>2*1024*1024:raise ValueError('history_size')
+                    result=json.loads(raw)
+                    if account is not None:
+                        policy=desktops.policy(account)
+                        with policy.lock:
+                            now=time.time();visible=[];hidden=0
+                            for row in result['messages']:
+                                action=policy.decision('desktop',row['id'],policy.rows(row,now),now,record=False) or 'allow'
+                                if action=='hide':hidden+=1
+                                else:visible.append(row)
+                            result['messages']=visible;result['hiddenCount']=hidden
+                    return self.reply(200,result)
+                except Exception:return self.reply(503,{'error':'置顶历史暂时无法读取，请重试'})
             account = self.authorized_account()
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})

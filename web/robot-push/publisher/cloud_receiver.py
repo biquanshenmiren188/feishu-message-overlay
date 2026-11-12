@@ -57,6 +57,7 @@ class CloudReceiver:
             if p.db.execute('SELECT count(*) FROM cloud_seen').fetchone()[0]>=10000:raise ValueError('bounded_dedup_limit')
             p.db.execute('INSERT INTO cloud_seen VALUES (?,?)',(m['id'],now));p.db.commit()
             if m['groupId']==p.pin_group:
+                p.pin_history.remember(m,utc(m['sentAt']))
                 if p.pin is None or utc(m['sentAt'])>=utc(p.pin['sentAt']):p.pin=m
             else:p.normal[m['id']]=m
             p.accepted+=1
@@ -100,6 +101,13 @@ class CloudReceiver:
         except Exception:
             self.stop_child();self.connected=False;self.verified=False;self.groups=[]
             self.publisher.write(False,now);self.retry_at=now+self.retry_delay;self.retry_delay=min(60,self.retry_delay*2)
+
+    def history(self):
+        p=self.publisher
+        if not self.verified:raise Rejected(503,'history_source_unverified')
+        if not p.pin_group:return {'messages':[],'currentId':None,'limit':5}
+        if p.pin_group not in {g['groupId'] for g in self.groups}:raise Rejected(403,'pin_source')
+        return {'messages':p.pin_history.rows(p.pin_group),'currentId':p.pin['id'] if p.pin else None,'limit':5}
 
     def state(self):
         p=self.publisher
