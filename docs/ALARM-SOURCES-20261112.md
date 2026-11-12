@@ -45,3 +45,6 @@
 用户发现新增报警原生 datalist 仍显示 BTC-USDT-SWAP。此次补齐 options value、输入值及编辑回填统一 BASE/USDT；保存时通过当前交易所目录唯一解析回原始交易对 q.symbol。支持精确基础币、统一币对及旧原始代码输入；多个品种同一显示身份时不静默取第一条。不同计价/包装币/倍率币不合并。
 
 五项精准匹配/解析测试和 JS 语法检查通过。隔离浏览器实测 OKX 输入 BTC → 选项 BTC/USDT → 保存请求仍为 OKX BTC-USDT-SWAP；编辑回填 BTC/USDT，393px 弹窗无横溢。纯静态部署脚本 scripts/deploy-alarm-picker.py 只修改 app/search/index，不重启报警和消息服务、不打开或更新软件、不修改真实报警或测试推送。
+
+选择器补丁已发布：源码 `36d9a28c05799810b38b5e84499945a8d873f982`，网页 current=`20261112-alarm-picker-1794494633098765897`，回滚=`20261112-alarm-sources-1794494007889713504`；后端仍为 3754023，三个服务 PID 均未变，保留3556其他静态文件。
+正式已登录页面确认加载 picker1，OKX 搜索 BTC/ETH 的 datalist value 分别为 BTC/USDT、ETH/USDT，393px 弹窗无横溢。截图 outputs/alarm-picker-live-desktop.png。编辑统一回填和原始交易对提交由隔离环境验证；正式编辑入口追加检查受浏览器控制超时影响，不计为完成。未保存真实规则、未发送通知、未操作桌面软件。
