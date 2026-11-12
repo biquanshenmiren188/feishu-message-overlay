@@ -102,6 +102,12 @@ function updateForm(){
  $('#repeat-help').hidden=!repeat;
  $('#quote-preview').hidden=!q;$('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'';
 }
+function renderFallbackOptions(selected=field('fallbackExchange').value||'auto'){
+ const main=field('exchange').value;
+ field('fallbackExchange').innerHTML='<option value="auto">自动选择</option><option value="off">关闭备用切换</option>'+Object.entries(venue).filter(([key])=>key!==main).map(([key,name])=>`<option value="${key}">${name} · 现货</option>`).join('');
+ field('fallbackExchange').value=selected===main?'auto':selected;
+ if(!field('fallbackExchange').value)field('fallbackExchange').value='auto';
+}
 function renderCatalog(){
  const query=field('symbol').value.trim();
  const rows=query?catalog.filter(q=>matchesInstrument(query,q)):[];
@@ -122,17 +128,18 @@ function openRule(rule=null){
  if(rule?.state?.asset?.pair)field('symbol').value=rule.state.asset.pair;
  if(!field('exchange').value)field('exchange').value='binance';
  if(!field('condition').value)field('condition').value='above';
+ renderFallbackOptions(rule?.fallbackExchange||'auto');
  $('#legacy-rule-help').hidden=!rule;
  $('#rule-enabled-row').hidden=!rule;field('enabled').checked=rule?.enabled??true;
  updateForm();$('#alarm-editor').showModal();loadCatalog();
 }
 $('#add-alarm').onclick=()=>openRule();
 form.addEventListener('input',e=>{draft=true;if(e.target.name==='symbol')renderCatalog();updateForm();});
-form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){field('symbol').value='';loadCatalog();}updateForm();});
+form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){field('symbol').value='';renderFallbackOptions();loadCatalog();}updateForm();});
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
  const q=resolveInstrument(field('symbol').value,catalog);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
- const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:field('enabled').checked};
+ const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,fallbackExchange:field('fallbackExchange').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:field('enabled').checked};
  if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
 function openDevice(){if(!verified||!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}
@@ -151,8 +158,8 @@ async function testBark(){
 $('#test-bark').onclick=testBark;$('#test-bark-inline').onclick=testBark;
 $('#unbind-bark').onclick=async()=>{if(confirm('解除当前 Bark 绑定？报警规则会保留，尚未发送的通知将取消。')&&await commit({action:'unbind'})){draft=false;$('#bark-editor').close();toast('已解除 Bark 绑定');}};
 $('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy||!verified)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit')openRule(r);else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
-for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;if(draft&&!confirm('放弃尚未保存的修改？'))return;draft=false;$('#'+b.dataset.close).close();};
-for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy||(draft&&!confirm('放弃尚未保存的修改？')))e.preventDefault();else draft=false;});
+for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;draft=false;$('#'+b.dataset.close).close();};
+for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy)e.preventDefault();else draft=false;});
 $('#alarm-search').oninput=renderRules;$('#refresh-alarms').onclick=()=>load();
 document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
 document.addEventListener('radar-profile-ready',async e=>{lastToken=token();await load(true,true);if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});

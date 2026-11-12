@@ -2,6 +2,7 @@
 from decimal import Decimal, InvalidOperation
 
 REPEAT_SECONDS = 30
+FALLBACK_VENUES = ('binance', 'okx', 'bybit', 'bitget', 'gate', 'aster')
 
 
 def number(value):
@@ -22,6 +23,12 @@ def validate(raw):
     rule = {k: raw.get(k) for k in ('exchange', 'market', 'symbol', 'priceType', 'condition')}
     if rule['exchange'] not in ('binance', 'bybit', 'okx', 'bitget', 'gate', 'aster'):
         raise ValueError('请选择支持的交易所')
+    fallback = raw.get('fallbackExchange', 'auto')
+    if not isinstance(fallback, str) or fallback not in ('auto', 'off', *FALLBACK_VENUES):
+        raise ValueError('请选择有效的备用现货源')
+    if fallback == rule['exchange']:
+        raise ValueError('备用现货源请选择其他交易所')
+    rule['fallbackExchange'] = fallback
     if rule['market'] not in ('spot', 'future') or rule['priceType'] not in ('last', 'mark'):
         raise ValueError('请选择市场和价格类型')
     if rule['market'] == 'spot' and rule['priceType'] != 'last':

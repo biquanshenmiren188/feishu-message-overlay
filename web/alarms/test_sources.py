@@ -34,6 +34,31 @@ def warm(base='BTC', venue='okx', start=100):
 
 
 class SourceTests(unittest.TestCase):
+    def test_fallback_choice_validation(self):
+        self.assertEqual(rule()['fallbackExchange'],'auto')
+        for choice in ('auto','off','binance','bybit','bitget','gate','aster'):
+            self.assertEqual(rule(fallbackExchange=choice)['fallbackExchange'],choice)
+        for choice in ('okx','unknown',None,[],True):
+            with self.subTest(choice=choice), self.assertRaises(ValueError):rule(fallbackExchange=choice)
+
+    def test_explicit_choice_and_off_never_use_an_unselected_venue(self):
+        r,s=warm();r['fallbackExchange']='bybit'
+        q,e,t=select(r,s,book(quote(at=118),quote(venue='bybit',at=118)),118)
+        self.assertEqual(t['source']['exchange'],'bybit')
+        q,e,t=select(r,s,book(quote(at=118)),118);self.assertIsNone(q)
+        self.assertEqual(active_groups(r,s),{('okx','future'),('bybit','spot')})
+        r['fallbackExchange']='off'
+        q,e,t=select(r,s,book(quote(at=118),quote(venue='bybit',at=118)),118);self.assertIsNone(q)
+        self.assertEqual(active_groups(r,s),{('okx','future')})
+
+    def test_explicit_aster_uses_same_identity_and_freshness_checks(self):
+        r=rule('ETH',fallbackExchange='aster');s={}
+        for t in (100,102,104):
+            q,e,s=select(r,s,book(quote('ETH','okx','future',t),quote('ETH','aster',at=t)),t)
+        q,e,s=select(r,s,book(quote('ETH','aster',at=118)),118)
+        self.assertEqual(s['source']['exchange'],'aster')
+        q,e,s=select(r,s,book(quote('ETH','aster',at=118)),131);self.assertIsNone(q)
+
     def test_normalization_uses_metadata_not_symbol_guessing(self):
         for venue in ('binance','okx','bybit','bitget','gate','aster'):
             q = quote(venue=venue, market='future')
@@ -193,6 +218,25 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertFalse(self.store.view('a')['rules'][0]['state']['fired'])
         self.store.tick(book(quote(at=self.now+14,price='99')),self.now+14)
         self.assertEqual(len(self.store.view('a')['events']),2)
+
+    def test_all_venues_and_coins_create_edit_persist_native_identity_and_choice(self):
+        import secrets
+        venues=('binance','okx','bybit','bitget','gate','aster')
+        for venue in venues:
+            for base in ('BTC','ETH','SOL','PEPE','1000PEPE','WBTC'):
+                with self.subTest(venue=venue,base=base):
+                    native=base+'-USDT-SWAP' if venue=='okx' else base+'_USDT' if venue=='gate' else base+'USDT'
+                    q=quote(base,venue,'future',self.now);q['symbol']=native
+                    r=validate(dict(exchange=venue,market='future',symbol=native,priceType='last',condition='below',target='100',fallbackExchange='auto'))
+                    def mutate(**data):
+                        return self.store.mutate('matrix',dict(requestId=secrets.token_hex(16),revision=self.store.view('matrix')['revision'],**data),book(q))
+                    rid=mutate(action='save',rule=r)['id']
+                    for choice in ('auto','off',*tuple(v for v in venues if v!=venue)):
+                        mutate(action='save',id=rid,rule=dict(r,fallbackExchange=choice))
+                        saved=next(x for x in self.store.view('matrix')['rules'] if x['id']==rid)
+                        self.assertEqual((saved['symbol'],saved['exchange'],saved['fallbackExchange'],saved['target']),(native,venue,choice,'100'))
+        self.store.db.close();self.store=Store(self.temp.name)
+        self.assertEqual(len(self.store.view('matrix')['rules']),36)
 
 
 if __name__ == '__main__':unittest.main()

@@ -6,12 +6,18 @@ not evidence that similarly named tokens are the same asset.
 """
 import math
 import re
-from engine import number
+from engine import number, FALLBACK_VENUES
 
 SPOT_PRIORITY = ('binance', 'okx', 'bybit', 'bitget', 'gate')
 MAX_AGE = 12
 # Tickers with known collisions require a reviewed asset-specific mapping.
 AMBIGUOUS = frozenset(('PAY', 'TIME', 'KEY', 'DODOX', 'LUNA', 'LUNC', 'BTG'))
+
+
+def backup_venues(rule):
+    choice = rule.get('fallbackExchange', 'auto')
+    venues = SPOT_PRIORITY if choice == 'auto' else (choice,) if choice in FALLBACK_VENUES else ()
+    return tuple(v for v in venues if v != rule['exchange'])
 
 
 def identity(q):
@@ -68,9 +74,7 @@ def select(rule, previous, quotes, now, advance=True):
     old_source = state.get('source') or primary_source
     candidates = []
     if eligible(asset):
-        for venue in SPOT_PRIORITY:
-            if venue == rule['exchange']:
-                continue
+        for venue in backup_venues(rule):
             matching = [q for k, q in quotes.items() if k[:2] == (venue, 'spot') and identity(q) == asset]
             # Ambiguous listings in the same venue are never selected.
             if len(matching) == 1 and fresh(matching[0], 'last', now):
@@ -127,7 +131,7 @@ def select(rule, previous, quotes, now, advance=True):
 def active_groups(rule, state):
     groups = {(rule['exchange'], rule['market'])}
     if eligible(state.get('asset')):
-        groups.update((v, 'spot') for v in SPOT_PRIORITY if v != rule['exchange'])
+        groups.update((v, 'spot') for v in backup_venues(rule))
     return groups
 
 
