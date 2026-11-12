@@ -32,13 +32,19 @@ class DesktopProfiles:
         return self.profiles.desktop_account(data.get('pushCode'), 'desktop:'+client)
 
     def state(self, data):
-        if set(data) != {'pushCode', 'client'}:
+        if set(data) not in ({'pushCode', 'client'},{'pushCode','client','pinHistory'}) or 'pinHistory' in data and data['pinHistory']!=1:
             raise ValueError('桌面绑定请求无效')
-        if data['pushCode'] == '':
-            return unrestricted()
-        account = self.account(data)
-        return dict(pushBinding=dict(protocol=1, bound=True, canManage=True),
-                    desktopRules=self.policy(account).evaluate())
+        policy=None
+        if data['pushCode'] == '':result=unrestricted()
+        else:
+            account=self.account(data);policy=self.policy(account)
+            result=dict(pushBinding=dict(protocol=1,bound=True,canManage=True),desktopRules=policy.evaluate())
+        if data.get('pinHistory')==1:
+            from pinned_history import visible_history
+            history=visible_history(policy)
+            result['pinnedHistory']=history['messages']
+            result['desktopRules']['messages'].update(history['actions'])
+        return result
 
     def coins(self, data):
         from coin_control import dispatch

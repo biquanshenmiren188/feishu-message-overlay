@@ -9,7 +9,7 @@ internal static class CompactSummaryTests
         var strong=CompactMessage.From("强信号聚集｜TOKEN｜6 组同时 ACTIVE",strongBody);
         check(strong.Title=="强信号｜TOKEN｜6组","strong V2 summary title");
         check(strong.Signals==string.Join("\n",netValues.Select((value,index)=>$"R{index}｜FF｜AS→BN｜{value}")),"strong V2 per-route net means preserve sign and precision");
-        foreach(var detail in new[]{"V3收敛 · 180秒 · 净均 +9.99%","V2收敛 · 181秒 · 净均 +9.99%","其他说明 · 净均 +9.99%","V2收敛 · 180秒 · 净均 未知","V2收敛 · 180秒 · 盘口差 +9.99%"})
+        foreach(var detail in new[]{"V3收敛 · 180秒 · 净均 +9.99%","V2收敛 · 0秒 · 净均 +9.99%","其他说明 · 净均 +9.99%","V2收敛 · 180秒 · 净均 未知","V2收敛 · 180秒 · 盘口差 +9.99%"})
             check(CompactMessage.From("强信号聚集｜TOKEN｜2 组同时 ACTIVE",$"最高净均 +9.99%\nR1｜SF｜买 GATE → 卖 BITGET\n{detail}\n净均 +8.88%\nR2｜FF｜买 ASTER → 卖 BINANCE\nV2收敛 · 180秒 · 净均 -0.12% · ACTIVE 7s").Signals=="R1｜SF｜GT→BG\nR2｜FF｜AS→BN｜-0.12%","strong V2 rejects unrelated details without borrowing another route");
         check(CompactMessage.From("强信号｜TOKEN","R6+｜FF｜买 OKX → 卖 BINANCE 净均 -0.12%\nV2收敛 · 180秒 · 净均 +9.99%\nR1｜SF｜买 GATE → 卖 BITGET\nV2收敛\t·\t180秒\t·\t净均\t+0.0010% · ACTIVE 7s").Signals=="R6+｜FF｜OK→BN｜-0.12%\nR1｜SF｜GT→BG｜+0.0010%","strong V2 inline priority and horizontal whitespace");
         const string observation="CTUSDT / USDT-FUTURES | 5分钟 close持续突降 | -3.4321 个百分点 | 档位 跌幅>=0.10 个百分点 | close 0.0000% -> -3.4321%";

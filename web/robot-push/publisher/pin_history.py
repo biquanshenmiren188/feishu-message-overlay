@@ -1,7 +1,7 @@
 """Bounded, persistent pin archive. Reading history never enters the live feed."""
 import json
 
-LIMIT = 5
+LIMIT = 200  # Source candidates; each user sees at most five after filtering.
 
 class PinHistory:
     def __init__(self, db):

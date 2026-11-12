@@ -26,6 +26,15 @@ class PinHistoryTest(unittest.TestCase):
                 self.assertEqual(len(get()[1]['messages']),2)
                 code,value=get(self.codes[0]['token']);self.assertEqual(code,200);self.assertEqual([m['id'] for m in value['messages']],['b'*64]);self.assertEqual(value['hiddenCount'],1)
                 self.assertEqual(len(get(self.codes[1]['token'])[1]['messages']),2)
+                envelope['messages']=[first]+[dict(second,id=str(n)*64) for n in range(1,7)]
+                code,value=get(self.codes[0]['token']);self.assertEqual(code,200)
+                self.assertEqual([m['id'] for m in value['messages']],[str(n)*64 for n in range(1,6)])
+                self.assertEqual(value['currentId'],'1'*64);self.assertEqual(value['sourceCurrentId'],first['id'])
+                self.assertEqual(len(get()[1]['messages']),5)
+                with patch('pinned_history.visible_history',return_value=value), patch.object(self.bindings.policy(self.bindings.account(self.data())),'evaluate',return_value=dict(messages={})):
+                    result=self.bindings.state(dict(self.data(),pinHistory=1))
+                self.assertEqual(len(result['pinnedHistory']),5)
+
                 calls=fetch.call_count;self.assertEqual(get('invalid')[0],401);self.assertEqual(fetch.call_count,calls)
             with patch('urllib.request.urlopen',side_effect=OSError('offline')):self.assertEqual(get()[0],503)
             self.assertEqual(before,{p:p.read_bytes() for p in self.profiles.directory.rglob('*') if p.is_file()})

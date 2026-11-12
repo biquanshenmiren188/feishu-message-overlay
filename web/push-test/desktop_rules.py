@@ -121,6 +121,10 @@ class DesktopRules:
         return desktop_rows(message,now)
 
     def decision(self, channel, identity, rows, now, oi_evidence=None, *, record=True):
+        if channel=='desktop' and rows and all(r.get('aggregate') for r in rows) and len(rows)>1:
+            outcomes=[self.decision(channel,identity,[row],now,record=False) or 'allow' for row in rows]
+            if 'allow' in outcomes:return None
+            if 'mute' in outcomes:return 'mute'
         policy=self.data[channel]; settings=policy['settings']; reasons=[];action='hide'
         if not settings['notify_enabled']:reasons=['接收已关闭']
         else:

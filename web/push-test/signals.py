@@ -85,7 +85,7 @@ def parse_messages(message, now, *, max_age=1800):
     # The observed V2 source adds this fixed window before each route's net
     # value. Keep the value on the immediately following line and require all
     # declared groups; headline percentages and adjacent routes are not values.
-    net_prefix = r'(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?'
+    net_prefix = r'(?:V2收敛[ \t]*·[ \t]*[1-9]\d{0,5}秒[ \t]*·[ \t]*)?'
     blocks = re.findall(r'^\s*R(\d{1,24})(\+?)\s*[|·]\s*(SF|FS|FF)\s*[|·]\s*([^\n]+)\n[ \t]*'+net_prefix+r'净均[ \t]*([+-]?\d+(?:\.\d+)?)[ \t]*%[ \t]*·[ \t]*ACTIVE[^\n]*$', body, re.M | re.I)
     if len(blocks) != int(header[2]):
         return []
@@ -107,7 +107,7 @@ def parse_messages(message, now, *, max_age=1800):
                       rank='R'+str(int(rank))+suffix, value=value+'%')
         # Each route has its own identity and still deduplicates with normal
         # signals through the existing content fingerprint.
-        result.append(dict(fields, id=digest([mid, fields]), at=int(sent), fingerprint=digest(fields)))
+        result.append(dict(fields, id=digest([mid, fields]), at=int(sent), fingerprint=digest(fields), aggregate=True))
     return result
 
 

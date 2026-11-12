@@ -191,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                     if 'pushCode' in control:
                         from desktop_binding import desktop_state
                         from urllib.error import HTTPError
-                        try:result.update(desktop_state(control['pushCode'], self.headers.get('X-Publish-Key','')))
+                        try:result.update(desktop_state(control['pushCode'], self.headers.get('X-Publish-Key',''), pin_history=control.get('pinHistory')==1))
                         except HTTPError as error:
                             status=400 if error.code == 400 else 503
                             error.close()

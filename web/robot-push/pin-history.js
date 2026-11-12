@@ -20,6 +20,10 @@ export function historySignals(message){
  }
  return rows.join('\n');
 }
+export function visiblePins(current,rows){
+ const unique=new Map(rows.map(m=>[m.id,m]));if(current)unique.set(current.id,current);
+ return [...unique.values()].sort((a,b)=>Date.parse(b.sentAt)-Date.parse(a.sentAt)).slice(0,5).reverse();
+}
 const token=()=>{try{return localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';}catch{return '';}};
 export function createPinHistory({element,renderCard}){
  let current=null,rows=[],identity=token(),epoch=0,controller=null,signature='',lastFetch=0,ready=true,following=true,resizing=false;
@@ -27,34 +31,34 @@ export function createPinHistory({element,renderCard}){
  element.setAttribute('aria-label','置顶消息，向上滚动查看最近5条');
  const observe=new ResizeObserver(()=>size());
  function size(){
-  const first=[...element.children].find(n=>n.dataset.id===current?.id);if(!first){element.style.removeProperty('--pin-history-height');return;}
+  const first=element.lastElementChild;if(!first){element.style.removeProperty('--pin-history-height');return;}
   const style=getComputedStyle(first),height=first.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
   if(height>0)element.style.setProperty('--pin-history-height',height+'px');if(following)element.scrollTop=element.scrollHeight;
  }
  function anchor(){if(element.scrollHeight-element.clientHeight-element.scrollTop<=2)return null;const top=element.getBoundingClientRect().top,item=[...element.children].find(n=>n.getBoundingClientRect().bottom>top+1);return item?{id:item.dataset.id,offset:item.getBoundingClientRect().top-top}:null;}
  function render(){
-  const messages=current?[...rows.filter(m=>m.id!==current.id).slice(0,4).sort((a,b)=>Date.parse(a.sentAt)-Date.parse(b.sentAt)),current]:[];
+  const messages=visiblePins(current,rows);
   const next=JSON.stringify(messages);if(next===signature){size();return;}
   const saved=anchor();following=!saved;signature=next;observe.disconnect();
   element.replaceChildren(...messages.map((m,index)=>{
-   const node=renderCard(m);if(m.id!==current.id){const summary=node.querySelector('.summary-signals'),text=historySignals(m);if(summary&&text){summary.textContent=text;summary.title=text;}}
+   const node=renderCard(m);if(m.id!==current?.id){const summary=node.querySelector('.summary-signals'),text=historySignals(m);if(summary&&text){summary.textContent=text;summary.title=text;}}
    return node;
-  }));const detail=document.querySelector('#detail-content>.pin');if(detail&&!messages.some(m=>m.id===detail.dataset.id))document.querySelector('#message-detail')?.close();size();const latest=[...element.children].find(n=>n.dataset.id===current?.id);if(latest)observe.observe(latest);
+  }));const detail=document.querySelector('#detail-content>.pin');if(detail&&!messages.some(m=>m.id===detail.dataset.id))document.querySelector('#message-detail')?.close();size();const latest=element.lastElementChild;if(latest)observe.observe(latest);
   if(saved){const node=[...element.children].find(n=>n.dataset.id===saved.id);if(node)element.scrollTop+=node.getBoundingClientRect().top-element.getBoundingClientRect().top-saved.offset;else element.scrollTop=element.scrollHeight;}
   else element.scrollTop=element.scrollHeight;
  }
  function clear(){epoch++;controller?.abort();controller=null;rows=[];render();}
  function check(){const next=token();if(identity!==next){identity=next;clear();lastFetch=0;}return next;}
  async function refresh(){
-  const auth=check();if(!current||controller||!ready||document.hidden)return;
-  const own=++epoch,active=current.id;controller=new AbortController();const abort=controller;lastFetch=Date.now();
+  const auth=check();if(controller||!ready||document.hidden)return;
+  const own=++epoch,active=current?.id;controller=new AbortController();const abort=controller;lastFetch=Date.now();
   const timer=setTimeout(()=>abort.abort(),8000);
   try{
    const response=await fetch('/radar/push-test/api/pinned-history',{headers:auth?{Authorization:'Bearer '+auth}:{},cache:'no-store',redirect:'error',signal:abort.signal});
    if(!response.ok)throw Error('history_unavailable');const data=await response.json(),result=historyRows(data);
    if(own!==epoch||token()!==auth||current?.id!==active)return;
    // Only attach an archive that belongs to the same current source snapshot.
-   if(data.currentId!==active){rows=[];render();return;}
+   if(active&&(data.sourceCurrentId??data.currentId)!==active){rows=[];render();return;}
    rows=result;render();element.removeAttribute('data-history-error');
    element.title='向上滚动查看最近5条置顶消息（含当前）；历史不会补发或响铃';
   }catch{if(own===epoch){rows=[];render();element.dataset.historyError='true';element.title='置顶历史暂时无法读取，将自动重试；当前置顶不受影响';}}
@@ -62,10 +66,10 @@ export function createPinHistory({element,renderCard}){
  }
  element.addEventListener('scroll',()=>{if(!resizing)following=element.scrollHeight-element.clientHeight-element.scrollTop<=2;},{passive:true});
  window.addEventListener('resize',()=>{resizing=true;requestAnimationFrame(()=>{size();resizing=false;});});
- const wake=()=>{check();if(current&&Date.now()-lastFetch>=3000)void refresh();};
+ const wake=()=>{check();if(Date.now()-lastFetch>=3000)void refresh();};
  element.addEventListener('wheel',event=>{if(!event.ctrlKey&&!event.metaKey)event.stopPropagation();},{passive:true});
  for(const name of ['touchstart','touchmove','touchend','touchcancel'])element.addEventListener(name,event=>event.stopPropagation(),{passive:true});
- element.addEventListener('keydown',event=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(event.key))event.stopPropagation();});
+ element.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(event.key))return;event.stopPropagation();if(event.target!==element)return;event.preventDefault();const steps={ArrowUp:-40,ArrowDown:40,PageUp:-element.clientHeight,PageDown:element.clientHeight};element.scrollTop=event.key==='Home'?0:event.key==='End'?element.scrollHeight:element.scrollTop+steps[event.key];});
  window.addEventListener('storage',wake);window.addEventListener('focus',wake);
  document.addEventListener('radar-profile-changing',()=>{clear();ready=false;});
  document.addEventListener('radar-rules-saved',()=>{clear();lastFetch=0;});
@@ -76,8 +80,8 @@ export function createPinHistory({element,renderCard}){
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)wake();});
  setInterval(wake,15000);
  return {
-  setCurrent(message){const changed=JSON.stringify(current)!==JSON.stringify(message);if(changed){epoch++;controller?.abort();controller=null;}current=message;check();render();if(changed&&current)void refresh();},
-  contains(id){return !!current&&(id===current.id||rows.some(m=>m.id===id));},
+  setCurrent(message){const changed=JSON.stringify(current)!==JSON.stringify(message);if(changed){epoch++;controller?.abort();controller=null;}current=message;check();render();if(changed||!lastFetch)void refresh();},
+  contains(id){return id===current?.id||rows.some(m=>m.id===id);},
   clear
  };
 }
