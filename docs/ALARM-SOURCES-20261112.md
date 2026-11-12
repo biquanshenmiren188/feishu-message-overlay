@@ -57,3 +57,11 @@
 - 81 项 Python、5 项 JS 测试通过。Store 矩阵覆盖六所 × BTC/ETH/SOL/PEPE/1000PEPE/WBTC 六种合成身份，各自新增及全部可选备用编辑保存；不宣称每家真实上市全部测试资产。
 - 浏览器使用真实 Store 的本地隔离表单：六所分别新增保存，共六条；六条逐一编辑回填指定备用并再次保存，手机另保存一次，共 13 次成功写入。原始代码保持 OKX `ETH-USDT-SWAP`、Gate `1000PEPE_USDT` 等；未保存的三种关闭操作无对话框，重开保持原阈值。
 - 393px 和 320px 手机视口无横溢，选择、保存、回填及关闭通过；CSS 未改。没有操作真实规则、发送通知或打开桌面软件。部署使用 `scripts/deploy-alarm-choice.py`，健康版本 9 / same-asset-spot-v2。
+
+### 可选备用源正式发布
+
+- 功能源码 `8fd8060ca8d890756b30cc833cc2942654a89637`，网页 `/opt/funding-radar-web/releases/20261112-alarm-choice-1794495596818070394`，后端 `/opt/radar-alarms/releases/8fd8060ca8d890756b30cc833cc2942654a89637`。
+- 回滚网页 `20261112-alarm-picker-1794494633098765897`，后端 `3754023e0d80a5b100f8edce26beeada756a5503`。仅重启报警服务，3556 个其他静态文件、消息服务 PID、报警配置、设备绑定及推送设置均保持。
+- 正式 Chrome 已登录页加载 fallback-choice1：编辑旧规则回填 BTC/USDT 和 auto，改选后 X 直接关闭，重开原设置未变；新增 Bybit ETH/USDT 取得当前行情，可选 OKX 现货。取消及 Esc 均无二次确认，未提交真实修改。
+- 桌面 1991px、手机 393px/320px 页面与弹窗无横溢，截图 outputs/alarm-choice-live-desktop.png、alarm-choice-live-mobile.png。手机为浏览器视口检查，非实体 iPhone。
+- 只读验收 version 9 / fallbackSelection=true；两条启用规则均为新鲜主源行情、监控中，每条已有四个合格备用。日志未见运行异常。GitHub 分支及 PR #70 同步，待合并。
