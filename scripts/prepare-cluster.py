@@ -25,7 +25,7 @@ def prepare(base,out):
   raw=(repo/'web/robot-push'/n).read_text(encoding='utf-8').replace('feed-color.js?v=20261028-feed1','feed-color.js?v=20261112-cluster').encode();files['static/robot-push/'+n]=raw
  for source,target in [(base/'robot-push/index.html','static/robot-push/index.html'),(base/'backend/_opt_radar-webpush-test_public_index.html','fallback/index.html')]:
   html=source.read_text(encoding='utf-8');assert bundle.name in html
-  html=html.replace('performance-20261017/'+bundle.name,name).replace('</head>','<link rel="stylesheet" href="/radar/robot-push/cluster-card.css?v=20261112"></head>');files[target]=html.encode()
+  html=html.replace('performance-20261017/'+bundle.name,name).replace('</head>','<link rel="stylesheet" href="/radar/robot-push/cluster-card.css?v=20261112b"></head>');files[target]=html.encode()
  for n,v in files.items():
   p=out/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(v)
  (out/'plan.json').write_text(json.dumps({'baseline':inv,'files':{n:sha(v) for n,v in files.items()},'bundle':name},indent=2))

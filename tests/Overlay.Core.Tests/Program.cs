@@ -5,6 +5,11 @@ var now = DateTimeOffset.UtcNow;
 var store = new MessageStore(2, TimeSpan.FromMinutes(30));
 var checks = 0;
 void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); checks++; Console.WriteLine("PASS " + name); }
+var retained=new MessageStore(expireMessages:false);retained.Start(now);
+var historical=new IncomingMessage("retained","cloud","","history",now.AddHours(-2),SenderKind.Bot);
+Check(!retained.Add(historical,"cloud",now),"ordinary admission still rejects stale history");
+Check(retained.Add(historical,"cloud",now,retainedSnapshot:true),"authenticated cloud retained history survives late startup");
+Check(!retained.Add(historical,"cloud",now,retainedSnapshot:true),"retained history never duplicates");
 await DesktopUpdateTests.RunAsync(Check);
 CompactSummaryTests.Run(Check);
 TopicSpreadTests.Run(Check);

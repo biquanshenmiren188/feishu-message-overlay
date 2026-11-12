@@ -29,6 +29,11 @@ def run():
             r.apply({'kind':'membership','verified':False,'groups':[]},now);assert p.pin is None and not r.state()['sourceConnected'];checks.append('membership_failure_closes_scope')
             r.apply({'kind':'message','message':msg(4)},now);assert p.accepted==3;checks.append('unverified_event_ignored')
             assert r.process is None;checks.append('test_never_starts_sdk')
+            r.apply({'kind':'membership','verified':True,'groups':[{'id':'oc_fixture','groupId':group,'name':'Synthetic'}]},now)
+            p.pin_group=group
+            for n in [5,6]:r.apply({'kind':'message','message':dict(msg(n),title='强信号聚集｜TOKEN｜2 组同时 ACTIVE')},now)
+            assert p.pin['id']==digest('6') and digest('5') in p.normal and digest('6') not in p.normal
+            checks.append('cluster_previous_pin_retained_once')
             p.db.close()
     return {'passed':True,'checks':checks,'syntheticOnly':True}
 

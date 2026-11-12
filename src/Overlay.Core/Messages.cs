@@ -35,11 +35,11 @@ public sealed class MessageStore(int capacity = 100, TimeSpan? lifetime = null, 
         var latest=messages.Where(m=>m.SourceId==groupId).OrderByDescending(m=>m.SentAt).FirstOrDefault();
         if(latest is not null && messages.RemoveAll(m=>m.SourceId==groupId && m.Id!=latest.Id)>0)Revision++;
     }
-    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now,bool latestOnly=false)
+    public bool Add(IncomingMessage message, string selectedSource, DateTimeOffset now,bool latestOnly=false,bool retainedSnapshot=false)
     {
         Prune(now);
         if (message.SourceId != selectedSource || message.Kind != SenderKind.Bot || string.IsNullOrWhiteSpace(message.Id) ||
-            message.SentAt <= cutoff || message.SentAt > now.AddMinutes(1) || now - message.SentAt >= ttl) return false;
+            (!retainedSnapshot && message.SentAt <= cutoff) || message.SentAt > now.AddMinutes(1) || (!retainedSnapshot && now - message.SentAt >= ttl)) return false;
         var key = message.SourceId + "\0" + message.Id;
         if (seen.ContainsKey(key) || messages.Any(m=>m.SourceId==message.SourceId && m.Id==message.Id)) return false;
         // Bound both message history and the deduplication window.

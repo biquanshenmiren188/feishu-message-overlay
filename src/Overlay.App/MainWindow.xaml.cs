@@ -176,9 +176,9 @@ public partial class MainWindow : Window
             foreach (var message in messages)
             {
                 try {
-                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow,latestOnly:message.SourceId==pinnedChatId && !(message.Card?.Title.Contains("强信号聚集")??false)))
+                    if(selectedChats.Contains(message.SourceId) && store.Add(message,message.SourceId,DateTimeOffset.UtcNow,latestOnly:message.SourceId==pinnedChatId && !(message.Card?.Title.Contains("强信号聚集")??false),retainedSnapshot:current is CloudMessageSource))
                     {
-                        if(current is not CloudMessageSource cloudMessage || message.SentAt>cloudMessage.StartedAt && cloudMessage.Rules.SoundMessage(message.Id))added=true;acceptedGroups.Add(message.SourceId);
+                        if(current is not CloudMessageSource cloudMessage || message.SourceId!=pinnedChatId && message.SentAt>cloudMessage.StartedAt && cloudMessage.Rules.SoundMessage(message.Id))added=true;acceptedGroups.Add(message.SourceId);
                         if(current.IsRealConnection){realMessages++;lastMessageChatId=message.SourceId;lastAcceptedType=message.MessageType;lastReadable=message.Text.Length>0 && !message.Text.StartsWith("[该消息类型") && !message.Text.StartsWith("[正文格式") && !message.Text.StartsWith("[接口未提供");reception.RecordAccepted(message,true,lastReadable,DateTimeOffset.UtcNow);}
                     }
                 }
