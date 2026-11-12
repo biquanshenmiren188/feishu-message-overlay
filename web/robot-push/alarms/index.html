@@ -23,7 +23,7 @@
 <div class="dialog-title"><h2 id="alarm-editor-title">新增报警</h2><button type="button" class="icon-button" data-close="alarm-editor" aria-label="关闭报警编辑">×</button></div>
 <fieldset id="alarm-fields">
 <label class="alarm-field">交易所<select name="exchange"><option value="binance">Binance · 币安</option><option value="okx">OKX</option><option value="bybit">Bybit</option><option value="bitget">Bitget</option><option value="gate">Gate</option><option value="aster">Aster</option></select></label>
-<label class="alarm-field">币种 / 交易对<input name="symbol" required autocomplete="off" placeholder="精准输入，例如 BTC 或 BTCUSDT" maxlength="64"><datalist id="alarm-symbols"></datalist></label><p id="quote-preview" class="helper" hidden></p>
+<label class="alarm-field">币种 / 交易对<input name="symbol" required autocomplete="off" placeholder="精准输入，例如 BTC 或 BTC/USDT" maxlength="64"><datalist id="alarm-symbols"></datalist></label><p id="quote-preview" class="helper" hidden></p>
 <div class="alarm-form-grid"><label>报警条件<select name="condition"><option value="above">涨到</option><option value="below">跌到</option></select></label><label>目标价格（USDT）<input name="target" inputmode="decimal" required placeholder="输入价格" maxlength="64"></label></div>
 <label class="alarm-field">提醒次数<select name="repeat"><option value="false">仅一次</option><option value="true">持续提醒（每 30 秒）</option></select></label>
 <label id="rule-enabled-row" class="alarm-check" hidden><input type="checkbox" name="enabled" checked>启用报警</label>
@@ -36,5 +36,5 @@
 </form></dialog>
 <dialog id="bark-editor" class="alarm-dialog bark-dialog" aria-labelledby="bark-title"><form id="bark-form"><div class="dialog-title"><h2 id="bark-title">Bark 接收设备</h2><button type="button" class="icon-button" data-close="bark-editor" aria-label="关闭设备绑定">×</button></div><p class="helper" id="bark-current">绑定到当前推送码。切换网页方案不会转移此设备。</p><label class="alarm-field">设备名称<input name="label" value="我的 iPhone" maxlength="30" required></label><label class="alarm-field">Bark 推送地址或 Key<input name="key" type="password" autocomplete="new-password" spellcheck="false" placeholder="粘贴 Bark App 首页的推送地址" required maxlength="180"></label><p class="helper">支持 https://api.day.app/…，保存后只显示绑定状态。更换设备会取消尚未发送的旧队列。</p><p class="helper"><a href="https://bark.day.app/" target="_blank" rel="noopener noreferrer">Bark 使用说明 ↗</a></p><p id="bark-form-error" class="error" role="alert"></p><div class="bark-existing" id="bark-existing" hidden><button type="button" id="test-bark">发送一条测试通知</button><button type="button" id="unbind-bark" class="danger-text">解除绑定</button></div><div class="dialog-actions"><button type="button" data-close="bark-editor">关闭</button><button type="submit" class="primary" id="save-bark">保存绑定</button></div></form></dialog>
 <div id="alarm-toast" class="alarm-toast" role="status" hidden></div>
-<script type="module" src="app.js?v=20261112-sources1"></script>
+<script type="module" src="app.js?v=20261112-picker1"></script>
 </body></html>

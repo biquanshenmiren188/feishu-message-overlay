@@ -1,7 +1,7 @@
 import {readSnapshot,saveSnapshot,clearSnapshots} from './snapshot.js?v=20261111-cache1';
 import {connection} from './session.js?v=20261111-smooth1';
 import {patchHTML} from './dom.js?v=20261111-smooth1';
-import {matchesInstrument,matchesAlarm} from './search.js?v=20261112-sources1';
+import {matchesInstrument,matchesAlarm,instrumentLabel,resolveInstrument} from './search.js?v=20261112-picker1';
 const $=s=>document.querySelector(s),form=$('#alarm-form'),barkForm=$('#bark-form');
 const field=n=>form.elements.namedItem(n),API='/radar/alarms-api/';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -98,7 +98,7 @@ async function commit(data){
 }
 $('#retry-action').onclick=async()=>{const testing=pending?.data.action==='test';if(pending&&await commit(pending.data)){if(testing){showTestResult=true;renderTestResult();}draft=false;$('#alarm-editor').close();$('#bark-editor').close();toast('原操作已确认完成');}};
 function updateForm(){
- const repeat=field('repeat').value==='true',q=catalog.find(q=>q.symbol===field('symbol').value);
+ const repeat=field('repeat').value==='true',q=resolveInstrument(field('symbol').value,catalog);
  $('#repeat-help').hidden=!repeat;
  $('#quote-preview').hidden=!q;$('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'';
 }
@@ -106,19 +106,20 @@ function renderCatalog(){
  const query=field('symbol').value.trim();
  const rows=query?catalog.filter(q=>matchesInstrument(query,q)):[];
  if(rows.length)field('symbol').setAttribute('list','alarm-symbols');else field('symbol').removeAttribute('list');
- $('#alarm-symbols').innerHTML=rows.map(q=>`<option value="${esc(q.symbol)}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');
+ $('#alarm-symbols').innerHTML=rows.map(q=>`<option value="${esc(instrumentLabel(q))}">${esc(q.base)} · ${esc(price(q.last))} USDT</option>`).join('');
 }
 const catalogCache=new Map();
 async function loadCatalog(){
- const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market='future';
+ const generation=++catalogEpoch,auth=token(),exchange=field('exchange').value,market='future',inputBefore=field('symbol').value;
  catalog=[];$('#alarm-symbols').replaceChildren();field('symbol').removeAttribute('list');$('#quote-preview').textContent='正在载入交易对…';
- try{const key=auth+':'+exchange,cached=catalogCache.get(key);const data=cached&&Date.now()-cached.at<60000?cached.data:await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(auth===token())catalogCache.set(key,{at:Date.now(),data});if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>a.symbol.localeCompare(b.symbol));renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
+ try{const key=auth+':'+exchange,cached=catalogCache.get(key);const data=cached&&Date.now()-cached.at<60000?cached.data:await api(`catalog?exchange=${exchange}&market=${market}`,undefined,auth);if(auth===token())catalogCache.set(key,{at:Date.now(),data});if(generation!==catalogEpoch||auth!==token())return;catalog=data.items.sort((a,b)=>instrumentLabel(a).localeCompare(instrumentLabel(b)));const selected=resolveInstrument(inputBefore,catalog);if(editing&&field('symbol').value===inputBefore&&selected)field('symbol').value=instrumentLabel(selected);renderCatalog();updateForm();if(!catalog.length)$('#quote-preview').textContent='此市场行情暂未就绪，稍后重新选择交易所重试。';}catch(e){if(generation===catalogEpoch)$('#quote-preview').textContent=e.message;}
 }
 function openRule(rule=null){
  if(!verified||!current)return;form.reset();editing=rule?rule.id:null;draft=false;$('#alarm-form-error').textContent='';$('#alarm-editor-title').textContent=editing?'编辑报警':'新增报警';
  let exchange='binance';try{exchange=localStorage.getItem('radar-alarm-exchange')||exchange;}catch{}
  const initial={exchange,condition:'above',repeat:false,...rule};
  for(const name of ['exchange','symbol','condition','target','repeat'])if(initial[name]!==undefined&&initial[name]!==null)field(name).value=String(initial[name]);
+ if(rule?.state?.asset?.pair)field('symbol').value=rule.state.asset.pair;
  if(!field('exchange').value)field('exchange').value='binance';
  if(!field('condition').value)field('condition').value='above';
  $('#legacy-rule-help').hidden=!rule;
@@ -130,8 +131,8 @@ form.addEventListener('input',e=>{draft=true;if(e.target.name==='symbol')renderC
 form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){field('symbol').value='';loadCatalog();}updateForm();});
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
- const q=catalog.find(q=>q.symbol===field('symbol').value);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
- const rule={exchange:field('exchange').value,market:'future',symbol:field('symbol').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:field('enabled').checked};
+ const q=resolveInstrument(field('symbol').value,catalog);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
+ const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:field('enabled').checked};
  if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
 function openDevice(){if(!verified||!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}
