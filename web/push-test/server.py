@@ -346,7 +346,8 @@ def handler(trial):
                 return self.reply(403, {'error': '来源不匹配'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 8192:
+                limit=16*1024*1024 if self.path=='/internal/desktop-binding' and self.client_address[0]=='127.0.0.1' else 8192
+                if not 0 < size <= limit:
                     return self.reply(413, {'error': '请求大小错误'})
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):

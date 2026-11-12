@@ -32,7 +32,7 @@ class DesktopProfiles:
         return self.profiles.desktop_account(data.get('pushCode'), 'desktop:'+client)
 
     def state(self, data):
-        if set(data) not in ({'pushCode', 'client'},{'pushCode','client','pinHistory'}) or 'pinHistory' in data and data['pinHistory']!=1:
+        if set(data) not in ({'pushCode', 'client'},{'pushCode','client','pinHistory','history'}) or 'pinHistory' in data and data['pinHistory']!=1:
             raise ValueError('桌面绑定请求无效')
         policy=None
         if data['pushCode'] == '':result=unrestricted()
@@ -41,7 +41,7 @@ class DesktopProfiles:
             result=dict(pushBinding=dict(protocol=1,bound=True,canManage=True),desktopRules=policy.evaluate())
         if data.get('pinHistory')==1:
             from pinned_history import visible_history
-            history=visible_history(policy)
+            history=visible_history(policy,source=data['history'])
             result['pinnedHistory']=history['messages']
             result['desktopRules']['messages'].update(history['actions'])
         return result

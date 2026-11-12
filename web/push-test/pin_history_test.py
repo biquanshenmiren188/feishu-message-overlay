@@ -33,7 +33,7 @@ class PinHistoryTest(unittest.TestCase):
                 self.assertEqual(value['currentId'],'1'*64);self.assertEqual(value['sourceCurrentId'],first['id'])
                 self.assertEqual(len(get()[1]['messages']),5)
                 with patch('pinned_history.visible_history',return_value=value), patch.object(self.bindings.policy(self.bindings.account(self.data())),'evaluate',return_value=dict(messages={})):
-                    result=self.bindings.state(dict(self.data(),pinHistory=1))
+                    result=self.bindings.state(dict(self.data(),pinHistory=1,history=envelope))
                 self.assertEqual(len(result['pinnedHistory']),5)
 
                 calls=fetch.call_count;self.assertEqual(get('invalid')[0],401);self.assertEqual(fetch.call_count,calls)
