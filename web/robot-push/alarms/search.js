@@ -7,5 +7,5 @@ export function matchesInstrument(query,item){
 export function matchesAlarm(query,rule){
  const q=normalized(query),symbol=normalized(rule.symbol);
  const base=symbol.replace(/(?:-USDT-SWAP|[-_/]?USDT)$/,'');
- return matchesInstrument(q,{symbol,base})||q===normalized(rule.note)||q===normalized(rule.exchange);
+ return matchesInstrument(q,{symbol,base:rule.state?.asset?.base||base})||q===normalized(rule.state?.asset?.pair)||q===normalized(rule.note)||q===normalized(rule.exchange);
 }

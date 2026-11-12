@@ -22,3 +22,9 @@ test('saved alarms match exact coin, full symbol, venue or complete note',()=>{
  for(const symbol of ['WBTCUSDT','1000BTCUSDT','BTCBUSDT'])assert.equal(matchesAlarm('BTC',{symbol}),false);
  assert.equal(matchesAlarm('RATS',{symbol:'1000RATSUSDT'}),false);
 });
+
+test('canonical display pair can be searched without aliasing wrapped or scaled coins',()=>{
+ const r={symbol:'BTC-USDT-SWAP',state:{asset:{base:'BTC',pair:'BTC/USDT'}}};
+ for(const q of ['BTC','btc/usdt','BTC-USDT-SWAP'])assert.equal(matchesAlarm(q,r),true);
+ for(const q of ['WBTC','1000BTC','BTC/USD'])assert.equal(matchesAlarm(q,r),false);
+});

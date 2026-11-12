@@ -11,6 +11,7 @@ import time
 from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
 from engine import evaluate, validate, matches, number, REPEAT_SECONDS
+from sources import select, active_groups, source_key, source_label, fresh
 
 
 def dump(value):
@@ -223,9 +224,10 @@ class Store:
                 rule = json.loads(row['config'])
                 previous = json.loads(row['state'])
                 key = rule['exchange'], rule['market'], rule['symbol']
-                state, event = evaluate(rule, previous, quotes.get(key), now)
+                selected, effective, routing = select(rule, previous, quotes, now)
+                state, event = evaluate(effective, routing, selected, now)
                 if state['status'] not in ('paused', 'expired', 'triggered'):
-                    active.add(key[:2])
+                    active.update(active_groups(rule, state))
                 if state != previous:
                     self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['id']))
                 if rule['repeat'] and state['status'] != 'alarming':
@@ -234,15 +236,14 @@ class Store:
                     if rule['repeat']:
                         self.cancel(row['profile'], row['id'], '已由本轮报警替代')
                     names = dict(above='涨到', below='跌到', enter='进入区间', exit='离开区间')
-                    price_kind = '最新成交价' if rule['priceType'] == 'last' else '标记价格'
                     clock = time.strftime('%m-%d %H:%M:%S', time.gmtime(now + 8 * 3600))
                     condition = rule['target'] + ('～' + rule['upper'] if rule['upper'] else '')
-                    title = rule['symbol'] + ' ' + names[rule['condition']] + ' ' + condition
+                    title = state.get('asset', {}).get('pair', rule['symbol']) + ' ' + names[rule['condition']] + ' ' + condition
                     reason = '价格仍满足条件，每 30 秒提醒' if event['reason'] == 'continuous' else '行情恢复时满足条件' if event['reason'] == 'recovery' else '启用时已满足条件' if event['reason'] == 'initial' else '价格穿越'
-                    body = f"{rule['exchange'].upper()} · {'永续' if rule['market']=='future' else '现货'} · {price_kind}\n触发价格：{event['price']} USDT\n{reason}\n{clock}（北京时间）"
+                    body = f"{source_label(state['source'])}\n触发价格：{event['price']} USDT\n{reason}\n{clock}（北京时间）"
                     if rule['note']:
                         body += '\n' + rule['note']
-                    payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'])
+                    payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'], source=state['source'])
                     if rule['repeat']:
                         payload['repeatInterval'] = REPEAT_SECONDS
                     device = self.db.execute('SELECT * FROM devices WHERE profile=?', (row['profile'],)).fetchone()
@@ -275,12 +276,24 @@ class Store:
                 if saved:
                     rule, state = json.loads(saved['config']), json.loads(saved['state'])
                     valid = rule['enabled'] and (not rule['expiresAt'] or now < rule['expiresAt'])
+                    if valid and not rule['repeat'] and quotes is not None:
+                        selected, effective, routing = select(rule, state, quotes, now, advance=False)
+                        queued_source = json.loads(row['payload']).get('source')
+                        valid = fresh(selected, effective['priceType'], now) and (not queued_source or source_key(queued_source) == source_key(routing.get('source')))
+                        if not valid:
+                            # A cancelled, never-sent one-shot must not remain permanently fired.
+                            state.update(fired=False, gap=True, pending=None, status='stale')
+                            self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['rule_id']))
                     if valid and rule['repeat']:
                         key = rule['exchange'], rule['market'], rule['symbol']
-                        q = quotes.get(key) if quotes is not None else {rule['priceType']: state.get('price'), 'observedAt': state.get('observedAt', 0), rule['priceType']+'At': state.get('sampleAt', 0)}
+                        selected, effective, routing = select(rule, state, quotes, now, advance=False) if quotes is not None else (None, rule, state)
+                        q = selected if quotes is not None else {rule['priceType']: state.get('price'), 'observedAt': state.get('observedAt', 0), rule['priceType']+'At': state.get('sampleAt', 0)}
                         try:
-                            stamp = q.get(rule['priceType']+'At') or q['observedAt']
-                            valid = now >= state.get('lastDispatch', 0) + REPEAT_SECONDS and -2 <= now-q['observedAt'] <= 12 and -2 <= now-stamp <= 12 and matches(rule, number(q.get(rule['priceType'])))
+                            stamp = q.get(effective['priceType']+'At') or q['observedAt']
+                            valid = now >= state.get('lastDispatch', 0) + REPEAT_SECONDS and -2 <= now-q['observedAt'] <= 12 and -2 <= now-stamp <= 12 and matches(rule, number(q.get(effective['priceType'])))
+                            queued_source = json.loads(row['payload']).get('source')
+                            actual_source = routing.get('source')
+                            valid = valid and (not queued_source or source_key(queued_source) == source_key(actual_source))
                         except (ValueError, TypeError, KeyError, AttributeError):
                             valid = False
             if not valid:
