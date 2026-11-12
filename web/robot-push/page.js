@@ -8,7 +8,7 @@ import {demoData} from './demo.js';
 import {createFeedPolicy} from './feed-policy.js?v=20261028-1';
 const $=id=>document.getElementById(id),store=new FeedStore(),reader=new CarouselReader();
 const board=$('board'),feed=$('feed'),pin=$('pinned');let timer=null,poll=null,newCount=0,lastPinKey=null,lastWindowKey=null,manualHeld=false;
-const pinHistory=createPinHistory({element:pin,renderCard:message=>card(message,true)});
+const pinHistory=createPinHistory({element:pin,renderCard:message=>card(message,true),onLayout:()=>{const atEnd=board.scrollHeight-board.clientHeight-board.scrollTop<=2;fitKey='';fitCards(true);if(atEnd){guardScroll();board.scrollTop=board.scrollHeight;}updateLatest();updateProgress();}});
 const demo=new URLSearchParams(location.search).get('mode')==='demo';
 let soundWanted=false,audio=null,primed=false,lastTone=-Infinity,toneRequests=0,audioBuffer=null,soundBusy=false,soundFailed=false;const activeSounds=new Set();const openedAt=Date.now();
 try{const p=JSON.parse(localStorage.getItem('robot-push-ui')||'{}');reader.configure(p.enabled!==false,p.seconds||5,Date.now());soundWanted=p.sound===true;}catch{}
@@ -143,7 +143,12 @@ function fitFeed(force){
  board.style.setProperty('--fit-font','13px');
  pin.style.position=mobile.matches?'relative':'sticky';
  for(const el of [...pin.children,...feed.children]){el.style.height='';el.style.minHeight='0';}
- const required=feed.offsetHeight+pin.offsetHeight;
+ const required=feed.offsetHeight;
+ // At the latest position, fit whole rows between the fixed pin and footer.
+ // A short trailing inset avoids showing only the tail of the first message.
+ const available=board.clientHeight-(parseFloat(getComputedStyle(board).paddingTop)||0),end=feed.lastElementChild?.getBoundingClientRect().bottom;
+ const first=[...feed.children].find(el=>end-el.getBoundingClientRect().top<=available);
+ board.style.paddingBottom=required>available&&first?Math.max(0,available-(end-first.getBoundingClientRect().top))+'px':'0px';
  if(pin.offsetHeight>=board.clientHeight*.5)pin.style.position='relative';
  board.dataset.fitFont='13';board.dataset.fitPasses='1';board.dataset.fitRequired=String(required);board.dataset.fitAvailable=String(board.clientHeight);
  board.dataset.fitStatus=required<=board.clientHeight?'fully-fitted':'native-history';board.title='';updateProgress();
@@ -301,7 +306,7 @@ function progressGeometry(){
 
 function updateProgress(active=false){
  const g=progressGeometry(),count=reader.ids.length;historyRail.hidden=(!count&&!store.pinned)||g.domain===0;
- historyRail.style.height=board.clientHeight+'px';historyRail.dataset.mobile=String(mobile.matches);
+ historyRail.style.top=board.offsetTop+'px';historyRail.style.height=board.clientHeight+'px';historyRail.dataset.mobile=String(mobile.matches);
  historyRail.tabIndex=mobile.matches?-1:0;historyRail.setAttribute('role',mobile.matches?'progressbar':'scrollbar');
  historyRail.setAttribute('aria-valuenow',String(Math.round(g.ratio*100)));historyRail.setAttribute('aria-valuetext',`历史第${Math.max(0,reader.rangeIndex)+1}至${Math.max(0,reader.rangeIndex)+reader.window().length}条，共${count}条；当前范围滚动${Math.round(g.overflow?board.scrollTop/g.overflow*100:0)}%`);
  historyRail.setAttribute('aria-valuetext',`历史共${count}条；已滚动${Math.round(g.ratio*100)}%`);

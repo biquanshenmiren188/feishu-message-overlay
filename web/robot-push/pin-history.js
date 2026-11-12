@@ -25,15 +25,20 @@ export function visiblePins(current,rows){
  return [...unique.values()].sort((a,b)=>Date.parse(b.sentAt)-Date.parse(a.sentAt)).slice(0,5).reverse();
 }
 const token=()=>{try{return localStorage.getItem('radar-settings-token')||localStorage.getItem('radar-test-token')||'';}catch{return '';}};
-export function createPinHistory({element,renderCard}){
- let current=null,rows=[],identity=token(),epoch=0,controller=null,signature='',lastFetch=0,ready=true,following=true,resizing=false;
+export function createPinHistory({element,renderCard,onLayout=()=>{}}){
+ let current=null,rows=[],identity=token(),epoch=0,controller=null,signature='',lastFetch=0,retry=null,following=true,resizing=false,lastHeight=0;
+ // Two real scroll viewports: ordinary rows must never pass behind the pin.
+ const board=element.parentElement;
+ if(board?.id==='board')board.before(element);
  element.classList.add('pin-history-scroll');element.tabIndex=0;
  element.setAttribute('aria-label','置顶消息，向上滚动查看最近5条');
  const observe=new ResizeObserver(()=>size());
  function size(){
-  const first=element.lastElementChild;if(!first){element.style.removeProperty('--pin-history-height');return;}
-  const style=getComputedStyle(first),height=first.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
-  if(height>0)element.style.setProperty('--pin-history-height',height+'px');if(following)element.scrollTop=element.scrollHeight;
+  const first=element.lastElementChild,style=first&&getComputedStyle(first);
+  const height=first?first.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0):0;
+  if(height>0)element.style.setProperty('--pin-history-height',height+'px');else element.style.removeProperty('--pin-history-height');
+  if(following)element.scrollTop=element.scrollHeight;
+  if(height!==lastHeight){lastHeight=height;onLayout();}
  }
  function anchor(){if(element.scrollHeight-element.clientHeight-element.scrollTop<=2)return null;const top=element.getBoundingClientRect().top,item=[...element.children].find(n=>n.getBoundingClientRect().bottom>top+1);return item?{id:item.dataset.id,offset:item.getBoundingClientRect().top-top}:null;}
  function render(){
@@ -47,21 +52,22 @@ export function createPinHistory({element,renderCard}){
   if(saved){const node=[...element.children].find(n=>n.dataset.id===saved.id);if(node)element.scrollTop+=node.getBoundingClientRect().top-element.getBoundingClientRect().top-saved.offset;else element.scrollTop=element.scrollHeight;}
   else element.scrollTop=element.scrollHeight;
  }
- function clear(){epoch++;controller?.abort();controller=null;rows=[];render();}
- function check(){const next=token();if(identity!==next){identity=next;clear();lastFetch=0;}return next;}
+ function clear(){epoch++;controller?.abort();controller=null;clearTimeout(retry);retry=null;rows=[];render();}
+ function check(){const next=token();if(identity!==next){identity=next;current=null;clear();lastFetch=0;}return next;}
  async function refresh(){
-  const auth=check();if(controller||!ready||document.hidden)return;
-  const own=++epoch,active=current?.id;controller=new AbortController();const abort=controller;lastFetch=Date.now();
+  const auth=check();if(controller||document.hidden)return;
+  clearTimeout(retry);retry=null;
+  const own=++epoch;controller=new AbortController();const abort=controller;lastFetch=Date.now();
   const timer=setTimeout(()=>abort.abort(),8000);
   try{
    const response=await fetch('/radar/push-test/api/pinned-history',{headers:auth?{Authorization:'Bearer '+auth}:{},cache:'no-store',redirect:'error',signal:abort.signal});
    if(!response.ok)throw Error('history_unavailable');const data=await response.json(),result=historyRows(data);
-   if(own!==epoch||token()!==auth||current?.id!==active)return;
-   // Only attach an archive that belongs to the same current source snapshot.
-   if(active&&(data.sourceCurrentId??data.currentId)!==active){rows=[];render();return;}
+   if(own!==epoch||token()!==auth)return;
+   // This endpoint applies the account policy itself. The ordinary feed can
+   // advance (or temporarily await its own policy) without invalidating history.
    rows=result;render();element.removeAttribute('data-history-error');
    element.title='向上滚动查看最近5条置顶消息（含当前）；历史不会补发或响铃';
-  }catch{if(own===epoch){rows=[];render();element.dataset.historyError='true';element.title='置顶历史暂时无法读取，将自动重试；当前置顶不受影响';}}
+  }catch{if(own===epoch){rows=[];render();element.dataset.historyError='true';element.title='置顶历史暂时无法读取，将自动重试；当前置顶不受影响';retry=setTimeout(()=>void refresh(),1000);}}
   finally{clearTimeout(timer);if(own===epoch)controller=null;}
  }
  element.addEventListener('scroll',()=>{if(!resizing)following=element.scrollHeight-element.clientHeight-element.scrollTop<=2;},{passive:true});
@@ -71,16 +77,15 @@ export function createPinHistory({element,renderCard}){
  for(const name of ['touchstart','touchmove','touchend','touchcancel'])element.addEventListener(name,event=>event.stopPropagation(),{passive:true});
  element.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(event.key))return;event.stopPropagation();if(event.target!==element)return;event.preventDefault();const steps={ArrowUp:-40,ArrowDown:40,PageUp:-element.clientHeight,PageDown:element.clientHeight};element.scrollTop=event.key==='Home'?0:event.key==='End'?element.scrollHeight:element.scrollTop+steps[event.key];});
  window.addEventListener('storage',wake);window.addEventListener('focus',wake);
- document.addEventListener('radar-profile-changing',()=>{clear();ready=false;});
- document.addEventListener('radar-rules-saved',()=>{clear();lastFetch=0;});
- document.addEventListener('radar-feed-policy-snapshot',event=>{
-  const next=!event.detail?.bound||event.detail?.ready===true;
-  if(!next&&ready)clear();const changed=next!==ready;ready=next;if(changed&&next)wake();
- });
+ const invalidate=()=>{current=null;clear();lastFetch=0;queueMicrotask(()=>void refresh());};
+ document.addEventListener('radar-profile-changing',invalidate);
+ document.addEventListener('radar-rules-saved',invalidate);
+ window.addEventListener('storage',event=>{if(event.key==='radar-rules-revision')invalidate();});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)wake();});
  setInterval(wake,15000);
+ queueMicrotask(()=>void refresh());
  return {
-  setCurrent(message){const changed=JSON.stringify(current)!==JSON.stringify(message);if(changed){epoch++;controller?.abort();controller=null;}current=message;check();render();if(changed||!lastFetch)void refresh();},
+  setCurrent(message){const changed=current?.id!==message?.id;current=message;check();render();if(changed||!lastFetch)void refresh();},
   contains(id){return id===current?.id||rows.some(m=>m.id===id);},
   clear
  };
