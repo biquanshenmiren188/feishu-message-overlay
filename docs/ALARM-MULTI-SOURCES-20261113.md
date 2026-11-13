@@ -19,3 +19,11 @@ Store六所×BTC/ETH/SOL新增、编辑、数据库重新打开验证多项/空�
 源码4c30f93c35dabc0da2306fb0668c92a66a5a60ee，网页/opt/funding-radar-web/releases/20261113-alarm-multi-1794540390144446058，后端/opt/radar-alarms/releases/4c30f93c35dabc0da2306fb0668c92a66a5a60ee。回滚网页/opt/funding-radar-web/releases/20261113-alarm-form-1794539603043523314、后端/opt/radar-alarms/releases/535c9bccfa8439c983239962d8e5dd1237579b3c。服务器两轮93项测试通过；仅重启报警服务，3557其他静态文件、无关服务、用户配置及设备绑定保持。
 
 正式3号浏览器新增和编辑均显示正确勾选，旧auto未扩张到Aster；电脑横排、393px手机3+2无横溢，关闭无确认。截图outputs/alarm-multi-live-desktop.png、outputs/alarm-multi-live-mobile.png。正式已有2条报警仍启用监控，实际保存流程在隔离真实Store完成12次，未修改真实规则或发送测试通知。视口恢复、隔离服务停止。GitHub PR70待合并。
+
+## 线上同版发送链路复核
+
+用户再次要求确认备用不仅显示切换。新增可重复的隔离验收脚本scripts/verify-selected-backup-delivery.py，并在正式服务器导入current指向的4c30f93全部实际模块运行；核对7个模块SHA与发布源码一致。12种场景（Binance/OKX主源 × BTC/ETH/SOL × 涨到/跌到）全部通过。
+
+脚本使用临时SQLite和虚拟时间，真实Market.poll→Store.tick→claim→send_event→begin_send→Bark POST构造→finish；仅模拟交易所行情和Bark外部HTTP。仅勾Bybit/Gate，主源超时后首次Bybit；Bybit超时后Gate；首次触发后0、30、60秒各一次请求，29/59秒不发，载荷包含实际备用来源和触发价格及critical/volume5/call1。价格恢复停止，排队后行情失效取消，所有勾选备用失效时不使用仍健康的未选源。报告work/selected-backup-delivery-live.json，生产规则/绑定摘要及服务PID前后保持。未重启或部署业务代码。
+
+边界：这是正式代码的隔离发送链路验证，Bark响应模拟200；不能把此结果称为真实Bark已接收或用户手机已收到/响铃。
