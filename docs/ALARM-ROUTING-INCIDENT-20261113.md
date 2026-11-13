@@ -39,3 +39,5 @@
 用户要求确认备用价格不仅用于显示，还能触发每30秒的手机报警。补充隔离回归直接调用真实 Store.tick → claim → server.send_event → begin_send → Bark Request 构造及 finish，只在外部HTTP传输边界模拟Bark响应，不使用真实设备或向外发送通知。备用价持续低于阈值时，第0、30、60秒分别构造一次 https://api.day.app/push 请求，第29、59秒无重复；载荷包含备用现货来源/实际触发价、critical/volume=5/call=1和隔离设备Key。模拟接受后事件状态accepted；第90秒价格恢复后无新请求；排队后行情失效时HTTP函数不被调用，事件cancelled。此证据证明服务端发送链路和节奏，不等于实体手机已收到或响铃。
 
 用户另要求去掉表单底部说明及启用勾选：删除备用解释、重复说明、市场摘要、强提醒说明、高级参数说明，以及启用复选框。新增和编辑提交 enabled=true，保存即启用；其他输入、提醒次数和备用源保持。只发布index/app/search静态文件，无后台功能变更或服务重启。真实Store隔离浏览器验证新增和编辑两次保存均enabled=true，显示监控中。原CSS/页面布局不重做。
+
+表单精简已上线：源码812d6d896bd8ddd060e105997f1323e9f44a4361，网页20261113-alarm-form-1794539603043523314；可回滚到20261113-alarm-routing-1794538944032596063。后端仍535c9bc，无服务重启，3557其他静态文件保持。88项Python通过。正式3号浏览器新增/编辑均无底部说明或启用勾选，393px手机视口无横溢、关闭无确认；截图outputs/alarm-form-live-desktop.png、outputs/alarm-form-live-mobile.png。隔离新增编辑两次保存enabled=true；正式规则未提交修改，仍2条启用、设备绑定正常。视口恢复，隔离服务停止。
