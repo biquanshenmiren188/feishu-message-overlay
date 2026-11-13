@@ -15,12 +15,16 @@ from test_sources import OutageSimulationTests
 from server import send_event
 
 results=[]
-for main in ('binance','okx'):
- for coin in ('BTC','ETH','SOL'):
+venues=('binance','okx','bybit','bitget','gate','aster')
+for main in venues:
+ others=[v for v in venues if v!=main]
+ selected=[others[1],others[-1]]
+ first,second=selected
+ for coin in ('BTC','ETH','SOL','DOGE','XRP','PEPE','JCT'):
   for condition in ('below','above'):
    case=OutageSimulationTests()
    try:
-    store,market,failed,prices,step,start=case.run_scenario(main,coin,selected=['bybit','gate'])
+    store,market,failed,prices,step,start=case.run_scenario(main,coin,selected=selected)
     store.mutate('simulation',dict(action='bind',key='synthetic_selected_delivery_only',label='isolated',requestId=secrets.token_hex(16),revision=store.view('simulation')['revision']),market.snapshot()[0])
     with store.db:
      row=store.db.execute('SELECT id,config FROM rules').fetchone()
@@ -32,8 +36,8 @@ for main in ('binance','okx'):
     prices['value']=hit;sent=[]
     with patch('server.build_opener') as transport:
      transport.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
-     for seconds,expected_source,expected_count in [(19,'bybit',1),(33,'gate',1),(48,'gate',1),(49,'gate',2),(78,'gate',2),(79,'gate',3)]:
-      if seconds==33:failed.add(('bybit','spot'))
+     for seconds,expected_source,expected_count in [(19,first,1),(33,second,1),(48,second,1),(49,second,2),(78,second,2),(79,second,3)]:
+      if seconds==33:failed.add((first,'spot'))
       state=step(seconds)
       assert state['source']['exchange']==expected_source and state['source']['fallback']
       event=store.claim()
@@ -53,8 +57,8 @@ for main in ('binance','okx'):
      prices['value']=hit;step(139);event=store.claim();assert event is not None
      market.quotes={};send_event(store,event,market)
      assert store.view('simulation')['events'][0]['status']=='cancelled'
-     failed.add(('gate','spot'));assert step(170)['status']=='stale';assert store.claim() is None
+     failed.add((second,'spot'));assert step(170)['status']=='stale';assert store.claim() is None
      assert transport.return_value.open.call_count==3
-    results.append(dict(main=main,coin=coin,condition=condition,selected=['bybit','gate'],sent=sent,clearStops=True,staleQueueCancelled=True,uncheckedNeverUsed=True))
+    results.append(dict(main=main,coin=coin,condition=condition,selected=selected,sent=sent,clearStops=True,staleQueueCancelled=True,uncheckedNeverUsed=True))
    finally:case.doCleanups()
 print(json.dumps(dict(backend=str(backend),scenarios=results,passed=len(results),barkTransport='mocked; no external notifications'),ensure_ascii=False,indent=2))
