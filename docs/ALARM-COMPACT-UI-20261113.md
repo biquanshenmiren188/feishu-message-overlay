@@ -46,3 +46,14 @@
 发布源码 `5c4e8fb67a0f535762849b9d281bbcf86fea08ea`，静态版本 `/opt/funding-radar-web/releases/20261113-alarm-stable-1794547443810815650`；回滚为上述alarm-layout版本。更新5个已有文件、增加quote-display.js，3557个非目标文件保留。后端文件与所有服务PID不变，原两条报警及设备绑定哈希保持。已同步GitHub分支，PR未合并。
 
 验收截图：任务outputs/alarm-stable-desktop-live.png、outputs/alarm-stable-mobile-live.png；逐秒DOM记录work/alarm-stable-browser-audit.json。不启动桌面小窗，不改变原报警或额外发送通知。
+
+
+## 2026-11-13 对齐修正
+
+此前各单元格垂直居中，但币种/当前价/状态带第二行，触发条件和操作只有一行，导致首行错位。桌面改为首行21px对齐，状态徽标和44px操作按钮以首行中心定位，操作列与标题居中；手机当前价和触发条件顶对齐。保留来源占位与原刷新逻辑。
+
+隔离检查1440、1024、768、393、320px：当前价与触发价纵坐标一致，无页面横向溢出；操作按钮保留至少44px触控区。CSS修正未增加实现镜像测试，使用浏览器实际几何与截图验收。
+
+源码b30126799936d92908562b3e20655581eb9abaeb。静态release20261113-alarm-font-1794547924143668552，回滚alarm-stable-1794547443810815650。只更新compact.css及两个HTML的样式版本，3560个其他文件、后端文件、服务PID、规则和绑定保持。已推送PR70分支，未合并。
+
+正式3号Chrome已验收align1：桌面两行当前价/触发价/徽标/操作中心差小于0.001px，手机393px两行当前价/触发价Y坐标相同、无溢出。截图outputs/alarm-aligned-desktop-live.png及alarm-aligned-mobile-live.png。
