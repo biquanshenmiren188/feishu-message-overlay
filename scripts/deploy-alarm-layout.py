@@ -21,10 +21,11 @@ def alarm_config():
     return base.sha(json.dumps(values,sort_keys=True).encode())
 
 stage=Path(sys.argv[1]);m=json.loads((stage/'manifest.json').read_text())
-expected={'robot-push/alarms/'+n for n in ('index.html','history.html','app.js','compact.css')}
+typography=m.get('kind')=='typography'
+expected={'robot-push/alarms/'+n for n in (('index.html','history.html','compact.css') if typography else ('index.html','history.html','app.js','compact.css'))}
 assert set(m['files'])==expected
-assert set(m['baseline'])==expected-{'robot-push/alarms/compact.css'}
-assert m['newFiles']==['robot-push/alarms/compact.css']
+assert set(m['baseline'])==(expected if typography else expected-{'robot-push/alarms/compact.css'})
+assert m['newFiles']==([] if typography else ['robot-push/alarms/compact.css'])
 for n,h in m['files'].items():assert base.sha((stage/'static'/n).read_bytes())==h,n
 with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -33,7 +34,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
     for n in m['newFiles']:assert not (old/n).exists(),n
     base.health()
     if '--apply' not in sys.argv:print('Preflight passed');sys.exit(0)
-    label='20261113-alarm-layout-'+str(time.time_ns());new=base.ROOT/'releases'/label
+    label=('20261113-alarm-font-' if typography else '20261113-alarm-layout-')+str(time.time_ns());new=base.ROOT/'releases'/label
     backup=base.ROOT/'backups'/label;backup.mkdir(mode=0o700)
     (backup/'manifest.json').write_text(json.dumps(m,indent=2))
     before,links=base.inventory(old);services=pids();backend=Path('/opt/radar-alarms/current').resolve()
