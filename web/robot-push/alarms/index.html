@@ -1,19 +1,19 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>报警设置 · 资金费雷达</title><meta name="theme-color" content="#f4f6f8"><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><link rel="stylesheet" href="../settings/style.css?v=20261106-compact2"><link rel="stylesheet" href="/radar/radar-ui-v2.css?v=20261027-cardcompact1"><link rel="stylesheet" href="style.css?v=20261113-multi1"><link rel="stylesheet" href="/radar/robot-push/shared-account.css?v=20261106-independent1"><link rel="stylesheet" href="/radar/navigation-stable.css?v=20261106-duo1"></head>
-<body>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>报警设置 · 资金费雷达</title><meta name="theme-color" content="#f4f6f8"><link rel="manifest" href="/radar/push-test/manifest.webmanifest"><link rel="stylesheet" href="../settings/style.css?v=20261106-compact2"><link rel="stylesheet" href="/radar/radar-ui-v2.css?v=20261027-cardcompact1"><link rel="stylesheet" href="style.css?v=20261113-multi1"><link rel="stylesheet" href="/radar/robot-push/shared-account.css?v=20261106-independent1"><link rel="stylesheet" href="/radar/navigation-stable.css?v=20261106-duo1"><link rel="stylesheet" href="compact.css?v=20261113-compact1"></head>
+<body class="alarm-page">
 <header class="masthead has-radar-account"><a class="brand" href="/radar/robot-push/" aria-label="资金费雷达，返回 BOT"><img src="/radar/radar-brand-treasure-v2.svg" width="154" height="46" alt="资金费雷达"></a><a class="radar-account-entry" href="/radar/push-center/"><span class="ra-entry-title">推送中心</span><span class="ra-entry-status">正在读取</span></a></header>
 <nav class="site-nav" aria-label="资金费雷达导航"><a href="/radar/?tab=market">全市场费率</a><a href="/radar/?tab=FF&amp;mode=FF">机会筛选</a><a href="/radar/?panel=transfer">充提查询</a><a href="/radar/position-limits/">HY限额查询</a><a href="/radar/robot-push/">BOT</a><a href="/radar/robot-push/settings/">消息设置</a><a href="/radar/robot-push/alarms/" aria-current="page">报警设置</a></nav>
-<main class="alarm-layout is-loading"><nav class="alarm-tabs" aria-label="报警管理"><a href="./" aria-current="page">报警设置</a><a href="history.html">报警记录</a></nav>
+<main class="alarm-layout is-loading"><div class="alarm-page-heading"><nav class="alarm-tabs" aria-label="报警管理"><a href="./" aria-current="page">报警设置</a><a href="history.html">报警记录</a></nav><button class="primary" id="add-alarm" disabled>＋ 新增报警</button></div>
 <div class="alarm-intro"><span id="plan-label">正在读取报警</span></div>
 <section class="alarm-card" aria-labelledby="alarm-title">
-<div class="alarm-heading"><div><h1 id="alarm-title">报警设置</h1><p id="alarm-status" role="status">正在同步报警规则…</p></div><button class="primary" id="add-alarm" disabled>＋ 新增报警</button></div>
+<div class="alarm-heading"><div><h1 id="alarm-title">报警设置</h1><p id="alarm-status" role="status">正在同步报警规则…</p></div></div>
 <div class="alarm-connections"><div class="device-controls"><button id="bind-device" class="device-summary" disabled><span class="status-dot"></span><span id="device-label">正在读取设备</span><span class="device-action">管理设备</span></button><button id="test-bark-inline" disabled aria-describedby="bark-test-result">测试推送</button></div></div>
 <p id="bark-test-result" class="bark-test-result" role="status" aria-live="polite" hidden></p>
 <div id="alarm-notice" class="alarm-notice" role="status" hidden></div>
 <div id="pending-action" class="alarm-notice" hidden><span>操作结果未确认。请重试原操作，避免重复提交。</span><button id="retry-action">重试原操作</button></div>
-<div class="alarm-toolbar"><input type="search" id="alarm-search" placeholder="精准搜索币种或备注" aria-label="搜索报警"><button id="refresh-alarms">刷新</button></div>
-<div class="alarm-list-heading"><span>报警规则 <b id="alarm-count">—</b></span></div>
+<div class="alarm-toolbar"><input type="search" id="alarm-search" placeholder="搜索币种或备注" aria-label="搜索报警"><div class="alarm-filters" role="group" aria-label="筛选报警"><button data-filter="all" aria-pressed="true">全部 <span id="alarm-count">—</span></button><button data-filter="alarming" aria-pressed="false">报警中 <span id="alarming-count">—</span></button><button data-filter="outage" aria-pressed="false">行情异常 <span id="outage-count">—</span></button></div><button id="refresh-alarms">刷新</button></div>
+<div class="alarm-table-heading" aria-hidden="true"><span>币种 / 来源</span><span>当前价（USDT）</span><span>触发条件（USDT）</span><span>状态 / 提醒</span><span>操作</span></div>
 <div id="alarm-list" aria-busy="true"><div class="alarm-empty"><strong>正在同步…</strong></div></div>
 
 </section>
@@ -32,5 +32,5 @@
 </form></dialog>
 <dialog id="bark-editor" class="alarm-dialog bark-dialog" aria-labelledby="bark-title"><form id="bark-form"><div class="dialog-title"><h2 id="bark-title">Bark 接收设备</h2><button type="button" class="icon-button" data-close="bark-editor" aria-label="关闭设备绑定">×</button></div><p class="helper" id="bark-current">绑定到当前推送码。切换网页方案不会转移此设备。</p><label class="alarm-field">设备名称<input name="label" value="我的 iPhone" maxlength="30" required></label><label class="alarm-field">Bark 推送地址或 Key<input name="key" type="password" autocomplete="new-password" spellcheck="false" placeholder="粘贴 Bark App 首页的推送地址" required maxlength="180"></label><p class="helper">支持 https://api.day.app/…，保存后只显示绑定状态。更换设备会取消尚未发送的旧队列。</p><p class="helper"><a href="https://bark.day.app/" target="_blank" rel="noopener noreferrer">Bark 使用说明 ↗</a></p><p id="bark-form-error" class="error" role="alert"></p><div class="bark-existing" id="bark-existing" hidden><button type="button" id="test-bark">发送一条测试通知</button><button type="button" id="unbind-bark" class="danger-text">解除绑定</button></div><div class="dialog-actions"><button type="button" data-close="bark-editor">关闭</button><button type="submit" class="primary" id="save-bark">保存绑定</button></div></form></dialog>
 <div id="alarm-toast" class="alarm-toast" role="status" hidden></div>
-<script type="module" src="app.js?v=20261113-multi1"></script>
+<script type="module" src="app.js?v=20261113-compact1"></script>
 </body></html>

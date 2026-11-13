@@ -47,18 +47,27 @@ function renderTestResult(){
 function syncPlanLabel(){const code=window.RadarIdentity?.code();$('#plan-label').textContent=!token()?'未连接推送码':!verified?'正在核对当前推送码':code?'当前推送码 · 尾号 '+code.slice(-2):'当前推送码 · 已连接';}
 function presentation(r){return presentRule(r,{serverTime:current?.serverTime,elapsed:Math.max(0,performance.now()-snapshotStartedAt)/1000,verified:verified&&!snapshotError});}
 function price(value){if(!value)return '—';const n=Number(value);return n>=1?n.toLocaleString('en-US',{maximumFractionDigits:10}):value;}
-function description(r){return conditions[r.condition]+' '+price(r.target)+(r.upper?' ～ '+price(r.upper):'')+' USDT';}
+function description(r){return conditions[r.condition]+' '+price(r.target)+(r.upper?' ～ '+price(r.upper):'');}
+let statusFilter='all';
+const outageStatus=status=>['stale','unavailable'].includes(status);
+function matchStatus(r){const {status}=presentation(r);return statusFilter==='all'||(statusFilter==='alarming'?status==='alarming':outageStatus(status));}
 function renderRules(){
  if(!current)return;
  const search=$('#alarm-search').value.trim().toLowerCase();
- const rows=current.rules.filter(r=>matchesAlarm(search,r));
+ const rows=current.rules.filter(r=>matchesAlarm(search,r)&&matchStatus(r));
  $('#alarm-count').textContent=current.rules.length;
+ $('#alarming-count').textContent=current.rules.filter(r=>presentation(r).status==='alarming').length;
+ $('#outage-count').textContent=current.rules.filter(r=>outageStatus(presentation(r).status)).length;
+ for(const button of document.querySelectorAll('[data-filter]'))button.setAttribute('aria-pressed',String(button.dataset.filter===statusFilter));
  const selected=new URLSearchParams(location.search).get('rule');
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
  const markup=rows.length?rows.map(r=>{
   const {status,fresh}=presentation(r);
-  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}"><div class="alarm-identity"><div class="alarm-rule-title"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong><span class="alarm-badge ${status==='alarming'?'is-alarming':['watching','confirming'].includes(status)?'is-live':['stale','unavailable'].includes(status)?'is-warning':''}">${labels[status]||'等待行情'}</span></div><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}${r.note?' · '+esc(r.note):''}</small></div><div class="alarm-price-block"><div class="alarm-condition">${esc(description(r))}</div><div class="alarm-current">当前价 <span class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</span></div>${fresh&&r.state?.source?.fallback?`<small>备用行情：${esc(venue[r.state.source.exchange]||r.state.source.exchange)} · 现货 · 最新成交价</small>`:fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text">删除</button></div></article>`;
- }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'尝试输入完整币种或备注。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
+  const fallback=fresh&&r.state?.source?.fallback;
+  const badgeClass=status==='alarming'?'is-alarming':outageStatus(status)?'is-warning':fallback?'is-backup':['watching','confirming'].includes(status)?'is-live':'';
+  const badge=labels[status]||'等待行情';
+  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}"><div class="alarm-identity"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small>${r.note?`<small>${esc(r.note)}</small>`:''}</div><div class="alarm-current-cell"><span class="alarm-mobile-label">当前价（USDT）</span><span class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</span>${fallback?`<small class="alarm-source">备用：${esc(venue[r.state.source.exchange]||r.state.source.exchange)} · 现货</small>`:fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-target-cell"><span class="alarm-mobile-label">触发条件（USDT）</span><div class="alarm-condition">${esc(description(r))}</div></div><div class="alarm-state"><span class="alarm-badge ${badgeClass}">${esc(badge)}</span><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}</small></div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}" aria-label="编辑 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text" aria-label="删除 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">删除</button></div></article>`;
+ }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'可调整币种搜索或状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
 }
@@ -162,8 +171,9 @@ $('#unbind-bark').onclick=async()=>{if(confirm('解除当前 Bark 绑定？报�
 $('#alarm-list').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b||busy||!verified)return;const action=b.dataset.action;if(action==='new'){openRule();return;}const r=current?.rules.find(r=>r.id===b.dataset.id);if(!r)return;if(action==='edit')openRule(r);else if(action==='delete'&&confirm('删除 '+r.symbol+' 的这条报警？已有触发记录将保留。'))await commit({action:'delete',id:r.id});};
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)return;draft=false;$('#'+b.dataset.close).close();};
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy)e.preventDefault();else draft=false;});
+for(const button of document.querySelectorAll('[data-filter]'))button.onclick=()=>{statusFilter=button.dataset.filter;renderRules();};
 $('#alarm-search').oninput=renderRules;$('#refresh-alarms').onclick=()=>load();
-document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
+document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;statusFilter='all';clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
 document.addEventListener('radar-profile-ready',async e=>{lastToken=token();await load(true,true);if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});
 window.addEventListener('beforeunload',e=>{if(draft||pending){e.preventDefault();e.returnValue='';}});
 let refreshTimer;
@@ -174,6 +184,6 @@ setInterval(()=>{if(document.visibilityState==='visible'&&current)render();},100
 async function start(){
  const auth=token(),generation=epoch;const snapshot=await readSnapshot(auth);
  if(snapshot&&auth===token()&&generation===epoch&&!verified){try{cachedAt=snapshot.at;current=snapshot.data;render();}catch{current=null;renderedSignature='';clearSnapshots();}}
- await load();if(new URLSearchParams(location.search).get('binding')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openDevice();}scheduleRefresh();
+ await load();if(new URLSearchParams(location.search).get('new')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openRule();}if(new URLSearchParams(location.search).get('binding')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openDevice();}scheduleRefresh();
 }
 start();

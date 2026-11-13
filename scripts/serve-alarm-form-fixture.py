@@ -5,7 +5,7 @@ Only synthetic save operations are accepted. No real credentials or network feed
 """
 from pathlib import Path
 from http.server import ThreadingHTTPServer
-import json, mimetypes, sys, tempfile, time
+import json, mimetypes, sys, tempfile, time, uuid
 from urllib.parse import urlsplit, parse_qs
 
 repo=Path(__file__).resolve().parents[1]
@@ -21,6 +21,7 @@ temp=tempfile.TemporaryDirectory();store=Store(temp.name);market=Market();audit=
 venues=('binance','okx','bybit','bitget','gate','aster')
 bases=('BTC','ETH','SOL','PEPE','1000PEPE','WBTC')
 scaled='--denominations' in sys.argv
+layout='--layout' in sys.argv
 
 def scaled_book(at,failed=False):
     quotes={}
@@ -38,10 +39,17 @@ def refresh():
     for venue in venues:
         for base in bases:
             symbol=base+'-USDT-SWAP' if venue=='okx' else base+'_USDT' if venue=='gate' else base+'USDT'
-            q=dict(exchange=venue,market='future',symbol=symbol,base=base,quote='USDT',unit=base,instrumentVerified=True,last='100',lastAt=now,observedAt=now)
+            value=('68732.3' if venue=='okx' else '68735.8') if layout and base=='BTC' else '100'
+            q=dict(exchange=venue,market='future',symbol=symbol,base=base,quote='USDT',unit=base,instrumentVerified=True,last=value,lastAt=now,observedAt=now)
             quotes[(venue,'future',symbol)]=q
     market.quotes=quotes
     store.tick(quotes,now)
+
+if layout:
+    refresh()
+    for i,(venue,symbol,target) in enumerate((('okx','BTC-USDT-SWAP','65000'),('binance','BTCUSDT','66000'))):
+        store.mutate('fixture',dict(action='save',requestId=uuid.uuid4().hex,revision=i,rule=dict(exchange=venue,market='future',symbol=symbol,priceType='last',condition='below',target=target,repeat=True,enabled=True,fallbackExchanges=['bybit'],hold=0,cooldown=30,hysteresis='0',level='critical',immediate=True)),market.quotes)
+    refresh()
 
 Base=make_handler(store,market,lambda token:'fixture' if token=='synthetic_fixture_only' else None)
 class Handler(Base):
@@ -71,7 +79,8 @@ class Handler(Base):
         if not (chosen.is_relative_to(repo/'web/robot-push/alarms') or chosen.is_relative_to(root)) or not chosen.is_file():return self.reply(404,{})
         raw=chosen.read_bytes()
         if chosen.name=='index.html':
-            raw=raw.replace(b'<body>',b'<body><script>localStorage.setItem("radar-settings-token","synthetic_fixture_only");</script>')
+            import re
+            raw=re.sub(rb'(<body\b[^>]*>)',rb'\1<script>localStorage.setItem("radar-settings-token","synthetic_fixture_only");</script>',raw,count=1)
         self.send_response(200);self.send_header('Content-Type',mimetypes.guess_type(str(chosen))[0] or 'application/octet-stream');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(raw)
 
 print('Isolated form fixture: http://127.0.0.1:18794/radar/robot-push/alarms/',flush=True)
