@@ -24,3 +24,11 @@
 3号浏览器运行真实 Store/API/候选网页的 loopback 隔离环境，逐步确认：主源正常 → OKX 现货备用 → Bybit 现货备用 → 主源持续恢复后切回 → 全部断流显示中断/— → 延迟响应不再误报断流 → 网页 API 失败明确提示更新失败 → 恢复显示备用。手动冻结恢复样本超过 12 秒时恢复计数会重置；持续提供三个新鲜样本才切回，符合防抖要求。393px 手机视口无横溢，原 CSS 和布局不变；不是实体 iPhone 测试。
 
 截图：outputs/alarm-routing-simulated-fallback.png、outputs/alarm-routing-simulated-mobile.png。桌面小窗无独立报警引擎，本次未打开或安装软件。发布使用 scripts/deploy-alarm-routing.py，版本 10 / authoritativeFeedStatus=true。
+
+## 正式发布与复验
+
+功能提交 535c9bccfa8439c983239962d8e5dd1237579b3c 已推送，网页 current=/opt/funding-radar-web/releases/20261113-alarm-routing-1794538944032596063，后端同源码 SHA。回滚网页 20261112-alarm-choice-1794495596818070394，后端 8fd8060ca8d890756b30cc833cc2942654a89637。发布前后服务器86项测试通过，3556个其他静态文件和消息服务PID保持，报警配置/设备绑定哈希完全未变；仅重启报警服务。
+
+正式3号浏览器确认 routing1，新紧凑API返回serverTime。用与复现一致的4秒标签页延迟，连续多次后台watching时网页均保持监控中，过期的页面价格隐藏为—而不再误报行情中断。恢复标签页网络后，两条实时价格正常返回。模拟前后过滤后的响应证据在 work/routing-browser-before.json、work/routing-browser-after.json。
+
+正式桌面与实际393px手机视口无横溢，截图 outputs/alarm-routing-live-desktop.png / alarm-routing-live-mobile.png；隔离切源截图独立标注为模拟，不能把正式主源健康画面替代断流测试。浏览器工具编号会变，本次实际 profileName=3号 对应工具ID4，最初误认ID3为配置名已纠正，没有要求用户重新登录或操作软件。所有临时网络/视口覆盖已恢复。PR70更新，待合并。
