@@ -84,6 +84,7 @@ class Handler(Base):
     def do_GET(self):
         path=urlsplit(self.path).path
         if path.startswith('/radar/alarms-api/'):
+            if '--slow-state' in sys.argv and path.endswith('/state'):time.sleep(3)
             refresh();return super().do_GET()
         rel=path.removeprefix('/radar/')
         if path.endswith('/'):rel+='index.html'

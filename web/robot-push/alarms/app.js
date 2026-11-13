@@ -68,10 +68,19 @@ function renderRules(){
   const {status,fresh}=presentation(r);
   const shown=quoteDisplay.read(r,{fresh},performance.now());
   const fallback=fresh&&shown.source?.fallback;
-  const sourceText=shown.last?(shown.value?'末次报价 · 等待更新':'等待行情'):fallback?'备用：'+(venue[shown.source.exchange]||shown.source.exchange)+' · 现货':'';
+  const lastQuote=shown.last&&(verified||!!snapshotError||outageStatus(status));
+  const sourceText=shown.source?.fallback?'备用：'+(venue[shown.source.exchange]||shown.source.exchange)+' · 现货':'';
   const badgeClass=status==='alarming'?'is-alarming':outageStatus(status)?'is-warning':fallback?'is-backup':['watching','confirming'].includes(status)?'is-live':'';
   const badge=labels[status]||'等待行情';
-  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}"><div class="alarm-identity"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small>${r.note?`<small>${esc(r.note)}</small>`:''}</div><div class="alarm-current-cell"><span class="alarm-mobile-label">当前价（USDT）</span><span class="alarm-price">${esc(price(shown.value))}</span><small class="alarm-source${shown.last?' is-last-quote':''}">${esc(sourceText)||'&nbsp;'}</small></div><div class="alarm-target-cell"><span class="alarm-mobile-label">触发条件（USDT）</span><div class="alarm-condition">${esc(description(r))}</div></div><div class="alarm-state"><span class="alarm-badge ${badgeClass}">${esc(badge)}</span><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}</small></div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}" aria-label="编辑 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text" aria-label="删除 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">删除</button></div></article>`;
+  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}">
+   <div class="alarm-identity"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong>${r.note?`<small>${esc(r.note)}</small>`:''}</div>
+   <div class="alarm-origin-cell"><span class="alarm-origin">${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</span><small class="alarm-source">${esc(sourceText)||'&nbsp;'}</small></div>
+   <div class="alarm-current-cell"><span class="alarm-mobile-label">当前价</span><span class="alarm-price" title="${shown.last?'上次报价，尚未更新':''}">${esc(price(shown.value))}</span><small class="alarm-quote-note">${lastQuote?(shown.value?'末次报价 · 等待更新':'等待行情'):'&nbsp;'}</small></div>
+   <div class="alarm-target-cell"><span class="alarm-mobile-label">触发条件</span><div class="alarm-condition">${esc(description(r))}</div></div>
+   <div class="alarm-state"><span class="alarm-badge ${badgeClass}">${esc(badge)}</span></div>
+   <div class="alarm-reminder-cell"><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}</small></div>
+   <div class="alarm-actions"><button data-action="edit" data-id="${r.id}" aria-label="编辑 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text" aria-label="删除 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">删除</button></div>
+  </article>`;
  }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'可调整币种搜索或状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
@@ -84,7 +93,9 @@ function render(){
  connected(true);
  const testEvents=JSON.stringify(current.events);
  if(testEvents!==renderedTestEvents){renderedTestEvents=testEvents;renderTestResult();}
- $('#alarm-status').textContent=snapshotError?'网页状态更新失败，请刷新重试；云端监控独立运行。':!verified?'显示上次数据（'+new Date(cachedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'})+'），正在更新…':'';
+ $('#alarm-status').textContent=snapshotError?'同步失败 · 请刷新':!verified?'上次数据 · 同步中':'';
+ $('#alarm-status').title=snapshotError?'网页状态更新失败；云端监控独立运行。':!verified?'正在核对服务器上的最新规则和报价':'';
+ document.querySelector('main').dataset.syncing=String(!verified&&!snapshotError);
  $('#device-label').textContent=current.device?current.device.label+' · 已绑定':'Bark 未绑定';$('#bind-device').classList.toggle('is-bound',!!current.device);
  if(!current.device)notice('先绑定 Bark 接收设备。未绑定时，触发事件只会记入报警记录。');else notice('');
  renderRules();
@@ -187,8 +198,8 @@ async function refreshLoop(){clearTimeout(refreshTimer);if(document.visibilitySt
 document.addEventListener('visibilitychange',()=>{clearTimeout(refreshTimer);if(document.visibilityState==='visible')refreshLoop();});
 setInterval(()=>{if(document.visibilityState==='visible'&&current)render();},1000);
 async function start(){
- const auth=token(),generation=epoch;const snapshot=await readSnapshot(auth);
+ const auth=token(),generation=epoch;const firstLoad=load();const snapshot=await readSnapshot(auth);
  if(snapshot&&auth===token()&&generation===epoch&&!verified){try{cachedAt=snapshot.at;current=snapshot.data;render();}catch{current=null;renderedSignature='';clearSnapshots();}}
- await load();if(new URLSearchParams(location.search).get('new')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openRule();}if(new URLSearchParams(location.search).get('binding')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openDevice();}scheduleRefresh();
+ await firstLoad;if(new URLSearchParams(location.search).get('new')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openRule();}if(new URLSearchParams(location.search).get('binding')==='1'&&current&&verified){history.replaceState(null,'',location.pathname);openDevice();}scheduleRefresh();
 }
 start();
