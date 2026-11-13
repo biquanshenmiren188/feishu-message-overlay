@@ -1,0 +1,96 @@
+/* Approved mobile preview, 2026-11-13. Presentation only; desktop and routing remain unchanged. */
+@media(max-width:700px){
+ html body :is(#startup-shell nav,body>nav.site-nav[aria-label],.dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"]){display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr))!important;gap:2px 4px!important;width:calc(100% - 24px)!important;max-width:none!important;height:102px!important;min-height:102px!important;margin:0 12px!important;padding:6px 0!important;border:0!important;border-radius:0!important;background:transparent!important;overflow:visible!important}
+ html body #root .dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"]{width:100%!important;max-width:100%!important;margin:0!important}
+ html body :is(#startup-shell nav,body>nav.site-nav[aria-label],.dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"])>:is(a,button):nth-child(n){grid-column:span 3!important;width:auto!important;min-width:0!important;height:44px!important;min-height:44px!important;padding:0 2px!important;font-size:13px!important;font-weight:500!important;line-height:20px!important}
+ html body :is(#startup-shell nav,body>nav.site-nav[aria-label],.dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"])>:is(a,button):nth-child(n+5){grid-column:span 4!important}
+ html body :is(#startup-shell nav,body>nav.site-nav[aria-label],.dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"])>:is([aria-current="page"],[data-state="active"]){background:#e6effb!important;border-color:transparent!important;box-shadow:none!important;color:#0868d9!important;font-weight:650!important}
+ html body :is(.masthead,.site-head).has-radar-account{min-height:58px!important;padding:4px 12px!important;flex-wrap:nowrap!important;gap:6px!important}
+ html body :is(.masthead,.site-head) .brand img,html body .site-head>strong{width:150px!important;height:45px!important}
+ html body :is(.masthead,.site-head) .radar-account-entry{display:flex!important;flex-direction:row!important;align-items:center!important;gap:5px!important;border:0!important;padding:0 2px!important;min-height:44px!important;font-size:12px!important;background:transparent!important}
+ html body :is(.masthead,.site-head) .radar-account-entry :is(.ra-entry-title,.ra-entry-status){font-size:12px!important;line-height:18px!important;margin:0!important}
+ html body :is(.masthead,.site-head) .ra-entry-status::before{content:'·';margin-right:4px}
+ /* Compact alarm cards: fixed geometry for live/backup/stale states. */
+ .alarm-page .alarm-layout{margin:8px auto;padding:0 12px 24px}
+ .alarm-page-heading{margin-bottom:8px;padding-bottom:0;position:relative;grid-template-areas:'tabs add';min-height:44px}
+ .alarm-page #alarm-status.alarm-sync{position:absolute;right:0;top:100%;margin:1px 0 0;min-height:14px;line-height:14px;font-size:11px;z-index:1;pointer-events:none}
+ .alarm-page .alarm-connections{margin:16px 0 10px}
+ .alarm-page .device-controls{padding:0 8px;gap:6px;min-height:44px;flex-wrap:nowrap}
+ .alarm-page .device-summary{min-width:0;padding:0;flex:1;flex-basis:auto;gap:4px;font-size:12px;min-height:44px}
+ .alarm-page .device-action{margin-left:auto;font-size:12px;white-space:nowrap}
+ .alarm-page #device-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .alarm-page #test-bark-inline{font-size:12px;min-height:44px;white-space:nowrap;margin:0}
+ .alarm-page .alarm-toolbar{gap:8px;margin-bottom:10px}
+ .alarm-page .alarm-filters{gap:6px}
+ .alarm-page .alarm-filters button{font-size:12px;padding:6px 10px}
+ .alarm-page #alarm-list{gap:10px}
+ .alarm-page .alarm-row,.alarm-page .alarm-row:last-child{padding:10px 12px 0;gap:0 12px;grid-template-rows:24px 20px 66px 44px;min-height:156px}
+ .alarm-page .alarm-origin-cell{display:flex;align-items:center;justify-content:space-between;min-height:20px;gap:8px;min-width:0}
+ .alarm-page .alarm-origin{font-size:12px;line-height:20px;white-space:nowrap}
+ .alarm-page .alarm-origin-cell>.alarm-source{position:static;margin:0;min-height:18px;font-size:11px;overflow:hidden;text-overflow:ellipsis;text-align:right;min-width:0}
+ .alarm-page .alarm-current-cell,.alarm-page .alarm-target-cell{align-self:start;margin-top:6px;padding-bottom:0;min-width:0}
+ .alarm-page .alarm-mobile-label{font-size:12px;line-height:16px;margin-bottom:2px}
+ .alarm-page .alarm-row .alarm-price,.alarm-page .alarm-row .alarm-condition{font-size:16px;line-height:22px;min-height:22px}
+ .alarm-page .alarm-row .alarm-quote-note{position:absolute;top:38px;font-size:11px;line-height:16px;min-height:16px;margin:0}
+ .alarm-page .alarm-reminder-cell,.alarm-page .alarm-row .alarm-actions{min-height:44px}
+ .alarm-page .alarm-row .alarm-actions{gap:8px}
+ .alarm-page .alarm-badge{font-size:11px;padding:2px 6px}
+ .alarm-page .alarm-row .alarm-repeat{font-size:12px}
+ /* One-row channel navigation, compact inventory, optional batch controls. */
+ .mobile-settings .layout{display:block;max-width:none;margin:0;padding:8px 12px 24px}
+ .mobile-settings .settings{padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .mobile-settings .mobile-settings-heading{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:0 0 8px}
+ .mobile-settings .mobile-settings-heading h2{font-size:17px;margin:0}
+ .mobile-settings .mobile-more{position:relative;color:#59697c;font-size:13px}
+ .mobile-settings .mobile-more>summary{display:flex;align-items:center;justify-content:center;min-height:44px;min-width:60px;cursor:pointer;list-style:none}
+ .mobile-settings .mobile-more>summary::-webkit-details-marker{display:none}
+ .mobile-settings .mobile-more-content{position:absolute;right:0;top:44px;z-index:10;width:min(330px,calc(100vw - 24px));padding:12px;background:#fff;border:1px solid #dce3eb;border-radius:8px;box-shadow:0 6px 20px #20344815;line-height:1.6}
+ .mobile-settings .mobile-more-content .settings-intro{margin:0;padding:0;border:0;font-size:12px;display:grid;gap:8px}
+ .mobile-settings .mobile-more-content p{font-size:12px;margin:8px 0}
+ .mobile-settings .rule-navigation{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin:0 0 12px;padding:3px;background:#e9edf3;border:0;border-radius:9px}
+ .mobile-settings .rule-navigation .channel-switch{display:contents}
+ .mobile-settings .rule-navigation #tab-coins,.mobile-settings .rule-navigation [data-channel]{display:flex;align-items:center;justify-content:center;min-height:44px;height:44px;padding:0 2px;border:0;font-size:13px;background:transparent;border-radius:7px;font-weight:500}
+ .mobile-settings #tab-coins small{display:none}
+ .mobile-settings .rule-navigation button[aria-pressed=true]{background:#fff!important;color:#0868d9!important;box-shadow:0 1px 3px #20344812!important;font-weight:650!important}
+ .mobile-settings #panel-coins>.section{padding:0;border:0}
+ .mobile-settings .section-heading{gap:8px;margin:0 0 8px;align-items:center}
+ .mobile-settings .section-heading h2{font-size:15px;margin:0}
+ .mobile-settings #add-blocked-coin{min-height:44px;white-space:nowrap;font-size:13px;padding:0 12px;background:#0868d9;color:white;border:0;border-radius:8px}
+ .mobile-settings .coin-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;margin:0 0 6px}
+ .mobile-settings #blocked-search{grid-column:1/-1;width:100%;min-width:0;font-size:16px;min-height:44px;padding:0 12px}
+ .mobile-settings #blocked-filter{width:100%;min-width:0;font-size:16px;min-height:44px;padding:0 8px}
+ .mobile-settings .coin-toolbar button{font-size:13px;min-height:44px;padding:0 10px;white-space:nowrap}
+ .mobile-settings #coin-sync-status{font-size:12px;line-height:18px;min-height:18px;margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .mobile-settings .coin-batch{display:none;margin:0 0 8px;padding:0;border:0}
+ .mobile-settings.is-batch .coin-batch{display:flex}
+ .mobile-settings .coin-select{display:none}
+ .mobile-settings.is-batch .coin-select{display:flex;grid-column:1;grid-row:1/3;min-height:44px}
+ .mobile-settings #blocked-list{background:#fff;border:1px solid #dce3eb;border-radius:10px;padding:0 12px;overflow:hidden}
+ .mobile-settings .blocked-coin-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:10px 0}
+ .mobile-settings.is-batch .blocked-coin-row{grid-template-columns:22px minmax(0,1fr) auto}
+ .mobile-settings .blocked-identity{grid-column:1;grid-row:1;min-width:0}
+ .mobile-settings.is-batch .blocked-identity{grid-column:2}
+ .mobile-settings .blocked-identity b{font-size:15px;overflow-wrap:anywhere}
+ .mobile-settings .blocked-identity small{font-size:12px;line-height:18px}
+ .mobile-settings .blocked-actions{grid-column:2;grid-row:1;gap:8px}
+ .mobile-settings.is-batch .blocked-actions{grid-column:3}
+ .mobile-settings .blocked-actions button{min-height:44px;min-width:44px;font-size:13px;padding:0 4px;border:0;background:transparent}
+ .mobile-settings .coin-channels{grid-column:1/-1;grid-row:2;gap:4px}
+ .mobile-settings.is-batch .coin-channels{grid-column:2/-1}
+ .mobile-settings .coin-chip{font-size:12px;line-height:18px;padding:2px 5px}
+ .mobile-settings .operation-history{padding:0 12px;margin-top:12px;border:1px solid #dce3eb;border-radius:8px;background:white}
+ .mobile-settings .operation-history summary{display:flex;align-items:center;gap:6px;min-height:44px;font-size:13px;color:#59697c}
+ .mobile-settings .coin-overview>.save-bar,.mobile-settings .coin-overview>.receive-row{display:none}
+ .mobile-settings .title-row,.mobile-settings .channel-tools{padding-inline:0}
+ .mobile-settings .title-row h1{font-size:16px}
+ .mobile-settings .tabs{margin-inline:0}
+ .mobile-settings button:focus-visible,.mobile-settings summary:focus-visible{outline:2px solid #0868d9;outline-offset:2px}
+}
+@media(min-width:701px){.mobile-settings-heading,#mobile-batch-toggle{display:none!important}}
+@media(max-width:360px){
+ html body :is(#startup-shell nav,body>nav.site-nav[aria-label],.dashboard-toolbar>.monitor-bar>[data-slot="tabs"]>[data-slot="tabs-list"])>:is(a,button):nth-child(n){font-size:12px!important}
+ html body :is(.masthead,.site-head) .brand img,html body .site-head>strong{width:138px!important;height:42px!important}
+ html body :is(.masthead,.site-head) .radar-account-entry{gap:3px!important;font-size:11px!important}
+ html body :is(.masthead,.site-head) .radar-account-entry :is(.ra-entry-title,.ra-entry-status){font-size:11px!important}
+ .mobile-settings .rule-navigation [data-channel],.mobile-settings .rule-navigation #tab-coins{font-size:12px}
+}
