@@ -27,3 +27,13 @@ Store六所×BTC/ETH/SOL新增、编辑、数据库重新打开验证多项/空�
 脚本使用临时SQLite和虚拟时间，真实Market.poll→Store.tick→claim→send_event→begin_send→Bark POST构造→finish；仅模拟交易所行情和Bark外部HTTP。仅勾Bybit/Gate，主源超时后首次Bybit；Bybit超时后Gate；首次触发后0、30、60秒各一次请求，29/59秒不发，载荷包含实际备用来源和触发价格及critical/volume5/call1。价格恢复停止，排队后行情失效取消，所有勾选备用失效时不使用仍健康的未选源。报告work/selected-backup-delivery-live.json，生产规则/绑定摘要及服务PID前后保持。未重启或部署业务代码。
 
 边界：这是正式代码的隔离发送链路验证，Bark响应模拟200；不能把此结果称为真实Bark已接收或用户手机已收到/响铃。
+
+## 实体手机实际验收（2026-11-13，北京时间）
+
+用户明确授权真实推送3次、间隔30秒、模拟主源断流且不得动原报警。使用scripts/accept-selected-backup-phone.py，导入正式4c30f93模块，在临时数据库内复制规则和加密接收绑定；生产库仅只读。模拟Binance主源超时，按该规则允许名单OKX/Bybit/Bitget/Gate切到OKX现货，测试价65999达到跌到66000条件。每条通知明确标记“断流验收n/3”和非实时价格，真实send_event向Bark HTTPS发送，每条一次，无重试。
+
+- 1/3：12:19:36.655，Bark accepted。
+- 2/3：12:20:06.680，间隔30.025秒，Bark accepted。
+- 3/3：12:20:36.718，间隔30.038秒，Bark accepted。
+
+用户随后明确回复“三条都收到并响铃，间隔约30秒”，因此本轮具有实体手机收件/响铃确认，不只是接口成功。12:20:37恢复模拟行情，12:20:41切回Binance主源，继续观察32秒，恰好3条事件、没有第4条。临时规则/数据库已自动清理；前后生产规则、配置、设备绑定摘要完全一致，原报警未改，未部署或重启服务。实际报告work/actual-phone-acceptance.jsonl；该文件含发送时间与匿名测试状态，不含设备Key。测试脚本仅显式--send-three运行，单次标记阻止盲目重复。
