@@ -29,6 +29,15 @@ def validate(raw):
     if fallback == rule['exchange']:
         raise ValueError('备用现货源请选择其他交易所')
     rule['fallbackExchange'] = fallback
+    if 'fallbackExchanges' in raw:
+        selected = raw['fallbackExchanges']
+        if (not isinstance(selected, list) or len(selected) > len(FALLBACK_VENUES)
+                or any(not isinstance(v, str) or v not in FALLBACK_VENUES or v == rule['exchange'] for v in selected)
+                or len(set(selected)) != len(selected)):
+            raise ValueError('请选择有效且不重复的其他交易所备用源')
+        rule['fallbackExchanges'] = [v for v in FALLBACK_VENUES if v in selected]
+        # Old single-choice clients must not interpret a subset as all venues.
+        rule['fallbackExchange'] = selected[0] if len(selected) == 1 else 'off'
     if rule['market'] not in ('spot', 'future') or rule['priceType'] not in ('last', 'mark'):
         raise ValueError('请选择市场和价格类型')
     if rule['market'] == 'spot' and rule['priceType'] != 'last':

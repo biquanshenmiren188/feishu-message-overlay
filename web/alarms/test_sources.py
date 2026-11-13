@@ -4,7 +4,7 @@ import time
 import unittest
 from unittest.mock import patch
 from engine import validate, evaluate
-from sources import select, identity, eligible, active_groups, fresh
+from sources import select, identity, eligible, active_groups, fresh, backup_venues
 from instruments import load
 from store import Store
 from market import Market, VENUES
@@ -36,6 +36,36 @@ def warm(base='BTC', venue='okx', start=100):
 
 
 class SourceTests(unittest.TestCase):
+    def test_multi_selection_validation_and_legacy_compatibility(self):
+        for invalid in (None, 'auto', True, ['binance','binance'], ['okx'], ['unknown'], [None], [[]]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                rule(fallbackExchanges=invalid)
+        self.assertEqual(backup_venues(rule()),('binance','bybit','bitget','gate'))
+        self.assertEqual(backup_venues(rule(fallbackExchange='aster')),('aster',))
+        self.assertEqual(backup_venues(rule(fallbackExchanges=[])),())
+        self.assertEqual(backup_venues(rule(fallbackExchange='auto',fallbackExchanges=['aster','bybit'])),('bybit','aster'))
+
+    def test_every_subset_only_routes_to_selected_venues(self):
+        from itertools import combinations
+        for main in VENUES:
+            others=[v for v in ('binance','okx','bybit','bitget','gate','aster') if v!=main]
+            for size in range(6):
+                for subset in combinations(others,size):
+                    with self.subTest(main=main,selected=subset):
+                        r=rule(exchange=main,fallbackExchanges=list(subset));state={}
+                        for t in (100,102,104):
+                            q,e,state=select(r,state,book(quote(venue=main,market='future',at=t),*[quote(venue=v,at=t) for v in others]),t)
+                        self.assertEqual(active_groups(r,state),{(main,'future'),*((v,'spot') for v in subset)})
+                        for failed_count in range(len(subset)+1):
+                            available=[v for v in others if v not in subset[:failed_count]]
+                            q,e,result=select(r,state,book(*[quote(venue=v,at=118,price='99') for v in available]),118)
+                            expected=subset[failed_count:]
+                            if expected:
+                                self.assertEqual(result['source']['exchange'],expected[0])
+                            else:
+                                self.assertIsNone(q) # All unchecked feeds are healthy but forbidden.
+                                self.assertEqual(result['routingReason'],'no_fresh_backup' if subset else 'backup_disabled')
+
     def test_fallback_choice_validation(self):
         self.assertEqual(rule()['fallbackExchange'],'auto')
         for choice in ('auto','off','binance','bybit','bitget','gate','aster'):
@@ -195,6 +225,36 @@ class RoutingStoreTests(unittest.TestCase):
         self.store.db.close();self.temp.cleanup()
     def change(self,**kw):
         return self.store.mutate('a',dict(requestId=__import__('secrets').token_hex(16),revision=self.store.view('a')['revision'],**kw),book(quote(venue='okx',market='future',at=self.now)))
+    def test_multi_selection_create_edit_reload_and_old_client_guard(self):
+        import secrets
+        for main in VENUES:
+            for base in ('BTC','ETH','SOL'):
+                native=base+'-USDT-SWAP' if main=='okx' else base+'_USDT' if main=='gate' else base+'USDT'
+                q=quote(base,main,'future',self.now);q['symbol']=native
+                choices=[v for v in ('binance','okx','bybit','bitget','gate','aster') if v!=main]
+                def save(r, rid=None):
+                    return self.store.mutate('multiselect',dict(action='save',rule=r,id=rid,requestId=secrets.token_hex(16),revision=self.store.view('multiselect')['revision']),book(q))
+                r=rule(base,main,fallbackExchanges=choices[1:3]);r['symbol']=native
+                rid=save(r)['id']
+                for selected in (choices[1:3], [], [choices[-1]], choices):
+                    r=rule(base,main,fallbackExchanges=selected);r['symbol']=native
+                    save(r,rid)
+                    self.store.db.close();self.store=Store(self.temp.name)
+                    saved=next(x for x in self.store.view('multiselect')['rules'] if x['id']==rid)
+                    self.assertEqual((saved['symbol'],saved['fallbackExchanges'],saved['enabled']),(native,selected,True))
+                old=dict(r);old.pop('fallbackExchanges')
+                with self.assertRaisesRegex(Exception,'刷新页面'):save(old,rid)
+                saved=next(x for x in self.store.view('multiselect')['rules'] if x['id']==rid)
+                self.assertEqual(saved['fallbackExchanges'],choices)
+
+    def test_unchecking_a_queued_source_cancels_delivery(self):
+        self.store.tick(book(quote(at=self.now,price='99')),self.now)
+        event=self.store.claim();self.assertIsNotNone(event)
+        r=dict(self.r,fallbackExchanges=['bybit'])
+        self.change(action='save',id=self.id,rule=r)
+        self.assertFalse(self.store.begin_send(event,book(quote(at=self.now,price='99')),self.now))
+        self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
+
     def test_fallback_payload_and_dispatch_use_same_source(self):
         quotes=book(quote(at=self.now,price='99'))
         self.store.tick(quotes,self.now);event=self.store.claim();self.assertIsNotNone(event)
@@ -206,6 +266,8 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertFalse(self.store.begin_send(event,book(quote(venue='bybit',at=self.now,price='99')),self.now))
 
     def test_fallback_reaches_bark_request_every_30_seconds_and_stops_on_recovery(self):
+        selected=validate(dict(self.r,fallbackExchanges=['binance','bitget']))
+        with self.store.db:self.store.db.execute('UPDATE rules SET config=? WHERE id=?',(json.dumps(selected),self.id))
         market=Market();self.addCleanup(market.pool.shutdown)
         sent=[]
         with patch('server.build_opener') as opener:
@@ -282,7 +344,7 @@ class RoutingStoreTests(unittest.TestCase):
 
 class OutageSimulationTests(unittest.TestCase):
     """Run real Market.poll -> Store.tick -> outbox with isolated timed-out feeds."""
-    def run_scenario(self, venue='binance', base='BTC', choice='auto'):
+    def run_scenario(self, venue='binance', base='BTC', choice='auto', selected=None):
         import secrets
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         clock=[time.time()];clock_patch=patch('market.time.time',side_effect=lambda:clock[0]);clock_patch.start();self.addCleanup(clock_patch.stop)
@@ -295,7 +357,7 @@ class OutageSimulationTests(unittest.TestCase):
                 return book(q)
         market=SimulatedMarket();self.addCleanup(market.pool.shutdown)
         store=Store(temp.name);self.addCleanup(lambda:store.db.close())
-        r=rule(base,venue,fallbackExchange=choice)
+        r=rule(base,venue,fallbackExchange=choice,**({'fallbackExchanges':selected} if selected is not None else {}))
         if venue=='gate':r['symbol']=base+'_USDT'
         primary=market.fetch(venue,'future')
         store.mutate('simulation',dict(action='save',rule=r,requestId=secrets.token_hex(16),revision=0),primary)
@@ -354,6 +416,20 @@ class OutageSimulationTests(unittest.TestCase):
         state=step(19)
         self.assertEqual(state['status'],'stale');self.assertEqual(state['sourceStatus'],'unavailable')
         self.assertFalse(store.view('simulation')['events'])
+
+    def test_multi_selected_outage_delivery_and_failure_never_uses_unchecked(self):
+        store,market,failed,prices,step,start=self.run_scenario(selected=['bybit','gate'])
+        failed.add(('binance','future'));prices['value']='99'
+        self.assertEqual(step(19)['source']['exchange'],'bybit') # OKX healthy but unchecked
+        failed.add(('bybit','spot'))
+        self.assertEqual(step(33)['source']['exchange'],'gate') # Bitget healthy but unchecked
+        self.assertEqual(len(store.view('simulation')['events']),1)
+        step(49)
+        self.assertEqual(len(store.view('simulation')['events']),2)
+        self.assertEqual(store.view('simulation')['events'][0]['source']['exchange'],'gate')
+        failed.add(('gate','spot'))
+        self.assertEqual(step(63)['status'],'stale')
+        self.assertEqual(len(store.view('simulation')['events']),2)
 
     def test_disabled_backup_is_reported_explicitly(self):
         store,market,failed,prices,step,start=self.run_scenario(choice='off')

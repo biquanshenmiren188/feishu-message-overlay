@@ -3,6 +3,7 @@ import {connection} from './session.js?v=20261111-smooth1';
 import {patchHTML} from './dom.js?v=20261111-smooth1';
 import {matchesInstrument,matchesAlarm,instrumentLabel,resolveInstrument} from './search.js?v=20261112-picker1';
 import {presentRule} from './presentation.js?v=20261113-routing1';
+import {fallbackChoices,FALLBACK_ORDER} from './fallback.js?v=20261113-multi1';
 const $=s=>document.querySelector(s),form=$('#alarm-form'),barkForm=$('#bark-form');
 const field=n=>form.elements.namedItem(n),API='/radar/alarms-api/';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -106,11 +107,10 @@ function updateForm(){
  const q=resolveInstrument(field('symbol').value,catalog);
  $('#quote-preview').hidden=!q;$('#quote-preview').textContent=q?`当前价格：${price(q.last)} USDT / ${q.unit}`:'';
 }
-function renderFallbackOptions(selected=field('fallbackExchange').value||'auto'){
+function checkedFallbacks(){return [...form.querySelectorAll('[name=fallbackExchanges]:checked')].map(input=>input.value);}
+function renderFallbackOptions(selected=checkedFallbacks()){
  const main=field('exchange').value;
- field('fallbackExchange').innerHTML='<option value="auto">自动选择</option><option value="off">关闭备用切换</option>'+Object.entries(venue).filter(([key])=>key!==main).map(([key,name])=>`<option value="${key}">${name} · 现货</option>`).join('');
- field('fallbackExchange').value=selected===main?'auto':selected;
- if(!field('fallbackExchange').value)field('fallbackExchange').value='auto';
+ $('#fallback-options').innerHTML=FALLBACK_ORDER.filter(key=>key!==main).map(key=>`<label><input type="checkbox" name="fallbackExchanges" value="${key}"${selected.includes(key)?' checked':''}><span>${venue[key]}</span></label>`).join('');
 }
 function renderCatalog(){
  const query=field('symbol').value.trim();
@@ -132,7 +132,7 @@ function openRule(rule=null){
  if(rule?.state?.asset?.pair)field('symbol').value=rule.state.asset.pair;
  if(!field('exchange').value)field('exchange').value='binance';
  if(!field('condition').value)field('condition').value='above';
- renderFallbackOptions(rule?.fallbackExchange||'auto');
+ renderFallbackOptions(fallbackChoices(rule,field('exchange').value));
  updateForm();$('#alarm-editor').showModal();loadCatalog();
 }
 $('#add-alarm').onclick=()=>openRule();
@@ -141,7 +141,7 @@ form.addEventListener('change',e=>{draft=true;if(e.target.name==='exchange'){fie
 form.onsubmit=async e=>{
  e.preventDefault();$('#alarm-form-error').textContent='';
  const q=resolveInstrument(field('symbol').value,catalog);if(!q){$('#alarm-form-error').textContent='请选择当前交易所列表中的完整交易对';return;}
- const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,fallbackExchange:field('fallbackExchange').value,priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:true};
+ const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,fallbackExchanges:checkedFallbacks(),priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:true};
  if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
 function openDevice(){if(!verified||!current)return;barkForm.reset();draft=false;$('#bark-form-error').textContent='';$('#bark-existing').hidden=!current.device;barkForm.elements.label.value=current.device?.label||'我的 iPhone';$('#bark-current').textContent=current.device?`当前设备：${current.device.label}。如需更换，请填写新设备地址后保存。`:'绑定到当前推送码。切换网页方案不会转移此设备。';$('#bark-editor').showModal();}

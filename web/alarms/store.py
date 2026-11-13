@@ -135,6 +135,8 @@ class Store:
                     old_rule = self.db.execute('SELECT * FROM rules WHERE id=? AND profile=?', (identity, profile)).fetchone()
                     if not old_rule:
                         raise ValueError('报警不存在或不属于当前推送码')
+                    if 'fallbackExchanges' in json.loads(old_rule['config']) and 'fallbackExchanges' not in rule:
+                        raise Conflict('此报警已使用备用源多选，请刷新页面后再保存')
                     old_state = json.loads(old_rule['state'])
                     # Editing a repeating rule must not bypass the 30-second interval.
                     state = {k: old_state[k] for k in ('lastFire', 'lastDispatch', 'fired') if k in old_state} if rule['repeat'] else {}

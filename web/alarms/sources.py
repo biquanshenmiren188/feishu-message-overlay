@@ -15,6 +15,8 @@ AMBIGUOUS = frozenset(('PAY', 'TIME', 'KEY', 'DODOX', 'LUNA', 'LUNC', 'BTG'))
 
 
 def backup_venues(rule):
+    if 'fallbackExchanges' in rule:
+        return tuple(v for v in FALLBACK_VENUES if v in rule['fallbackExchanges'] and v != rule['exchange'])
     choice = rule.get('fallbackExchange', 'auto')
     venues = SPOT_PRIORITY if choice == 'auto' else (choice,) if choice in FALLBACK_VENUES else ()
     return tuple(v for v in venues if v != rule['exchange'])
@@ -127,7 +129,7 @@ def select(rule, previous, quotes, now, advance=True):
         state['routingReason'] = 'healthy_backup' if selected_source['fallback'] else 'healthy_primary'
     else:
         state['sourceStatus'] = 'unavailable'
-        state['routingReason'] = ('backup_disabled' if rule.get('fallbackExchange') == 'off' else
+        state['routingReason'] = ('backup_disabled' if not backup_venues(rule) else
                                   'asset_ineligible' if not eligible(asset) else
                                   'backup_unqualified' if fresh_candidates else 'no_fresh_backup')
     return selected, effective, state
