@@ -2,8 +2,10 @@ import {readSnapshot,saveSnapshot,clearSnapshots} from './snapshot.js?v=20261111
 import {connection} from './session.js?v=20261111-smooth1';
 import {patchHTML} from './dom.js?v=20261111-smooth1';
 import {matchesInstrument,matchesAlarm,instrumentLabel,resolveInstrument} from './search.js?v=20261112-picker1';
-import {presentRule} from './presentation.js?v=20261113-routing1';
+import {presentRule} from './presentation.js?v=20261113-stable1';
 import {fallbackChoices,FALLBACK_ORDER} from './fallback.js?v=20261113-multi1';
+import {createQuoteDisplay} from './quote-display.js?v=20261113-stable1';
+const quoteDisplay=createQuoteDisplay();
 const $=s=>document.querySelector(s),form=$('#alarm-form'),barkForm=$('#bark-form');
 const field=n=>form.elements.namedItem(n),API='/radar/alarms-api/';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -53,6 +55,7 @@ const outageStatus=status=>['stale','unavailable'].includes(status);
 function matchStatus(r){const {status}=presentation(r);return statusFilter==='all'||(statusFilter==='alarming'?status==='alarming':outageStatus(status));}
 function renderRules(){
  if(!current)return;
+ quoteDisplay.prune(current.rules.map(r=>r.id));
  const search=$('#alarm-search').value.trim().toLowerCase();
  const rows=current.rules.filter(r=>matchesAlarm(search,r)&&matchStatus(r));
  $('#alarm-count').textContent=current.rules.length;
@@ -63,17 +66,19 @@ function renderRules(){
  const focused=document.activeElement?.closest('[data-action]');const restore=focused&&{action:focused.dataset.action,id:focused.dataset.id};
  const markup=rows.length?rows.map(r=>{
   const {status,fresh}=presentation(r);
-  const fallback=fresh&&r.state?.source?.fallback;
+  const shown=quoteDisplay.read(r,{fresh},performance.now());
+  const fallback=fresh&&shown.source?.fallback;
+  const sourceText=shown.last?(shown.value?'末次报价 · 等待更新':'等待行情'):fallback?'备用：'+(venue[shown.source.exchange]||shown.source.exchange)+' · 现货':'';
   const badgeClass=status==='alarming'?'is-alarming':outageStatus(status)?'is-warning':fallback?'is-backup':['watching','confirming'].includes(status)?'is-live':'';
   const badge=labels[status]||'等待行情';
-  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}"><div class="alarm-identity"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small>${r.note?`<small>${esc(r.note)}</small>`:''}</div><div class="alarm-current-cell"><span class="alarm-mobile-label">当前价（USDT）</span><span class="alarm-price">${fresh?esc(price(r.state.price)):'—'}</span>${fallback?`<small class="alarm-source">备用：${esc(venue[r.state.source.exchange]||r.state.source.exchange)} · 现货</small>`:fresh?'':'<small>等待新鲜行情</small>'}</div><div class="alarm-target-cell"><span class="alarm-mobile-label">触发条件（USDT）</span><div class="alarm-condition">${esc(description(r))}</div></div><div class="alarm-state"><span class="alarm-badge ${badgeClass}">${esc(badge)}</span><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}</small></div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}" aria-label="编辑 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text" aria-label="删除 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">删除</button></div></article>`;
+  return `<article class="alarm-row ${r.id===selected?'is-highlighted':''} ${status==='alarming'?'is-alarming':''}"><div class="alarm-identity"><strong>${esc(r.state?.asset?.pair||r.symbol)}</strong><small>${venue[r.exchange]} · ${r.market==='future'?'永续':'现货'}${r.priceType==='last'?'':' · 标记价格'}</small>${r.note?`<small>${esc(r.note)}</small>`:''}</div><div class="alarm-current-cell"><span class="alarm-mobile-label">当前价（USDT）</span><span class="alarm-price">${esc(price(shown.value))}</span><small class="alarm-source${shown.last?' is-last-quote':''}">${esc(sourceText)||'&nbsp;'}</small></div><div class="alarm-target-cell"><span class="alarm-mobile-label">触发条件（USDT）</span><div class="alarm-condition">${esc(description(r))}</div></div><div class="alarm-state"><span class="alarm-badge ${badgeClass}">${esc(badge)}</span><small class="alarm-repeat">${r.repeat?'每 30 秒提醒':'仅一次'}${!r.repeat&&r.hold?' · 持续 '+r.hold+' 秒':''}</small></div><div class="alarm-actions"><button data-action="edit" data-id="${r.id}" aria-label="编辑 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">编辑</button><button data-action="delete" data-id="${r.id}" class="danger-text" aria-label="删除 ${esc(r.state?.asset?.pair||r.symbol)} ${venue[r.exchange]} 报警">删除</button></div></article>`;
  }).join(''):`<div class="alarm-empty"><strong>${current.rules.length?'没有匹配的报警':'还没有价格报警'}</strong><p>${current.rules.length?'可调整币种搜索或状态筛选。':'选择交易所和币种，设置目标价格。保存后由云端持续监控。'}</p>${current.rules.length?'':'<button data-action="new">＋ 创建第一条报警</button>'}</div>`;
  patchHTML($('#alarm-list'),verified?markup:markup.replaceAll('<button','<button disabled'));
  if(restore)$('#alarm-list').querySelector(`[data-action="${restore.action}"][data-id="${restore.id}"]`)?.focus({preventScroll:true});
 }
 let renderedSignature='',renderedTestEvents='';
 function render(){
- const signature=JSON.stringify([verified,snapshotError,current,current.rules.map(r=>presentation(r))]);if(signature===renderedSignature)return;renderedSignature=signature;
+ const signature=JSON.stringify([Math.floor(performance.now()/5000),verified,snapshotError,current,current.rules.map(r=>presentation(r))]);if(signature===renderedSignature)return;renderedSignature=signature;
  connection(verified&&!snapshotError);document.querySelector('main').classList.remove('is-loading');$('#alarm-list').setAttribute('aria-busy','false');
  syncPlanLabel();
  connected(true);
@@ -87,10 +92,10 @@ function render(){
 }
 
 async function readState(showError=true){
- const auth=token(),generation=epoch,sequence=++loadSequence;if(!auth){clearSnapshots();verified=false;current=null;connected(false);renderTestResult();connection(false);$('#plan-label').textContent='未连接推送码';$('#alarm-status').textContent='请先连接推送码';$('#device-label').textContent='未连接';$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>请先连接推送码</strong><a href="/radar/push-center/">打开推送中心</a></div>';return;}
+ const auth=token(),generation=epoch,sequence=++loadSequence;if(!auth){clearSnapshots();quoteDisplay.clear();verified=false;current=null;connected(false);renderTestResult();connection(false);$('#plan-label').textContent='未连接推送码';$('#alarm-status').textContent='请先连接推送码';$('#device-label').textContent='未连接';$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>请先连接推送码</strong><a href="/radar/push-center/">打开推送中心</a></div>';return;}
  const requestStartedAt=performance.now();
  try{const next=await api('state?events=latest-test',undefined,auth);if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;verified=true;current=next;snapshotStartedAt=requestStartedAt;snapshotError='';render();saveSnapshot(auth,next);}
- catch(e){if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;snapshotError=e.message;if(e.status===401){clearSnapshots();verified=false;current=null;renderedSignature='';connection(false);connected(false);}if(!current){connected(false);$('#alarm-status').textContent='暂时无法读取报警';$('#alarm-list').innerHTML='<div class="alarm-empty">读取失败，可点击刷新重试。</div>';}else render();if(showError||!verified)notice(e.message);if(current&&!verified)$('#alarm-status').textContent='上次数据，更新失败；修改暂不可用，请重试刷新。';}
+ catch(e){if(auth!==token()||generation!==epoch||sequence<appliedSequence)return;appliedSequence=sequence;snapshotError=e.message;if(e.status===401){clearSnapshots();quoteDisplay.clear();verified=false;current=null;renderedSignature='';connection(false);connected(false);}if(!current){connected(false);$('#alarm-status').textContent='暂时无法读取报警';$('#alarm-list').innerHTML='<div class="alarm-empty">读取失败，可点击刷新重试。</div>';}else render();if(showError||!verified)notice(e.message);if(current&&!verified)$('#alarm-status').textContent='上次数据，更新失败；修改暂不可用，请重试刷新。';}
 }
 let reading=null;
 async function load(showError=true,force=false){
@@ -173,7 +178,7 @@ for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>{if(busy)
 for(const d of [$('#alarm-editor'),$('#bark-editor')])d.addEventListener('cancel',e=>{if(busy)e.preventDefault();else draft=false;});
 for(const button of document.querySelectorAll('[data-filter]'))button.onclick=()=>{statusFilter=button.dataset.filter;renderRules();};
 $('#alarm-search').oninput=renderRules;$('#refresh-alarms').onclick=()=>load();
-document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;statusFilter='all';clearSnapshots();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
+document.addEventListener('radar-profile-changing',()=>{showTestResult=false;clearTimeout(testFeedbackTimer);epoch++;catalogEpoch++;statusFilter='all';clearSnapshots();quoteDisplay.clear();verified=false;current=null;document.querySelector('main').classList.add('is-loading');renderedSignature='';catalogCache.clear();catalog=[];pending=null;draft=false;$('#plan-label').textContent=token()?'当前推送码 · 已连接':'未连接推送码';$('#pending-action').hidden=true;$('#alarm-editor').close();$('#bark-editor').close();barkForm.elements.key.value='';connected(false);renderTestResult();$('#alarm-list').innerHTML='<div class="alarm-empty"><strong>正在载入当前推送码…</strong></div>';});
 document.addEventListener('radar-profile-ready',async e=>{lastToken=token();await load(true,true);if(new URLSearchParams(location.search).get('binding')==='1'&&current){history.replaceState(null,'',location.pathname);openDevice();}});
 window.addEventListener('beforeunload',e=>{if(draft||pending){e.preventDefault();e.returnValue='';}});
 let refreshTimer;

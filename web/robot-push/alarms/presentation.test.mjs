@@ -12,8 +12,8 @@ test('device wall clock cannot override a healthy server route',()=>{
   }
  }finally{Date.now=original;}
 });
-test('delayed responses hide old prices without inventing an exchange outage',()=>{
- assert.deepEqual(presentRule(rule(),{serverTime:100,elapsed:4}),{status:'watching',fresh:false});
+test('quote age does not override the server route between page polls',()=>{
+ assert.deepEqual(presentRule(rule(),{serverTime:100,elapsed:4}),{status:'watching',fresh:true});
 });
 test('new fallback snapshot restores price even if source timestamp is older',()=>{
  const r=rule('watching',{sampleAt:103,observedAt:104,source:{fallback:true,exchange:'okx'}});
@@ -27,13 +27,14 @@ test('offline cached snapshots and legacy responses never show a live price',()=
  assert.equal(presentRule(rule(),{}).fresh,false);
  assert.equal(presentRule(rule(),{serverTime:100,elapsed:13}).fresh,false);
 });
-test('receipt duration uses elapsed monotonic time, rejects invalid and future samples',()=>{
+test('page connection age uses monotonic time and rejects invalid metadata',()=>{
  for(const elapsed of [-1,NaN,Infinity])assert.equal(presentRule(rule(),{serverTime:100,elapsed}).fresh,false);
- assert.equal(presentRule(rule('watching',{sampleAt:104}),{serverTime:100}).fresh,false);
- assert.equal(presentRule(rule('watching',{observedAt:80}),{serverTime:100}).fresh,false);
+ assert.equal(presentRule(rule('watching',{sampleAt:NaN}),{serverTime:100}).fresh,false);
+ assert.equal(presentRule(rule('watching',{observedAt:0}),{serverTime:100}).fresh,false);
 });
 test('paused expired and one-shot status remain independent of device clock',()=>{
  assert.equal(presentRule({...rule(),enabled:false},{serverTime:100}).status,'paused');
  assert.equal(presentRule({...rule(),expiresAt:99},{serverTime:100}).status,'expired');
  assert.equal(presentRule(rule('triggered'),{serverTime:100}).status,'triggered');
+ for(const r of [{...rule(),enabled:false},{...rule(),expiresAt:99},rule('triggered')])assert.equal(presentRule(r,{serverTime:100}).fresh,false);
 });

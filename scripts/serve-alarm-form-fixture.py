@@ -53,6 +53,19 @@ if layout:
 
 Base=make_handler(store,market,lambda token:'fixture' if token=='synthetic_fixture_only' else None)
 class Handler(Base):
+    def reply(self,status,data):
+        # Optional deterministic display-only faults, confined to this isolated fixture.
+        control=audit_path.with_suffix('.feed.json')
+        if '--stable' in sys.argv and self.path.startswith('/radar/alarms-api/state') and control.exists():
+            mode=json.loads(control.read_text()).get('mode','healthy')
+            for r in data.get('rules',[]):
+                s=r['state'];now=time.time()
+                s.update(price=str(68000+int(now)%100),sampleAt=now-11,observedAt=now-2,status='watching')
+                s['source']={'exchange':r['exchange'],'market':'future','fallback':False}
+                if mode=='outage':s.update(status='stale',sampleAt=now-30)
+                if mode=='backup':s['source']={'exchange':'bybit','market':'spot','fallback':True}
+        return super().reply(status,data)
+
     def do_POST(self):
         if self.path!='/radar/alarms-api/change':return self.reply(405,{})
         try:

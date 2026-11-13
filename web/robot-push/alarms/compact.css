@@ -142,3 +142,8 @@
  .alarm-page .alarm-fallback-options{grid-template-columns:repeat(2,minmax(0,1fr))}
  .alarm-page .alarm-form-grid{grid-template-columns:1fr}
 }
+
+/* Reserve one line while quote/source changes; no price animation or row reflow. */
+.alarm-page .alarm-row .alarm-source{display:block;min-height:18px;line-height:18px;white-space:nowrap;font-size:12px}
+.alarm-page .alarm-row .alarm-source.is-last-quote{color:var(--alarm-muted)}
+.alarm-page .alarm-row .alarm-price{line-height:21px;min-height:21px;transition:none;animation:none}
