@@ -93,6 +93,7 @@ def select(rule, previous, quotes, now, advance=True):
                 record.update(stamp=stamp, count=min(3, record.get('count', 0) + 1), at=now)
                 qualified[key] = record
         state['qualifiedSources'] = qualified
+    fresh_candidates = len(candidates)
     candidates = [q for q in candidates if qualified.get(q['exchange'] + ':' + q['symbol'], {}).get('count', 0) >= 3
                   and now - qualified[q['exchange'] + ':' + q['symbol']].get('at', 0) <= 86400]
     recovering = old_source.get('fallback', False)
@@ -123,8 +124,12 @@ def select(rule, previous, quotes, now, advance=True):
             state.update(gap=True, pending=None)
         state['source'] = selected_source
         state['sourceStatus'] = 'fallback' if selected_source['fallback'] else 'primary'
+        state['routingReason'] = 'healthy_backup' if selected_source['fallback'] else 'healthy_primary'
     else:
         state['sourceStatus'] = 'unavailable'
+        state['routingReason'] = ('backup_disabled' if rule.get('fallbackExchange') == 'off' else
+                                  'asset_ineligible' if not eligible(asset) else
+                                  'backup_unqualified' if fresh_candidates else 'no_fresh_backup')
     return selected, effective, state
 
 

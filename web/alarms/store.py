@@ -226,6 +226,11 @@ class Store:
                 key = rule['exchange'], rule['market'], rule['symbol']
                 selected, effective, routing = select(rule, previous, quotes, now)
                 state, event = evaluate(effective, routing, selected, now)
+                old_route = (previous.get('sourceStatus'), source_key(previous.get('source')))
+                new_route = (state.get('sourceStatus'), source_key(state.get('source')))
+                if old_route != new_route:
+                    transition = dict(at=now, status=state.get('sourceStatus'), source=state.get('source') if selected else None, reason=state.get('routingReason'))
+                    state['routingHistory'] = [*previous.get('routingHistory', []), transition][-12:]
                 if state['status'] not in ('paused', 'expired', 'triggered'):
                     active.update(active_groups(rule, state))
                 if state != previous:

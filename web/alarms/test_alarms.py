@@ -315,7 +315,11 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(result.exception.code,401)
             with urlopen(Request(base+'state',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['rules'],[])
             with urlopen(Request(base+'history',headers={'Authorization':'Bearer b'})) as res:self.assertEqual(json.load(res)['items'],[])
-            with urlopen(Request(base+'state?events=latest-test',headers={'Authorization':'Bearer a'})) as res:self.assertEqual(json.load(res)['events'],[])
+            with urlopen(Request(base+'state?events=latest-test',headers={'Authorization':'Bearer a'})) as res:
+                value=json.load(res)
+                self.assertEqual(value['events'],[])
+                self.assertLess(abs(value['serverTime']-time.time()),2)
+                self.assertEqual(value['sampleInterval'],2)
             with self.assertRaises(HTTPError) as result:urlopen(Request(base+'state',headers={'Authorization':'Bearer a','Origin':'https://evil.test'}))
             self.assertEqual(result.exception.code,403)
         finally:http.shutdown();http.server_close();market.pool.shutdown()

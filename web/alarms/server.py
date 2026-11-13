@@ -84,7 +84,7 @@ def make_handler(store, market, auth=authenticate):
             self.started=time.perf_counter();self.auth_ms=0
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=9, quoteRouting="same-asset-spot-v2", fallbackSelection=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
+                return self.reply(200, dict(ok=True, version=10, quoteRouting="same-asset-spot-v2", fallbackSelection=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
             if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event'):
@@ -100,7 +100,9 @@ def make_handler(store, market, auth=authenticate):
                 if not post and route.path == BASE + 'event':
                     return self.reply(200, store.event_detail(profile, query.get('id',[''])[0]))
                 if not post and route.path == BASE + 'state' and query.get('events') == ['latest-test']:
-                    return self.reply(200, store.view(profile, compact=True))
+                    value = store.view(profile, compact=True)
+                    value.update(serverTime=time.time(), sampleInterval=2)
+                    return self.reply(200, value)
                 quotes, health = market.snapshot()
                 if not post and route.path == BASE + 'state':
                     value = store.view(profile)

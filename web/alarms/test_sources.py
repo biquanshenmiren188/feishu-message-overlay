@@ -7,6 +7,7 @@ from engine import validate, evaluate
 from sources import select, identity, eligible, active_groups, fresh
 from instruments import load
 from store import Store
+from market import Market, VENUES
 
 
 def rule(base='BTC', exchange='okx', **kw):
@@ -237,6 +238,88 @@ class RoutingStoreTests(unittest.TestCase):
                         self.assertEqual((saved['symbol'],saved['exchange'],saved['fallbackExchange'],saved['target']),(native,venue,choice,'100'))
         self.store.db.close();self.store=Store(self.temp.name)
         self.assertEqual(len(self.store.view('matrix')['rules']),36)
+
+
+class OutageSimulationTests(unittest.TestCase):
+    """Run real Market.poll -> Store.tick -> outbox with isolated timed-out feeds."""
+    def run_scenario(self, venue='binance', base='BTC', choice='auto'):
+        import secrets
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        clock=[time.time()];clock_patch=patch('market.time.time',side_effect=lambda:clock[0]);clock_patch.start();self.addCleanup(clock_patch.stop)
+        failed=set();prices={'value':'101'}
+        class SimulatedMarket(Market):
+            def fetch(self, exchange, market):
+                if (exchange,market) in failed:raise TimeoutError('isolated simulated feed outage')
+                q=quote(base,exchange,market,clock[0],prices['value'])
+                if exchange=='gate':q['symbol']=base+'_USDT'
+                return book(q)
+        market=SimulatedMarket();self.addCleanup(market.pool.shutdown)
+        store=Store(temp.name);self.addCleanup(lambda:store.db.close())
+        r=rule(base,venue,fallbackExchange=choice)
+        if venue=='gate':r['symbol']=base+'_USDT'
+        primary=market.fetch(venue,'future')
+        store.mutate('simulation',dict(action='save',rule=r,requestId=secrets.token_hex(16),revision=0),primary)
+        start=clock[0];active={(e,m) for e in VENUES for m in ('future','spot')}
+        def step(seconds):
+            clock[0]=start+seconds
+            market.poll(active)
+            for future in list(market.pending.values()):
+                try:future.result(timeout=2)
+                except TimeoutError:pass
+            market.poll(active)
+            store.tick(market.snapshot()[0],clock[0])
+            return store.view('simulation')['rules'][0]['state']
+        for t in (0,3,6):step(t)
+        return store,market,failed,prices,step,start
+
+    def test_timeout_matrix_six_primary_venues_three_coins_reaches_actual_fallback_event(self):
+        for venue in VENUES:
+            for base in ('BTC','ETH','SOL'):
+                with self.subTest(venue=venue,base=base):
+                    store,market,failed,prices,step,start=self.run_scenario(venue,base)
+                    failed.add((venue,'future'));prices['value']='99'
+                    self.assertFalse(step(9)['source']['fallback'])
+                    state=step(19)
+                    self.assertEqual(state['status'],'alarming');self.assertTrue(state['source']['fallback'])
+                    self.assertNotEqual(state['source']['exchange'],venue);self.assertEqual(state['source']['market'],'spot')
+                    event=store.view('simulation')['events'][0]
+                    self.assertEqual(event['source'],state['source']);self.assertEqual(event['price'],'99')
+                    self.assertIn('备用行情',event['body'])
+                    self.assertEqual(market.health[(venue,'future')]['error'],'TimeoutError')
+
+    def test_backup_timeout_moves_to_next_and_all_timeout_pauses_without_false_event(self):
+        store,market,failed,prices,step,start=self.run_scenario()
+        failed.add(('binance','future'));prices['value']='99'
+        first=step(19);self.assertEqual(first['source']['exchange'],'okx')
+        failed.add(('okx','spot'))
+        second=step(33);self.assertEqual(second['source']['exchange'],'bybit')
+        self.assertEqual(len(store.view('simulation')['events']),1) # no new 30-second slot
+        failed.update((v,m) for v in VENUES for m in ('spot','future'))
+        state=step(47)
+        self.assertEqual(state['status'],'stale');self.assertEqual(state['routingReason'],'no_fresh_backup')
+        self.assertEqual(len(store.view('simulation')['events']),1)
+        self.assertEqual([x['status'] for x in state['routingHistory']],['primary','fallback','fallback','unavailable'])
+
+    def test_three_distinct_primary_recoveries_and_no_duplicate_repeat(self):
+        store,market,failed,prices,step,start=self.run_scenario()
+        failed.add(('binance','future'));prices['value']='99';step(19)
+        failed.clear()
+        self.assertTrue(step(22)['source']['fallback']);self.assertTrue(step(25)['source']['fallback'])
+        self.assertFalse(step(28)['source']['fallback']);self.assertEqual(len(store.view('simulation')['events']),1)
+        step(49);self.assertEqual(len(store.view('simulation')['events']),2)
+
+    def test_selected_backup_failure_does_not_silently_use_another(self):
+        store,market,failed,prices,step,start=self.run_scenario(choice='bybit')
+        failed.update({('binance','future'),('bybit','spot')})
+        state=step(19)
+        self.assertEqual(state['status'],'stale');self.assertEqual(state['sourceStatus'],'unavailable')
+        self.assertFalse(store.view('simulation')['events'])
+
+    def test_disabled_backup_is_reported_explicitly(self):
+        store,market,failed,prices,step,start=self.run_scenario(choice='off')
+        failed.add(('binance','future'))
+        state=step(19)
+        self.assertEqual(state['status'],'stale');self.assertEqual(state['routingReason'],'backup_disabled')
 
 
 if __name__ == '__main__':unittest.main()
