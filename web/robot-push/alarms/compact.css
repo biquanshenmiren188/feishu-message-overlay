@@ -147,3 +147,14 @@
 .alarm-page .alarm-row .alarm-source{display:block;min-height:18px;line-height:18px;white-space:nowrap;font-size:12px}
 .alarm-page .alarm-row .alarm-source.is-last-quote{color:var(--alarm-muted)}
 .alarm-page .alarm-row .alarm-price{line-height:21px;min-height:21px;transition:none;animation:none}
+/* Align first-line content, rather than centering unequal one/two-line cells. */
+@media(min-width:761px){
+ .alarm-page .alarm-row{align-items:start;align-content:center}
+ .alarm-page .alarm-row strong,.alarm-page .alarm-row .alarm-condition{line-height:21px}
+ .alarm-page .alarm-state{display:grid;grid-template-rows:21px auto;gap:4px;justify-items:start}
+ .alarm-page .alarm-state .alarm-badge{align-self:center}
+ .alarm-page .alarm-row .alarm-actions{justify-content:center;margin-block:-11.5px}
+}
+@media(max-width:760px){
+ .alarm-page .alarm-current-cell,.alarm-page .alarm-target-cell{align-self:start}
+}
