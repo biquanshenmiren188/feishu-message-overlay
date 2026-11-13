@@ -10,8 +10,8 @@ export function createQuoteDisplay(interval=5000){
    let saved=values.get(rule.id);
    if(saved?.identity!==identity){values.delete(rule.id);saved=null;}
    const valid=state.price!=null&&Number.isFinite(Number(state.price))&&Number(state.price)>0;
-   if(valid&&(!saved||fresh&&now-saved.at>=interval)){
-    saved={identity,at:now,value:state.price,source:{...state.source}};values.set(rule.id,saved);
+   if(valid&&(!saved||fresh&&(!saved.verified||now-saved.at>=interval))){
+    saved={identity,at:now,verified:fresh,value:state.price,source:{...state.source}};values.set(rule.id,saved);
    }
    return {value:saved?.value??null,source:saved?.source??null,last:!fresh};
   }

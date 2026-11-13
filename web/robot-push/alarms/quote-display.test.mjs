@@ -18,6 +18,7 @@ test('outage retains explicitly marked last quote, never a zero or blank flash',
 test('cold cache stays labelled last and disconnected empty state does not invent price',()=>{
  const d=createQuoteDisplay();assert.equal(d.read(rule(null),offline,0).value,null);
  assert.deepEqual(d.read(rule('68000'),offline,1000).last,true);
+ assert.equal(d.read(rule('67000'),live,1100).value,'67000');
 });
 test('asset edit, removed rule, and profile changes discard old display values',()=>{
  const d=createQuoteDisplay();d.read(rule('68000'),live,0);
