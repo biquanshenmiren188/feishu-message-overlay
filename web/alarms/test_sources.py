@@ -129,7 +129,7 @@ class SourceTests(unittest.TestCase):
         r,s=warm()
         for bad in [quote('WBTC',at=118),dict(quote(at=118),quote='USD'),dict(quote(at=118),unit='1000BTC'),quote('1000BTC',at=118),dict(quote(at=118),instrumentVerified=False)]:
             q,_,_=select(r,s,book(bad),118);self.assertIsNone(q)
-        for base in ('1000PEPE','PAY','BTC3L'):
+        for base in ('1000UNKNOWN','PAY','BTC3L'):
             self.assertFalse(eligible(identity(quote(base))))
 
     def test_never_use_original_exchange_spot(self):

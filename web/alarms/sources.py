@@ -1,12 +1,13 @@
 """Exact instrument identities and deterministic, persisted quote failover.
 
-Never remove numeric prefixes, alias wrapped assets, or convert quote currencies.
+Never guess numeric prefixes, alias wrapped assets, or convert quote currencies.
 Candidate warm-up compares simultaneous prices; it is an extra sanity check,
 not evidence that similarly named tokens are the same asset.
 """
 import math
 import re
 from engine import number, FALLBACK_VENUES
+from denominations import denomination, converted
 
 SPOT_PRIORITY = ('binance', 'okx', 'bybit', 'bitget', 'gate')
 MAX_AGE = 12
@@ -29,10 +30,14 @@ def identity(q):
     if not isinstance(base, str) or not re.fullmatch(r'[A-Z0-9][A-Z0-9._-]{0,39}', base) or quote != 'USDT':
         return None
     # Metadata contract size is an order quantity, never a price multiplier.
-    return dict(base=base, quote=quote, unit=q.get('unit', base), pair=base + '/' + quote, fallbackAllowed=q.get('fallbackAllowed', True))
+    asset = dict(base=base, quote=quote, unit=q.get('unit', base), pair=base + '/' + quote, fallbackAllowed=q.get('fallbackAllowed', True))
+    asset.update(denomination(q) or {})
+    return asset
 
 
 def eligible(asset):
+    if asset and asset.get('denominationVersion'):
+        return bool(asset.get('fallbackAllowed', True) and asset['unit'] == asset['base'])
     return bool(asset and asset.get('fallbackAllowed', True) and asset['unit'] == asset['base'] and asset['base'] not in AMBIGUOUS
                 and not re.match(r'^\d', asset['base'])
                 and not re.search(r'(?:[235](?:L|S)|UP|DOWN|BULL|BEAR)$', asset['base']))
@@ -50,11 +55,41 @@ def fresh(q, kind, now):
 
 
 def source(q, kind, fallback=False):
-    return dict(exchange=q['exchange'], market=q['market'], symbol=q['symbol'], priceType=kind, fallback=fallback)
+    result = dict(exchange=q['exchange'], market=q['market'], symbol=q['symbol'], priceType=kind, fallback=fallback)
+    if q.get('denominationVersion'):
+        result.update({k:q[k] for k in ('conversionFactor','targetUnit','assetId','denominationVersion')})
+    return result
 
 
 def source_key(s):
-    return tuple(s.get(k) for k in ('exchange', 'market', 'symbol', 'priceType')) if s else None
+    return tuple(s.get(k) for k in ('exchange', 'market', 'symbol', 'priceType', 'conversionFactor', 'targetUnit', 'assetId', 'denominationVersion')) if s else None
+
+
+def candidate(q, asset):
+    other = identity(q)
+    if not eligible(other):
+        return None
+    # Preserve established exact-unit routing for ordinary assets, even if only
+    # one venue has a reviewed denomination entry. Scaled/ambiguous units must
+    # have registry evidence at BOTH ends.
+    if (asset['base'] == other['base'] and asset['unit'] == other['unit']
+            and not re.match(r'^\d', asset['base']) and asset['base'] not in AMBIGUOUS
+            and not (asset.get('units', '1') != '1' or other.get('units', '1') != '1')):
+        return q
+    if asset.get('denominationVersion'):
+        try:
+            return converted(q, asset)
+        except (ValueError, ArithmeticError, TypeError):
+            return None
+    return q if other == asset else None
+
+
+def qualification_key(q):
+    # Never reuse a paired qualification after the denominator or registry changes.
+    key = q['exchange'] + ':' + q['symbol']
+    if q.get('denominationVersion'):
+        key += ':' + ':'.join(str(q[k]) for k in ('conversionFactor','targetUnit','assetId','denominationVersion'))
+    return key
 
 
 def select(rule, previous, quotes, now, advance=True):
@@ -77,7 +112,8 @@ def select(rule, previous, quotes, now, advance=True):
     candidates = []
     if eligible(asset):
         for venue in backup_venues(rule):
-            matching = [q for k, q in quotes.items() if k[:2] == (venue, 'spot') and identity(q) == asset]
+            matching = [c for k, q in quotes.items() if k[:2] == (venue, 'spot')
+                        and (c := candidate(q, asset)) is not None]
             # Ambiguous listings in the same venue are never selected.
             if len(matching) == 1 and fresh(matching[0], 'last', now):
                 candidates.append(matching[0])
@@ -85,7 +121,7 @@ def select(rule, previous, quotes, now, advance=True):
     qualified = dict(state.get('qualifiedSources', {}))
     if advance and primary_ok:
         for q in candidates:
-            key = q['exchange'] + ':' + q['symbol']
+            key = qualification_key(q)
             record = dict(qualified.get(key, {}))
             stamp = [primary['observedAt'], q['observedAt']]
             ratio = number(q['last']) / number(primary[rule['priceType']])
@@ -96,8 +132,8 @@ def select(rule, previous, quotes, now, advance=True):
                 qualified[key] = record
         state['qualifiedSources'] = qualified
     fresh_candidates = len(candidates)
-    candidates = [q for q in candidates if qualified.get(q['exchange'] + ':' + q['symbol'], {}).get('count', 0) >= 3
-                  and now - qualified[q['exchange'] + ':' + q['symbol']].get('at', 0) <= 86400]
+    candidates = [q for q in candidates if qualified.get(qualification_key(q), {}).get('count', 0) >= 3
+                  and now - qualified[qualification_key(q)].get('at', 0) <= 86400]
     recovering = old_source.get('fallback', False)
     count = state.get('primaryRecoveryCount', 0)
     if advance:
@@ -143,4 +179,7 @@ def active_groups(rule, state):
 
 
 def source_label(s):
-    return f"{'备用行情：' if s.get('fallback') else ''}{s['exchange'].upper()} · {'现货' if s['market'] == 'spot' else '永续'} · {s['symbol']} · {'最新成交价' if s['priceType'] == 'last' else '标记价格'}"
+    label = f"{'备用行情：' if s.get('fallback') else ''}{s['exchange'].upper()} · {'现货' if s['market'] == 'spot' else '永续'} · {s['symbol']} · {'最新成交价' if s['priceType'] == 'last' else '标记价格'}"
+    if s.get('conversionFactor') and s['conversionFactor'] != '1':
+        label += f"（×{s['conversionFactor']}，按 {s['targetUnit']} 报价）"
+    return label
