@@ -18,4 +18,13 @@
 
 发布工具 `scripts/deploy-alarm-layout.py` 使用当前版本锁、源文件哈希、全静态树校验、原子切换及回滚；校验服务 PID、后台文件、报警配置和设备绑定不变。回滚仅恢复静态 current 链接，不恢复用户数据旧快照。
 
-实际发布信息在上线验收后追加。
+## 已上线
+
+- 功能源码：`95d8ad23e2a8c4406895493793127940121575e6`。
+- 静态版本：`/opt/funding-radar-web/releases/20261113-alarm-layout-1794546624629364328`。
+- 回滚版本：`/opt/funding-radar-web/releases/20261113-alarm-multi-1794540390144446058`。
+- 后端保持 `6d5414bcd2a1edee9b23182a04967474510c2ead`；后台文件逐项不变，三个服务 PID、报警配置、设备绑定与推送配置保持。保留3558个非目标静态文件，只替换3个文件、增加compact.css。
+- 正式3号Chrome：1440px桌面、393px手机、320px窄屏检查通过；两条真实BTC规则仍为65000/66000、每30秒提醒，设备绑定保持。只读打开新增与编辑并取消；16条既有历史记录正常读取，未保存真实规则、未发送通知。
+- 验收中还观察到Binance规则自然显示“备用：OKX · 现货”，价格更新，后台切源逻辑未被界面改动覆盖。
+- 截图保存于任务 outputs/alarm-compact-desktop-live.png 和 outputs/alarm-compact-mobile-live.png。手机验收为Chrome视口，不是实体Safari。
+- 已推送现有PR70；未合并。
