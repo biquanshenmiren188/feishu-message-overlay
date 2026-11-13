@@ -8,6 +8,7 @@ from sources import select, identity, eligible, active_groups, fresh
 from instruments import load
 from store import Store
 from market import Market, VENUES
+from server import send_event
 
 
 def rule(base='BTC', exchange='okx', **kw):
@@ -203,6 +204,45 @@ class RoutingStoreTests(unittest.TestCase):
     def test_stale_or_changed_source_cancels_claim(self):
         self.store.tick(book(quote(at=self.now,price='99')),self.now);event=self.store.claim()
         self.assertFalse(self.store.begin_send(event,book(quote(venue='bybit',at=self.now,price='99')),self.now))
+
+    def test_fallback_reaches_bark_request_every_30_seconds_and_stops_on_recovery(self):
+        market=Market();self.addCleanup(market.pool.shutdown)
+        sent=[]
+        with patch('server.build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
+            for seconds,price,expected in [(0,'99',1),(29,'99',1),(30,'99',2),(59,'99',2),(60,'99',3),(90,'101',3)]:
+                now=self.now+seconds
+                with patch('store.time.time',return_value=now):
+                    market.quotes=book(quote(at=now,price=price))
+                    self.store.tick(market.quotes,now)
+                    event=self.store.claim()
+                    if event:
+                        send_event(self.store,event,market)
+                        request=opener.return_value.open.call_args.args[0]
+                        payload=json.loads(request.data)
+                        self.assertEqual(request.full_url,'https://api.day.app/push')
+                        self.assertEqual((payload['level'],payload['volume'],payload['call']),('critical',5,'1'))
+                        self.assertIn('备用行情：BINANCE · 现货',payload['body'])
+                        self.assertIn('触发价格：99 USDT',payload['body'])
+                        self.assertIn('BTC/USDT',payload['title'])
+                        self.assertTrue(payload['device_key'].startswith('synthetic_'))
+                        sent.append(seconds)
+                    self.assertEqual(opener.return_value.open.call_count,expected)
+            self.assertEqual(sent,[0,30,60])
+            self.assertEqual({e['status'] for e in self.store.view('a')['events']},{'accepted'})
+            self.assertEqual(self.store.view('a')['rules'][0]['state']['status'],'watching')
+
+    def test_fallback_stales_after_queuing_never_reaches_bark_http(self):
+        market=Market();self.addCleanup(market.pool.shutdown)
+        with patch('store.time.time',return_value=self.now):
+            market.quotes=book(quote(at=self.now,price='99'))
+            self.store.tick(market.quotes,self.now);event=self.store.claim()
+            self.assertIsNotNone(event)
+            market.quotes={}
+            with patch('server.build_opener') as opener:
+                send_event(self.store,event,market)
+                opener.assert_not_called()
+        self.assertEqual(self.store.view('a')['events'][0]['status'],'cancelled')
     def test_all_failed_no_zero_price_or_old_price_trigger(self):
         self.store.tick({},self.now)
         view=self.store.view('a');self.assertEqual(view['rules'][0]['state']['status'],'stale');self.assertFalse(view['events'])

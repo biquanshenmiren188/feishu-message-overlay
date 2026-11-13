@@ -32,3 +32,10 @@
 正式3号浏览器确认 routing1，新紧凑API返回serverTime。用与复现一致的4秒标签页延迟，连续多次后台watching时网页均保持监控中，过期的页面价格隐藏为—而不再误报行情中断。恢复标签页网络后，两条实时价格正常返回。模拟前后过滤后的响应证据在 work/routing-browser-before.json、work/routing-browser-after.json。
 
 正式桌面与实际393px手机视口无横溢，截图 outputs/alarm-routing-live-desktop.png / alarm-routing-live-mobile.png；隔离切源截图独立标注为模拟，不能把正式主源健康画面替代断流测试。浏览器工具编号会变，本次实际 profileName=3号 对应工具ID4，最初误认ID3为配置名已纠正，没有要求用户重新登录或操作软件。所有临时网络/视口覆盖已恢复。PR70更新，待合并。
+
+
+## 备用触发发送链路与表单精简
+
+用户要求确认备用价格不仅用于显示，还能触发每30秒的手机报警。补充隔离回归直接调用真实 Store.tick → claim → server.send_event → begin_send → Bark Request 构造及 finish，只在外部HTTP传输边界模拟Bark响应，不使用真实设备或向外发送通知。备用价持续低于阈值时，第0、30、60秒分别构造一次 https://api.day.app/push 请求，第29、59秒无重复；载荷包含备用现货来源/实际触发价、critical/volume=5/call=1和隔离设备Key。模拟接受后事件状态accepted；第90秒价格恢复后无新请求；排队后行情失效时HTTP函数不被调用，事件cancelled。此证据证明服务端发送链路和节奏，不等于实体手机已收到或响铃。
+
+用户另要求去掉表单底部说明及启用勾选：删除备用解释、重复说明、市场摘要、强提醒说明、高级参数说明，以及启用复选框。新增和编辑提交 enabled=true，保存即启用；其他输入、提醒次数和备用源保持。只发布index/app/search静态文件，无后台功能变更或服务重启。真实Store隔离浏览器验证新增和编辑两次保存均enabled=true，显示监控中。原CSS/页面布局不重做。
