@@ -1,3 +1,4 @@
+import {ordinaryViewportHeight} from './feed-viewport.js?v=20261113-six1';
 import {createPinHistory} from './pin-history.js';
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
@@ -136,7 +137,7 @@ function fitFeed(force){
  const safeBottom=parseFloat(getComputedStyle($('board-shell')).paddingBottom)||0;
  const pane=document.querySelector('.feed-pane');
  const bottom=pane?stablePaneBottom(pane.getBoundingClientRect().bottom,viewportBottom,matchMedia('(max-width:900px)').matches):viewportBottom;
- const height=Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
+ const height=matchMedia('(max-width:900px)').matches?ordinaryViewportHeight([...feed.children].map(el=>el.getBoundingClientRect()),parseFloat(getComputedStyle(board).paddingTop)||0):Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
  if(key===fitKey)return;fitKey=key;guardScroll();

@@ -1,0 +1,4 @@
+/* Ordinary history has its own six-row viewport; the pin keeps its own scroller. */
+@media(max-width:900px){
+ html body.split-mode .feed-pane{height:auto;min-height:350px}
+}
