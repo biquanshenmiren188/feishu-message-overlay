@@ -37,4 +37,12 @@
 
 ## 发布
 
-使用 `deploy-alarm-denominations.py` 只替换报警服务后台并重启该服务，锁定基线、检查全部静态文件哈希、配置与绑定摘要和无关服务 PID。健康版本 12 / same-asset-spot-v3。实际提交、部署路径和上线后检查在发布后补录。
+使用 `deploy-alarm-denominations.py` 只替换报警服务后台并重启该服务，锁定基线、检查全部静态文件哈希、配置与绑定摘要和无关服务 PID。
+
+- 已部署源码 **6d5414bcd2a1edee9b23182a04967474510c2ead**，后台 `/opt/radar-alarms/releases/6d5414bcd2a1edee9b23182a04967474510c2ead`。
+- 健康版本 **12 / same-asset-spot-v3 / denominationConversion=true**，仍 critical、30 秒重复和 30 秒响铃请求参数。
+- 静态 release 保持 `/opt/funding-radar-web/releases/20261113-alarm-multi-1794540390144446058`；**3561 个静态文件未改**。发布前后规则/用户配置/设备摘要一致，无关服务 PID 一致。
+- 后台回滚目标 `/opt/radar-alarms/releases/4c30f93c35dabc0da2306fb0668c92a66a5a60ee`，无配置迁移。
+- 上线后直接导入 current 模块，再跑 12 组隔离 sender 断流场景：Binance 1000PEPE、Bybit SHIB1000/10000SATS、Aster 1000PEPE、Bitget 1MCHEEMS、Gate CHEEMS 反向换算，分别涨/跌；0/30/60 秒、解除取消和恢复通过。无真实通知。
+- 正式 3号浏览器桌面/393px 手机视口复核：两条原报警监控中，原阈值 65000/66000 和绑定均保留；无横向溢出。没有新建生产测试规则、没有打开桌面软件。
+- PR #70 待合并；源码已推送，发布记录为后续文档提交，不改变上述功能部署 SHA。
