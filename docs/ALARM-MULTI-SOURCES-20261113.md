@@ -12,4 +12,10 @@
 
 Store六所×BTC/ETH/SOL新增、编辑、数据库重新打开验证多项/空项/单项/全选保存。3号浏览器隔离真实Store/API共12次保存，覆盖Binance/OKX/Bybit/Bitget/Gate/Aster及BTC/ETH/SOL/PEPE。手机393px实际新增、编辑、刷新回显OKX/Gate，3+2换行无横溢；这是浏览器视口验收，非实体iPhone。正式规则和设备未用于测试。
 
-发布脚本scripts/deploy-alarm-multi.py，仅替换4个静态文件并更新报警后端；保留其他线上文件、用户配置、设备及无关服务。健康版本11，fallbackMultiSelect=true。上线记录待补。
+发布脚本scripts/deploy-alarm-multi.py，仅替换4个静态文件并更新报警后端；保留其他线上文件、用户配置、设备及无关服务。健康版本11，fallbackMultiSelect=true。
+
+## 正式发布
+
+源码4c30f93c35dabc0da2306fb0668c92a66a5a60ee，网页/opt/funding-radar-web/releases/20261113-alarm-multi-1794540390144446058，后端/opt/radar-alarms/releases/4c30f93c35dabc0da2306fb0668c92a66a5a60ee。回滚网页/opt/funding-radar-web/releases/20261113-alarm-form-1794539603043523314、后端/opt/radar-alarms/releases/535c9bccfa8439c983239962d8e5dd1237579b3c。服务器两轮93项测试通过；仅重启报警服务，3557其他静态文件、无关服务、用户配置及设备绑定保持。
+
+正式3号浏览器新增和编辑均显示正确勾选，旧auto未扩张到Aster；电脑横排、393px手机3+2无横溢，关闭无确认。截图outputs/alarm-multi-live-desktop.png、outputs/alarm-multi-live-mobile.png。正式已有2条报警仍启用监控，实际保存流程在隔离真实Store完成12次，未修改真实规则或发送测试通知。视口恢复、隔离服务停止。GitHub PR70待合并。
