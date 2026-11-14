@@ -22,6 +22,7 @@ venues=('binance','okx','bybit','bitget','gate','aster')
 bases=('BTC','ETH','SOL','PEPE','1000PEPE','WBTC')
 scaled='--denominations' in sys.argv
 layout='--layout' in sys.argv
+devices='--devices' in sys.argv
 
 def scaled_book(at,failed=False):
     quotes={}
@@ -51,6 +52,10 @@ if layout:
         store.mutate('fixture',dict(action='save',requestId=uuid.uuid4().hex,revision=i,rule=dict(exchange=venue,market='future',symbol=symbol,priceType='last',condition='below',target=target,repeat=True,enabled=True,fallbackExchanges=['bybit'],hold=0,cooldown=30,hysteresis='0',level='critical',immediate=True)),market.quotes)
     refresh()
 
+if devices:
+    for name,key in [('我的 iPhone','DemoKey_iPhone_A1B2C3D4'),('备用 iPhone','DemoKey_Backup_E5F6G7H8')]:
+        store.mutate('fixture',dict(action='bind',key=key,label=name,requestId=uuid.uuid4().hex,revision=store.view('fixture')['revision']),market.quotes)
+
 Base=make_handler(store,market,lambda token:'fixture' if token=='synthetic_fixture_only' else None)
 class Handler(Base):
     def reply(self,status,data):
@@ -71,8 +76,16 @@ class Handler(Base):
         try:
             assert self.headers.get('Authorization')=='Bearer synthetic_fixture_only'
             data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            if data.get('action')!='save':return self.reply(405,dict(error='Fixture accepts only synthetic saves'))
+            if data.get('action')!='save' and not devices:return self.reply(405,dict(error='Fixture accepts only synthetic saves'))
+            if data.get('action')=='bind' and not data.get('key','').startswith('DemoKey_'):
+                return self.reply(400,dict(error='Fixture accepts only DemoKey_ synthetic keys'))
             refresh();result=store.mutate('fixture',data,market.quotes)
+            if devices and data.get('action')=='test':
+                from unittest.mock import patch
+                from server import send_event
+                with patch('server.build_opener') as transport:
+                    transport.return_value.open.return_value.__enter__.return_value.read.return_value=b'{"code":200}'
+                    while (event:=store.claim()) is not None:send_event(store,event,market)
             if scaled:
                 now=time.time()
                 for offset in (6,4,2):store.tick(scaled_book(now-offset),now-offset)

@@ -368,7 +368,8 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(self.store.view('a')['events'][0]['status'],'expired')
 
     def repeat_fixture(self):
-        self.change(action='bind',key='synthetic_device_12345',label='设备')
+        if not self.store.view('a')['device']:
+            self.change(action='bind',key='synthetic_device_12345',label='设备')
         identity=self.create(repeat=True)
         quotes={('binance','future','BTCUSDT'):quote(101,self.now)}
         self.store.tick(quotes,self.now)

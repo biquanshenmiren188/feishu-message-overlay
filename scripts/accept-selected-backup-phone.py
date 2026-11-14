@@ -66,7 +66,7 @@ try:
    store.cipher=Fernet((root/'bark-encryption.key').read_bytes())
    with store.db:
     store.ensure('acceptance')
-    store.db.execute('INSERT INTO devices VALUES (?,?,?,?)',('acceptance',receiver[1],receiver[2],'authorized test recipient'))
+    store.db.execute('INSERT INTO devices(id,profile,fingerprint,secret,label) VALUES (?,?,?,?,?)',(secrets.token_hex(16),'acceptance',receiver[1],receiver[2],'authorized test recipient'))
    primary=market.fetch(config['exchange'],config['market'])
    store.mutate('acceptance',dict(action='save',rule=config,requestId=secrets.token_hex(16),revision=0),primary)
    active={(v,m) for v in VENUES for m in ('spot','future')}

@@ -88,6 +88,7 @@ class DenominationTests(unittest.TestCase):
                 rid=mutate(action='save',rule=r)['id']
                 mutate(action='save',id=rid,rule=r)
                 mutate(action='bind',key='synthetic_denomination_test_only',label='isolated')
+                mutate(action='bind',key='synthetic_denomination_second_device',label='second')
                 store.db.close();store=Store(temp)
                 saved=store.view('isolated')['rules'][0]
                 self.assertEqual((saved['symbol'],saved['target'],saved['fallbackExchanges']),(r['symbol'],r['target'],[backup]))
@@ -107,21 +108,25 @@ class DenominationTests(unittest.TestCase):
                         self.assertEqual(state['source']['exchange'],backup)
                         self.assertEqual(number(state['price']),hit)
                         event=store.claim()
-                        if event:
+                        while event:
                             send_event(store,event,market)
                             payload=json.loads(transport.return_value.open.call_args.args[0].data)
                             self.assertIn(base+'/USDT',payload['title'])
                             self.assertIn('触发价格：'+state['price']+' USDT',payload['body'])
                             self.assertEqual((payload['level'],payload['call'],payload['volume']),('critical','1',5))
                             sends.append(sec)
-                        self.assertEqual(transport.return_value.open.call_count,expected)
-                    self.assertEqual(sends,[20,50,80])
+                            event=store.claim()
+                        self.assertEqual(transport.return_value.open.call_count,expected*2)
+                    self.assertEqual(sends,[20,20,50,50,80,80])
                     self.assertEqual({e['status'] for e in store.view('isolated')['events']},{'accepted'})
                     # Converted CLEAR price prevents sending, despite a misleading raw magnitude.
                     clock[0]=now+110;market.quotes=book(secondary(clock[0],hit))
                     store.tick(market.quotes,clock[0]);event=store.claim();self.assertIsNotNone(event)
-                    market.quotes=book(secondary(clock[0],clear));send_event(store,event,market)
-                    self.assertEqual(transport.return_value.open.call_count,3)
+                    market.quotes=book(secondary(clock[0],clear))
+                    while event:
+                        send_event(store,event,market)
+                        event=store.claim()
+                    self.assertEqual(transport.return_value.open.call_count,6)
                     self.assertEqual(store.view('isolated')['events'][0]['status'],'cancelled')
                     # A healthy but UNCHECKED exact-asset source cannot replace selected source.
                     clock[0]=now+140;market.quotes={}

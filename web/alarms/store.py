@@ -48,6 +48,16 @@ class Store:
         CREATE TABLE IF NOT EXISTS requests (profile TEXT NOT NULL, id TEXT NOT NULL, digest TEXT NOT NULL, response TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY(profile,id));
         ''')
         with self.db:
+            # Transactional, one-time migration: preserve encrypted keys and labels verbatim.
+            if 'id' not in {r['name'] for r in self.db.execute('PRAGMA table_info(devices)')}:
+                self.db.execute('BEGIN IMMEDIATE')
+                self.db.execute('ALTER TABLE devices RENAME TO devices_single')
+                self.db.execute('CREATE TABLE devices (id TEXT PRIMARY KEY, profile TEXT NOT NULL, fingerprint TEXT UNIQUE NOT NULL, secret TEXT NOT NULL, label TEXT NOT NULL)')
+                for device in self.db.execute('SELECT * FROM devices_single').fetchall():
+                    self.db.execute('INSERT INTO devices VALUES (?,?,?,?,?)', (secrets.token_hex(16), *tuple(device)))
+                self.db.execute('DROP TABLE devices_single')
+            self.db.execute('CREATE INDEX IF NOT EXISTS devices_profile ON devices(profile)')
+            self.db.execute('CREATE TABLE IF NOT EXISTS device_dispatch (rule_id TEXT NOT NULL, fingerprint TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY(rule_id,fingerprint))')
             # Preserve effective pauses when retiring the account-wide switch.
             for profile in self.db.execute('SELECT id FROM profiles WHERE enabled=0').fetchall():
                 for row in self.db.execute('SELECT id,config,state FROM rules WHERE profile=?', (profile['id'],)).fetchall():
@@ -71,11 +81,29 @@ class Store:
         with self.lock, self.db:
             self.ensure(profile)
             p = dict(self.db.execute('SELECT * FROM profiles WHERE id=?', (profile,)).fetchone())
-            d = self.db.execute('SELECT label,fingerprint FROM devices WHERE profile=?', (profile,)).fetchone()
+            devices = self.device_list(profile)
+            d = devices[0] if devices else None
             rules = [dict(id=r['id'], **json.loads(r['config']), state=json.loads(r['state'])) for r in self.db.execute('SELECT * FROM rules WHERE profile=? ORDER BY created DESC', (profile,))]
-            event_sql = "SELECT * FROM events WHERE profile=?" + (" AND rule_id='test' ORDER BY at DESC LIMIT 1" if compact else " ORDER BY at DESC LIMIT 100")
-            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status='queued' if r['status']=='claimed' else r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile,))]
-            return dict(revision=p['revision'], enabled=True, device=dict(label=d['label'], suffix=d['fingerprint'][-6:]) if d else None, rules=rules, events=events)
+            event_sql = "SELECT * FROM events WHERE profile=?" + (" AND rule_id='test' AND at=(SELECT MAX(at) FROM events WHERE profile=? AND rule_id='test') ORDER BY id" if compact else " ORDER BY at DESC LIMIT 100")
+            events = [dict(json.loads(r['payload']), id=r['id'], ruleId=r['rule_id'], at=r['at'], status='queued' if r['status']=='claimed' else r['status'], attempts=r['attempts'], error=r['error']) for r in self.db.execute(event_sql, (profile, profile) if compact else (profile,))]
+            return dict(revision=p['revision'], enabled=True, device=d, devices=devices, rules=rules, events=events)
+
+    def device_list(self, profile, reveal=False):
+        with self.lock:
+            return [dict(id=d['id'], label=d['label'], suffix=d['fingerprint'][-6:],
+                         **({'key': self.cipher.decrypt(d['secret'].encode()).decode()} if reveal else {}))
+                    for d in self.db.execute('SELECT * FROM devices WHERE profile=? ORDER BY rowid', (profile,))]
+
+    def selected_device(self, profile, identity):
+        if identity:
+            device = self.db.execute('SELECT * FROM devices WHERE profile=? AND id=?', (profile, identity)).fetchone()
+            if not device:
+                raise ValueError('设备不存在或不属于当前推送码')
+            return device
+        devices = self.db.execute('SELECT * FROM devices WHERE profile=?', (profile,)).fetchall()
+        if len(devices) != 1:
+            raise ValueError('请选择要操作的设备，请刷新页面')
+        return devices[0]
 
     def history(self, profile, query):
         def arg(name, default=''): return query.get(name, [default])[0]
@@ -178,24 +206,39 @@ class Store:
                 if not re.fullmatch('[A-Za-z0-9_-]{8,128}', value):
                     raise ValueError('Bark Key 格式不正确，请复制 App 首页的推送地址')
                 fingerprint = hashlib.sha256(value.encode()).hexdigest()
-                owner = self.db.execute('SELECT profile FROM devices WHERE fingerprint=?', (fingerprint,)).fetchone()
+                existing = self.selected_device(profile, data['deviceId']) if data.get('deviceId') else None
+                owner = self.db.execute('SELECT profile,id FROM devices WHERE fingerprint=?', (fingerprint,)).fetchone()
                 if owner and owner['profile'] != profile:
                     raise Conflict('该 Bark 设备已绑定其他推送码，请先在原码解除绑定')
+                if owner and (not existing or owner['id'] != existing['id']):
+                    raise ValueError('该 Bark Key 已绑定，无需重复添加')
                 label = data.get('label', '我的 iPhone')
                 if not isinstance(label, str) or not 1 <= len(label.strip()) <= 30:
                     raise ValueError('设备名称应为 1 至 30 字')
-                self.cancel(profile)
-                self.db.execute('INSERT OR REPLACE INTO devices VALUES (?,?,?,?)', (profile, fingerprint, self.cipher.encrypt(value.encode()).decode(), label.strip()))
+                if existing:
+                    if existing['fingerprint'] != fingerprint:
+                        self.cancel_device(profile, existing['fingerprint'])
+                    self.db.execute('UPDATE devices SET fingerprint=?,secret=?,label=? WHERE id=? AND profile=?', (fingerprint, existing['secret'] if existing['fingerprint'] == fingerprint else self.cipher.encrypt(value.encode()).decode(), label.strip(), existing['id'], profile))
+                    changed_id = existing['id']
+                else:
+                    if self.db.execute('SELECT count(*) FROM devices WHERE profile=?', (profile,)).fetchone()[0] >= 100:
+                        raise ValueError('每个推送码最多绑定 100 台设备')
+                    changed_id = secrets.token_hex(16)
+                    self.db.execute('INSERT INTO devices VALUES (?,?,?,?,?)', (changed_id, profile, fingerprint, self.cipher.encrypt(value.encode()).decode(), label.strip()))
             elif action == 'unbind':
-                self.cancel(profile)
-                self.db.execute('DELETE FROM devices WHERE profile=?', (profile,))
+                device = self.selected_device(profile, data.get('deviceId'))
+                self.cancel_device(profile, device['fingerprint'])
+                self.db.execute('DELETE FROM devices WHERE profile=? AND id=?', (profile, device['id']))
             elif action == 'test':
-                device = self.db.execute('SELECT * FROM devices WHERE profile=?', (profile,)).fetchone()
-                if not device:
+                devices = [self.selected_device(profile, data['deviceId'])] if data.get('deviceId') else self.db.execute('SELECT * FROM devices WHERE profile=?', (profile,)).fetchall()
+                if not devices:
                     raise ValueError('请先绑定 Bark')
-                if self.db.execute("SELECT 1 FROM events WHERE profile=? AND rule_id='test' AND at>?", (profile, now - 60)).fetchone():
-                    raise ValueError('请间隔一分钟再发送测试通知')
-                self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。收到后，当前 Bark 设备即可用于价格报警。', group='雷达报警测试', level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/'), device, now)
+                for device in devices:
+                    if self.db.execute("SELECT 1 FROM events WHERE profile=? AND fingerprint=? AND rule_id='test' AND at>?", (profile, device['fingerprint'], now - 60)).fetchone():
+                        raise ValueError('部分设备刚发送过测试，请间隔一分钟再试')
+                round_id = secrets.token_hex(16)
+                for device in devices:
+                    self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。接收设备：' + device['label'], group='雷达报警测试', level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/', roundId=round_id), device, now)
             else:
                 raise ValueError('不支持的操作')
             self.db.execute('UPDATE profiles SET revision=revision+1 WHERE id=?', (profile,))
@@ -213,9 +256,15 @@ class Store:
             args.append(identity)
         self.db.execute(sql, args)
 
+    def cancel_device(self, profile, fingerprint):
+        self.db.execute("UPDATE events SET status='cancelled',error='设备已变更或解绑' WHERE profile=? AND fingerprint=? AND status IN ('queued','retry','claimed')", (profile, fingerprint))
+
     def event(self, profile, identity, payload, device, now):
         event_id = secrets.token_hex(16)
+        payload = dict(payload)
         payload['id'] = event_id
+        if device:
+            payload.update(deviceId=device['id'], deviceLabel=device['label'])
         self.db.execute('INSERT INTO events VALUES (?,?,?,?,?,?,0,?,?,?,?)', (event_id, profile, identity, now, dump(payload), 'queued' if device else 'no_device', now, now + payload.get('repeatInterval', 120), device['fingerprint'] if device else None, None if device else '未绑定 Bark，事件已记录'))
 
     def tick(self, quotes, now):
@@ -253,8 +302,10 @@ class Store:
                     payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'], source=state['source'])
                     if rule['repeat']:
                         payload['repeatInterval'] = REPEAT_SECONDS
-                    device = self.db.execute('SELECT * FROM devices WHERE profile=?', (row['profile'],)).fetchone()
-                    self.event(row['profile'], row['id'], payload, device, now)
+                    payload['roundId'] = secrets.token_hex(16)
+                    devices = self.db.execute('SELECT * FROM devices WHERE profile=?', (row['profile'],)).fetchall()
+                    for device in devices or [None]:
+                        self.event(row['profile'], row['id'], payload, device, now)
             self.db.execute("UPDATE events SET status='expired',error='超过发送时效' WHERE status IN ('queued','retry') AND expires<?", (now,))
             self.db.execute("DELETE FROM events WHERE at<? AND status NOT IN ('queued','retry','claimed','sending')", (now - 30 * 86400,))
         return active
@@ -275,8 +326,9 @@ class Store:
             row = self.db.execute('SELECT * FROM events WHERE id=?', (event['id'],)).fetchone()
             if not row or row['status'] != 'claimed':
                 return False
-            device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=?', (row['profile'],)).fetchone()
+            device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            round_id = json.loads(row['payload']).get('roundId', row['id'])
             if valid and row['rule_id'] != 'test':
                 saved = self.db.execute('SELECT config,state FROM rules WHERE id=? AND profile=?', (row['rule_id'], row['profile'])).fetchone()
                 valid = bool(saved)
@@ -287,7 +339,8 @@ class Store:
                         selected, effective, routing = select(rule, state, quotes, now, advance=False)
                         queued_source = json.loads(row['payload']).get('source')
                         valid = fresh(selected, effective['priceType'], now) and (not queued_source or source_key(queued_source) == source_key(routing.get('source')))
-                        if not valid:
+                        dispatched = self.db.execute("SELECT 1 FROM events WHERE profile=? AND rule_id=? AND attempts>0 AND COALESCE(json_extract(payload,'$.roundId'),id)=?", (row['profile'], row['rule_id'], round_id)).fetchone()
+                        if not valid and not dispatched:
                             # A cancelled, never-sent one-shot must not remain permanently fired.
                             state.update(fired=False, gap=True, pending=None, status='stale')
                             self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['rule_id']))
@@ -297,7 +350,7 @@ class Store:
                         q = selected if quotes is not None else {rule['priceType']: state.get('price'), 'observedAt': state.get('observedAt', 0), rule['priceType']+'At': state.get('sampleAt', 0)}
                         try:
                             stamp = q.get(effective['priceType']+'At') or q['observedAt']
-                            valid = now >= state.get('lastDispatch', 0) + REPEAT_SECONDS and -2 <= now-q['observedAt'] <= 12 and -2 <= now-stamp <= 12 and matches(rule, number(q.get(effective['priceType'])))
+                            valid = (state.get('lastDispatchRound') == round_id or now >= state.get('lastDispatch', 0) + REPEAT_SECONDS) and -2 <= now-q['observedAt'] <= 12 and -2 <= now-stamp <= 12 and matches(rule, number(q.get(effective['priceType'])))
                             queued_source = json.loads(row['payload']).get('source')
                             actual_source = routing.get('source')
                             valid = valid and (not queued_source or source_key(queued_source) == source_key(actual_source))
@@ -307,8 +360,14 @@ class Store:
                 self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
                 return False
             if row['rule_id'] != 'test' and rule['repeat']:
-                state['lastDispatch'] = now
-                self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['rule_id']))
+                last = self.db.execute('SELECT at FROM device_dispatch WHERE rule_id=? AND fingerprint=?', (row['rule_id'], row['fingerprint'])).fetchone()
+                if last and now < last['at'] + REPEAT_SECONDS:
+                    self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?", (last['at'] + REPEAT_SECONDS, row['id']))
+                    return False
+                self.db.execute('INSERT OR REPLACE INTO device_dispatch VALUES (?,?,?)', (row['rule_id'], row['fingerprint'], now))
+                if state.get('lastDispatchRound') != round_id:
+                    state.update(lastDispatch=now, lastDispatchRound=round_id)
+                    self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['rule_id']))
             self.db.execute("UPDATE events SET status='sending',attempts=attempts+1 WHERE id=?", (row['id'],))
             return True
 
