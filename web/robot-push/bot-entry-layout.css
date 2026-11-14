@@ -29,3 +29,7 @@
  html body.split-mode main{display:flex;flex-direction:column;align-items:stretch}
  html body.split-mode #basis-pane{height:auto;max-height:none;overflow:visible;flex:none}
 }
+/* Large touch screens scroll the page from cards; message history stays independent. */
+@media(min-width:720px) and (max-width:1199px) and (hover:none) and (pointer:coarse){
+ html body.split-mode #basis-pane{height:auto;max-height:none;overflow:visible;overscroll-behavior:auto}
+}
