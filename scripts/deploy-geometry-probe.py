@@ -15,7 +15,7 @@ def main():
     assert re.fullmatch(r'radar-dialog-clearance-[0-9a-f]{16}\.css',m['css'])
     targets={'index.html','position-limits/index.html','robot-push/index.html','push-center/index.html','robot-push/center/index.html','robot-push/alarms/history.html','robot-push/alarms/index.html','robot-push/settings/index.html'}
     expected=targets|{m['js']}
-    assert set(m['files'])==expected and m['newFiles']==[m['js']]
+    assert set(m['files'])==expected and m['newFiles'] in ([m['js']], [])
     assert set(m['baseline'])==targets
     for name,h in m['files'].items():assert base.sha((stage/'static'/name).read_bytes())==h,name
     assert base.sha((stage/'fallback.html').read_bytes())==m['fallbackAfter']
@@ -24,6 +24,7 @@ def main():
         old=base.CURRENT.resolve();assert str(old)==m['previous'],'Concurrent release: rebuild candidate'
         for n,h in m['baseline'].items():assert base.sha((old/n).read_bytes())==h,n
         for n in m['newFiles']:assert not (old/n).exists(),n
+        if not m['newFiles']:assert base.sha((old/m['js']).read_bytes())==m['files'][m['js']], 'Reuse requires identical existing asset'
         fallback=base.FALLBACK.read_bytes();assert base.sha(fallback)==m['fallbackBefore'];base.health()
         if '--apply' not in sys.argv:print('Preflight passed');return
         protected={p:base.sha(p.read_bytes()) for p in [base.FALLBACK.parent/'manifest.webmanifest',base.FALLBACK.parent/'sw.js']}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
-const code=readFileSync(new URL('../web/robot-push/home-launch.js',import.meta.url),'utf8').split('/* Temporary geometry-only probe')[1];
+const code=readFileSync(new URL('./fixtures/geometry-probe.js',import.meta.url),'utf8').split('/* Temporary geometry-only probe')[1];
 function run({expired=false,coarse=true,total=0,storageError=false,touch=0,screenSize=820}={}) {
  const requests=[],timers=[];let removed=0,appended=0;
  const body={scrollWidth:820,getBoundingClientRect:()=>({left:0,width:820}),appendChild:()=>appended++};

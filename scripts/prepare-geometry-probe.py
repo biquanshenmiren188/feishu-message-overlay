@@ -21,6 +21,6 @@ def prepare(root,out,source,mainrepo,mainsource):
  for n,b in files.items():
   p=out/'static'/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b)
  (out/'fallback.html').write_bytes(patch(fallback))
- manifest=dict(previous=m['previous'],source=source,mainSource=mainsource,js=name,css=style,files={n:sha(b) for n,b in files.items()},newFiles=[name],baseline=before,fallbackBefore=sha(fallback),fallbackAfter=sha(patch(fallback)))
+ manifest=dict(previous=m['previous'],source=source,mainSource=mainsource,js=name,css=style,files={n:sha(b) for n,b in files.items()},newFiles=[] if '--reuse-script' in sys.argv else [name],baseline=before,fallbackBefore=sha(fallback),fallbackAfter=sha(patch(fallback)))
  (out/'manifest.json').write_text(json.dumps(manifest,indent=2));print(json.dumps({'files':len(files),'js':name,'css':style}))
 if __name__=='__main__':prepare(Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3],Path(sys.argv[4]),sys.argv[5])
