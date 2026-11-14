@@ -10,3 +10,11 @@
 }
 @media(max-width:700px){#alarm-content{font-size:16px}}
 @media(max-width:360px){.alarm-page .alarm-row .alarm-actions{gap:0}.alarm-page .alarm-row .alarm-actions button{padding-inline:3px;min-width:36px}}
+.content-preview{margin-top:14px}
+.content-preview-heading{font-size:13px;font-weight:600;color:var(--alarm-ink)}
+.content-preview-caption{font-size:12px;line-height:1.6;color:var(--alarm-muted);margin:4px 0 8px}
+.content-preview-notification{padding:12px 14px;border:1px solid var(--alarm-line);border-radius:12px;background:#f4f6f8;color:var(--alarm-ink);overflow-wrap:anywhere}
+.content-preview-app{display:block;font-size:12px;color:var(--alarm-muted);margin-bottom:5px}
+#content-preview-title{display:block;font-size:14px;line-height:1.5;margin-bottom:5px}
+#content-preview-body{white-space:pre-wrap;font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums}
+#content-preview-error:empty{display:none}

@@ -1,5 +1,6 @@
 import {createDeviceManager} from './devices.js?v=20261114-devices1';
 import {contentDraft} from './content-template.js?v=20261114-template1';
+import {previewContext,renderPreviewBody} from './content-preview.js?v=20261114-preview1';
 import {readSnapshot,saveSnapshot,clearSnapshots} from './snapshot.js?v=20261114-devices1';
 import {connection} from './session.js?v=20261111-smooth1';
 import {patchHTML} from './dom.js?v=20261111-smooth1';
@@ -171,14 +172,25 @@ form.onsubmit=async e=>{
  const rule={exchange:field('exchange').value,market:'future',symbol:q.symbol,fallbackExchanges:checkedFallbacks(),priceType:'last',condition:field('condition').value,target:field('target').value.trim(),upper:null,repeat:field('repeat').value==='true',hold:0,cooldown:30,hysteresis:'0',level:'critical',note:'',immediate:true,recovery:false,expiresAt:null,enabled:true};
  if(await commit({action:'save',id:editing,rule})){try{localStorage.setItem('radar-alarm-exchange',rule.exchange);}catch{}draft=false;$('#alarm-editor').close();toast('强提醒报警已保存');}
 };
-let contentRuleId=null;
+let contentRuleId=null,contentPreviewRule=null,contentPreviewContext=null;
+function updateContentPreview(){
+ if(!contentPreviewRule||!contentPreviewContext)return;
+ $('#content-preview-caption').textContent=contentPreviewContext.caption;
+ $('#content-preview-title').textContent=contentPreviewContext.title;
+ try{
+  $('#content-preview-body').textContent=renderPreviewBody($('#alarm-content').value,contentPreviewRule,contentPreviewContext.values);
+  $('#content-preview-error').textContent='';
+ }catch(error){$('#content-preview-body').textContent='';$('#content-preview-error').textContent=error.message;}
+}
 function openContent(rule){
  contentRuleId=rule.id;draft=false;
+ contentPreviewRule=structuredClone(rule);contentPreviewContext=previewContext(contentPreviewRule,{fresh:presentation(rule).fresh,now:(current.serverTime||Date.now()/1000)*1000});
  $('#content-context').textContent=(rule.state?.asset?.pair||rule.symbol)+' · '+venue[rule.exchange];
  $('#alarm-content').value=contentDraft(rule);$('#content-form-error').textContent='';
+ updateContentPreview();
  $('#content-editor').showModal();
 }
-$('#alarm-content').addEventListener('input',()=>{draft=true;});
+$('#alarm-content').addEventListener('input',()=>{draft=true;updateContentPreview();});
 $('#content-form').onsubmit=async e=>{
  e.preventDefault();$('#content-form-error').textContent='';
  if(await commit({action:'content',id:contentRuleId,alarmContent:$('#alarm-content').value,alarmContentMode:'template'})){
