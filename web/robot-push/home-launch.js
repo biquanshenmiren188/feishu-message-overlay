@@ -17,3 +17,49 @@
   target.hash = location.hash;
   location.replace(target.href);
 })();
+
+/* Temporary geometry-only probe, expires 2026-11-16 00:00 UTC. No identifiers or page content. */
+(function () {
+  if (typeof window === 'undefined' || Date.now() >= Date.UTC(2026, 10, 16)) return;
+  if (!matchMedia('(pointer:coarse)').matches || Math.max(screen.width, screen.height) < 720) return;
+  var src = document.currentScript && document.currentScript.src;
+  if (!src) return;
+  var endpoint = new URL(src, location.href);
+  if (endpoint.origin !== location.origin) return;
+  endpoint.search = ''; endpoint.hash = '';
+  var key = 'radar-geometry-20261114', sent = 0;
+  function n(value) { return Number.isFinite(value) ? Math.round(value * 100) / 100 : -1; }
+  function report(phase) {
+    if (sent >= 3 || Date.now() >= Date.UTC(2026, 10, 16) || !document.body) return;
+    try {
+      var total = Number(sessionStorage.getItem(key) || 0);
+      if (!Number.isFinite(total) || total >= 18) return;
+      sessionStorage.setItem(key, String(total + 1));
+      sent++;
+      var safe = document.createElement('div');
+      safe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;width:0;height:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);';
+      document.body.appendChild(safe);
+      var st = getComputedStyle(safe);
+      var inset = ['Top','Right','Bottom','Left'].map(function (side) { return n(parseFloat(st['padding' + side])); });
+      safe.remove();
+      var root = document.documentElement, body = document.body, main = document.querySelector('main') || body;
+      var b = body.getBoundingClientRect(), m = main.getBoundingClientRect(), v = window.visualViewport;
+      var path = location.pathname;
+      var page = /push-test/.test(path) ? 'legacy' : /alarms/.test(path) ? 'alarms' : /settings/.test(path) ? 'settings' : /robot-push/.test(path) ? 'bot' : /position-limits/.test(path) ? 'limits' : /push-center/.test(path) ? 'push' : 'main';
+      var data = {
+        phase:phase,page:page,installed:navigator.standalone === true,standalone:matchMedia('(display-mode: standalone)').matches,
+        screen:[n(screen.width),n(screen.height),n(screen.availWidth),n(screen.availHeight)],
+        window:[n(innerWidth),n(innerHeight),n(outerWidth),n(outerHeight),n(devicePixelRatio)],
+        viewport:v ? [n(v.width),n(v.height),n(v.offsetLeft),n(v.offsetTop),n(v.scale)] : [],
+        document:[n(root.clientWidth),n(root.scrollWidth),n(body.scrollWidth)],
+        body:[n(b.left),n(b.width)],main:[n(m.left),n(m.width)],safe:inset
+      };
+      var url = new URL(endpoint.href);
+      url.searchParams.set('radar_geometry_v1', JSON.stringify(data));
+      url.searchParams.set('sample', String(Date.now()));
+      fetch(url.href, {credentials:'same-origin',cache:'no-store',referrerPolicy:'no-referrer'}).catch(function () {});
+    } catch (_) { /* Diagnostic failure must not affect the page. */ }
+  }
+  function start() { report('ready'); setTimeout(function () { report('settled'); }, 1500); setTimeout(function () { report('late'); }, 5000); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true}); else start();
+})();
