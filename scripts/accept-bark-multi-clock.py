@@ -26,6 +26,7 @@ class Response:
 def transport(request, **_):
     payload = json.loads(request.data)
     records.append((time.monotonic(), payload))
+    assert payload['body'].startswith('自定义报警内容验收\n\n')
     assert (payload['level'], payload['volume'], payload['call']) == ('critical', 5, '1')
     if payload['device_key'].endswith('_1'):
         time.sleep(.7)
@@ -41,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='bark-clock-') as directory:
     def change(**value):
         return store.mutate('acceptance', dict(value, revision=store.view('acceptance')['revision'], requestId=secrets.token_hex(16)), market.snapshot()[0])
     for n in range(3): change(action='bind', key='clock_demo_device_' + str(n), label='验收设备 ' + str(n))
-    change(action='save', rule=rule(repeat=True))
+    change(action='save', rule=rule(repeat=True,alarmContent='自定义报警内容验收'))
     started = time.monotonic()
     with patch('server.build_opener') as opener, ThreadPoolExecutor(max_workers=8) as workers:
         opener.return_value.open.side_effect = transport

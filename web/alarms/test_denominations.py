@@ -81,7 +81,7 @@ class DenominationTests(unittest.TestCase):
                 clear=target*(Decimal('1.01') if condition=='below' else Decimal('.99'))
                 hit=target*(Decimal('.99') if condition=='below' else Decimal('1.01'))
                 r=validate(dict(exchange=main,market='future',symbol=native(main,'future',base),
-                    priceType='last',condition=condition,target=str(target),repeat=True,fallbackExchanges=[backup]))
+                    priceType='last',condition=condition,target=str(target),repeat=True,alarmContent='倍率币自定义提醒',fallbackExchanges=[backup]))
                 def primary(t):return sample(main,'future',base,t,str(clear))
                 def secondary(t,p):return sample(backup,'spot',spot,t,str(p*Decimal(spot_units)/units))
                 def mutate(**kw):return store.mutate('isolated',dict(requestId=secrets.token_hex(16),revision=store.view('isolated')['revision'],**kw),book(primary(clock[0])))
@@ -112,6 +112,7 @@ class DenominationTests(unittest.TestCase):
                             send_event(store,event,market)
                             payload=json.loads(transport.return_value.open.call_args.args[0].data)
                             self.assertIn(base+'/USDT',payload['title'])
+                            self.assertTrue(payload['body'].startswith('倍率币自定义提醒\n\n'))
                             self.assertIn('触发价格：'+state['price']+' USDT',payload['body'])
                             self.assertEqual((payload['level'],payload['call'],payload['volume']),('critical','1',5))
                             sends.append(sec)

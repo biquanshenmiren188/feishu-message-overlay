@@ -10,7 +10,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
-from engine import evaluate, validate, matches, number, REPEAT_SECONDS
+from engine import evaluate, validate, validate_content, matches, number, REPEAT_SECONDS
 from sources import select, active_groups, source_key, source_label, fresh
 
 
@@ -163,6 +163,9 @@ class Store:
                     old_rule = self.db.execute('SELECT * FROM rules WHERE id=? AND profile=?', (identity, profile)).fetchone()
                     if not old_rule:
                         raise ValueError('报警不存在或不属于当前推送码')
+                    # Older/general editors must not erase separately managed content.
+                    if 'alarmContent' not in data['rule']:
+                        rule['alarmContent'] = json.loads(old_rule['config']).get('alarmContent', '')
                     if 'fallbackExchanges' in json.loads(old_rule['config']) and 'fallbackExchanges' not in rule:
                         raise Conflict('此报警已使用备用源多选，请刷新页面后再保存')
                     old_state = json.loads(old_rule['state'])
@@ -175,6 +178,17 @@ class Store:
                         raise ValueError('每个推送码最多 100 条报警')
                     identity = secrets.token_hex(16)
                     self.db.execute('INSERT INTO rules VALUES (?,?,?,?,?)', (identity, profile, dump(rule), '{}', now))
+                changed_id = identity
+            elif action == 'content':
+                content = validate_content(data.get('alarmContent'))
+                identity = data.get('id')
+                row = self.db.execute('SELECT config FROM rules WHERE id=? AND profile=?', (identity, profile)).fetchone()
+                if not row:
+                    raise ValueError('报警不存在或不属于当前推送码')
+                rule = json.loads(row['config'])
+                rule['alarmContent'] = content
+                # Preserve state, dispatch clocks and the current round's immutable payloads.
+                self.db.execute('UPDATE rules SET config=? WHERE id=? AND profile=?', (dump(rule), identity, profile))
                 changed_id = identity
             elif action in ('delete', 'toggle'):
                 identity = data.get('id')
@@ -299,6 +313,8 @@ class Store:
                     body = f"{source_label(state['source'])}\n触发价格：{event['price']} USDT\n{reason}\n{clock}（北京时间）"
                     if rule['note']:
                         body += '\n' + rule['note']
+                    if rule.get('alarmContent'):
+                        body = rule['alarmContent'] + '\n\n' + body
                     payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'], source=state['source'])
                     if rule['repeat']:
                         payload['repeatInterval'] = REPEAT_SECONDS

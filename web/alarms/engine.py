@@ -76,7 +76,14 @@ def validate(raw):
     rule['note'] = raw.get('note', '')
     if not isinstance(rule['note'], str) or len(rule['note']) > 100:
         raise ValueError('备注最多 100 字')
+    rule['alarmContent'] = validate_content(raw.get('alarmContent', ''))
     return rule
+
+
+def validate_content(value):
+    if not isinstance(value, str) or len(value) > 1000:
+        raise ValueError('报警内容最多 1000 字')
+    return value.strip()
 
 
 def matches(rule, price):

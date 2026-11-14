@@ -1,0 +1,12 @@
+/* Option B: only widen the existing action area; retain row/card geometry. */
+.alarm-page .alarm-table-heading,.alarm-page .alarm-row{grid-template-columns:minmax(110px,1fr) minmax(130px,1.15fr) minmax(120px,1fr) minmax(145px,1.2fr) minmax(90px,.8fr) minmax(120px,1fr) 180px}
+.alarm-content-action{white-space:nowrap}
+#content-editor{width:min(480px,calc(100% - 24px))}
+#alarm-content{box-sizing:border-box;width:100%;min-height:132px;max-height:40dvh;resize:vertical;border:1px solid var(--alarm-line);border-radius:8px;padding:10px 12px;font:inherit;font-size:14px;line-height:1.6;color:var(--alarm-ink);background:#fff}
+@media(max-width:1100px){
+.alarm-page .alarm-row,.alarm-page .alarm-row:last-child{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.alarm-page .alarm-row .alarm-actions{width:max-content;justify-self:end;gap:4px}
+.alarm-page .alarm-row .alarm-actions .alarm-content-action{padding-inline:6px}
+}
+@media(max-width:700px){#alarm-content{font-size:16px}}
+@media(max-width:360px){.alarm-page .alarm-row .alarm-actions{gap:0}.alarm-page .alarm-row .alarm-actions button{padding-inline:3px;min-width:36px}}
