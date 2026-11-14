@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
 from engine import evaluate, validate, validate_content, matches, number, REPEAT_SECONDS
 from sources import select, active_groups, source_key, source_label, fresh
+from content import render_content, validate_template
 
 
 def dump(value):
@@ -166,6 +167,8 @@ class Store:
                     # Older/general editors must not erase separately managed content.
                     if 'alarmContent' not in data['rule']:
                         rule['alarmContent'] = json.loads(old_rule['config']).get('alarmContent', '')
+                        if json.loads(old_rule['config']).get('alarmContentMode') == 'template':
+                            rule['alarmContentMode'] = 'template'
                     if 'fallbackExchanges' in json.loads(old_rule['config']) and 'fallbackExchanges' not in rule:
                         raise Conflict('此报警已使用备用源多选，请刷新页面后再保存')
                     old_state = json.loads(old_rule['state'])
@@ -180,13 +183,22 @@ class Store:
                     self.db.execute('INSERT INTO rules VALUES (?,?,?,?,?)', (identity, profile, dump(rule), '{}', now))
                 changed_id = identity
             elif action == 'content':
-                content = validate_content(data.get('alarmContent'))
+                mode = data.get('alarmContentMode')
+                content = validate_content(data.get('alarmContent'), 2000 if mode == 'template' else 1000)
+                if mode is not None and mode != 'template':
+                    raise ValueError('报警内容格式不正确')
+                if mode == 'template':
+                    validate_template(content)
                 identity = data.get('id')
                 row = self.db.execute('SELECT config FROM rules WHERE id=? AND profile=?', (identity, profile)).fetchone()
                 if not row:
                     raise ValueError('报警不存在或不属于当前推送码')
                 rule = json.loads(row['config'])
                 rule['alarmContent'] = content
+                if mode == 'template':
+                    rule['alarmContentMode'] = mode
+                else:
+                    rule.pop('alarmContentMode', None)
                 # Preserve state, dispatch clocks and the current round's immutable payloads.
                 self.db.execute('UPDATE rules SET config=? WHERE id=? AND profile=?', (dump(rule), identity, profile))
                 changed_id = identity
@@ -310,11 +322,10 @@ class Store:
                     condition = rule['target'] + ('～' + rule['upper'] if rule['upper'] else '')
                     title = state.get('asset', {}).get('pair', rule['symbol']) + ' ' + names[rule['condition']] + ' ' + condition
                     reason = '价格仍满足条件，每 30 秒提醒' if event['reason'] == 'continuous' else '行情恢复时满足条件' if event['reason'] == 'recovery' else '启用时已满足条件' if event['reason'] == 'initial' else '价格穿越'
-                    body = f"{source_label(state['source'])}\n触发价格：{event['price']} USDT\n{reason}\n{clock}（北京时间）"
-                    if rule['note']:
-                        body += '\n' + rule['note']
-                    if rule.get('alarmContent'):
-                        body = rule['alarmContent'] + '\n\n' + body
+                    body = render_content(rule, {'行情来源': source_label(state['source']), '触发价格': event['price'],
+                        '触发原因': reason, '时间': clock, '备注': rule['note'],
+                        '币种': state.get('asset', {}).get('pair', rule['symbol']),
+                        '触发条件': names[rule['condition']] + ' ' + condition})
                     payload = dict(title=title, body=body, group='雷达价格 · ' + rule['symbol'], level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/?rule=' + row['id'], price=event['price'], sampleAt=event['sampleAt'], reason=event['reason'], source=state['source'])
                     if rule['repeat']:
                         payload['repeatInterval'] = REPEAT_SECONDS

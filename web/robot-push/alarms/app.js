@@ -1,4 +1,5 @@
 import {createDeviceManager} from './devices.js?v=20261114-devices1';
+import {contentDraft} from './content-template.js?v=20261114-template1';
 import {readSnapshot,saveSnapshot,clearSnapshots} from './snapshot.js?v=20261114-devices1';
 import {connection} from './session.js?v=20261111-smooth1';
 import {patchHTML} from './dom.js?v=20261111-smooth1';
@@ -174,13 +175,13 @@ let contentRuleId=null;
 function openContent(rule){
  contentRuleId=rule.id;draft=false;
  $('#content-context').textContent=(rule.state?.asset?.pair||rule.symbol)+' · '+venue[rule.exchange];
- $('#alarm-content').value=rule.alarmContent||'';$('#content-form-error').textContent='';
+ $('#alarm-content').value=contentDraft(rule);$('#content-form-error').textContent='';
  $('#content-editor').showModal();
 }
 $('#alarm-content').addEventListener('input',()=>{draft=true;});
 $('#content-form').onsubmit=async e=>{
  e.preventDefault();$('#content-form-error').textContent='';
- if(await commit({action:'content',id:contentRuleId,alarmContent:$('#alarm-content').value})){
+ if(await commit({action:'content',id:contentRuleId,alarmContent:$('#alarm-content').value,alarmContentMode:'template'})){
   draft=false;$('#content-editor').close();toast('报警内容已保存，从下一轮生效');
  }
 };

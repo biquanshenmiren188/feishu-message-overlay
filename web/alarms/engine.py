@@ -76,13 +76,19 @@ def validate(raw):
     rule['note'] = raw.get('note', '')
     if not isinstance(rule['note'], str) or len(rule['note']) > 100:
         raise ValueError('备注最多 100 字')
-    rule['alarmContent'] = validate_content(raw.get('alarmContent', ''))
+    rule['alarmContent'] = validate_content(raw.get('alarmContent', ''), 2000 if raw.get('alarmContentMode') == 'template' else 1000)
+    if 'alarmContentMode' in raw:
+        from content import validate_template
+        if raw['alarmContentMode'] != 'template':
+            raise ValueError('报警内容格式不正确')
+        validate_template(rule['alarmContent'])
+        rule['alarmContentMode'] = 'template'
     return rule
 
 
-def validate_content(value):
-    if not isinstance(value, str) or len(value) > 1000:
-        raise ValueError('报警内容最多 1000 字')
+def validate_content(value, limit=1000):
+    if not isinstance(value, str) or len(value) > limit:
+        raise ValueError(f'报警内容最多 {limit} 字')
     return value.strip()
 
 

@@ -72,7 +72,12 @@ class DenominationTests(unittest.TestCase):
                             self.scenarios+=1
         self.assertGreater(self.scenarios,200)
 
-    def exercise(self,main,base,units,backup,spot,spot_units,condition):
+    def test_editable_template_with_scaled_contract_and_reverse_conversion(self):
+        for condition in ('above','below'):
+            self.exercise('binance','1000PEPE',1000,'okx','PEPE',1,condition,template=True)
+            self.exercise('gate','CHEEMS',1,'binance','1000CHEEMS',1000,condition,template=True)
+
+    def exercise(self,main,base,units,backup,spot,spot_units,condition,template=False):
         now=time.time();clock=[now]
         with tempfile.TemporaryDirectory() as temp, patch('store.time.time',side_effect=lambda:clock[0]):
             store=Store(temp);market=Market()
@@ -82,6 +87,9 @@ class DenominationTests(unittest.TestCase):
                 hit=target*(Decimal('.99') if condition=='below' else Decimal('1.01'))
                 r=validate(dict(exchange=main,market='future',symbol=native(main,'future',base),
                     priceType='last',condition=condition,target=str(target),repeat=True,alarmContent='倍率币自定义提醒',fallbackExchanges=[backup]))
+                if template:
+                    from content import DEFAULT_TEMPLATE
+                    r.update(alarmContentMode='template',alarmContent='倍率币自定义提醒\n\n'+DEFAULT_TEMPLATE)
                 def primary(t):return sample(main,'future',base,t,str(clear))
                 def secondary(t,p):return sample(backup,'spot',spot,t,str(p*Decimal(spot_units)/units))
                 def mutate(**kw):return store.mutate('isolated',dict(requestId=secrets.token_hex(16),revision=store.view('isolated')['revision'],**kw),book(primary(clock[0])))
@@ -114,6 +122,8 @@ class DenominationTests(unittest.TestCase):
                             self.assertIn(base+'/USDT',payload['title'])
                             self.assertTrue(payload['body'].startswith('倍率币自定义提醒\n\n'))
                             self.assertIn('触发价格：'+state['price']+' USDT',payload['body'])
+                            self.assertEqual(payload['body'].count('触发价格：'),1)
+                            self.assertNotIn('{{',payload['body'])
                             self.assertEqual((payload['level'],payload['call'],payload['volume']),('critical','1',5))
                             sends.append(sec)
                             event=store.claim()

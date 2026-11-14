@@ -33,8 +33,8 @@
 <dialog id="content-editor" class="alarm-dialog" aria-labelledby="content-title"><form id="content-form">
 <div class="dialog-title"><h2 id="content-title">报警内容</h2><button type="button" class="icon-button" data-close="content-editor" aria-label="关闭报警内容">×</button></div>
 <p id="content-context" class="helper"></p>
-<label class="alarm-field" for="alarm-content">推送内容</label><textarea id="alarm-content" rows="5" maxlength="1000" placeholder="填写提醒自己的内容，留空使用默认内容"></textarea>
-<p class="helper">保存后从下一轮生效，币种、价格和实际来源自动保留。</p>
+<label class="alarm-field" for="alarm-content">推送内容</label><textarea id="alarm-content" rows="5" maxlength="2000" placeholder="清空后使用默认内容"></textarea>
+<p class="helper">可直接修改，{{字段}}在推送时自动更新；保存后从下一轮生效。</p>
 <p id="content-form-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" data-close="content-editor">取消</button><button type="submit" class="primary" id="save-content">保存内容</button></div>
 </form></dialog>
 <dialog id="bark-editor" class="alarm-dialog bark-dialog" aria-labelledby="bark-title">
@@ -46,5 +46,5 @@
 <div class="bark-footer"><button type="button" id="test-bark">测试全部</button><button type="button" class="primary" data-close="bark-editor">完成</button></div>
 </dialog>
 <div id="alarm-toast" class="alarm-toast" role="status" hidden></div>
-<script type="module" src="app.js?v=20261114-content1"></script>
+<script type="module" src="app.js?v=20261114-template1"></script>
 </body></html>
