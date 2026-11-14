@@ -21,7 +21,9 @@
 /* Temporary geometry-only probe, expires 2026-11-16 00:00 UTC. No identifiers or page content. */
 (function () {
   if (typeof window === 'undefined' || Date.now() >= Date.UTC(2026, 10, 16)) return;
-  if (!matchMedia('(pointer:coarse)').matches || Math.max(screen.width, screen.height) < 720) return;
+  // Some large/folded Apple viewports retain the small outer screen dimensions.
+  // Do not use screen size to decide whether geometry can be diagnosed.
+  if (!matchMedia('(pointer:coarse)').matches && !(navigator.maxTouchPoints > 0)) return;
   var src = document.currentScript && document.currentScript.src;
   if (!src) return;
   var endpoint = new URL(src, location.href);
@@ -48,6 +50,7 @@
       var page = /push-test/.test(path) ? 'legacy' : /alarms/.test(path) ? 'alarms' : /settings/.test(path) ? 'settings' : /robot-push/.test(path) ? 'bot' : /position-limits/.test(path) ? 'limits' : /push-center/.test(path) ? 'push' : 'main';
       var data = {
         phase:phase,page:page,installed:navigator.standalone === true,standalone:matchMedia('(display-mode: standalone)').matches,
+        coarse:matchMedia('(pointer:coarse)').matches,touch:n(navigator.maxTouchPoints),
         screen:[n(screen.width),n(screen.height),n(screen.availWidth),n(screen.availHeight)],
         window:[n(innerWidth),n(innerHeight),n(outerWidth),n(outerHeight),n(devicePixelRatio)],
         viewport:v ? [n(v.width),n(v.height),n(v.offsetLeft),n(v.offsetTop),n(v.scale)] : [],

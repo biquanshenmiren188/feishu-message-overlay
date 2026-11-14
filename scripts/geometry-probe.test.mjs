@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const code=readFileSync(new URL('../web/robot-push/home-launch.js',import.meta.url),'utf8').split('/* Temporary geometry-only probe')[1];
-function run({expired=false,coarse=true,total=0,storageError=false}={}) {
+function run({expired=false,coarse=true,total=0,storageError=false,touch=0,screenSize=820}={}) {
  const requests=[],timers=[];let removed=0,appended=0;
  const body={scrollWidth:820,getBoundingClientRect:()=>({left:0,width:820}),appendChild:()=>appended++};
  const date=class extends Date {static now(){return Date.UTC(2026,10,expired?17:14);}};
- const context={URL,Date:date,Number,Math,JSON,screen:{width:820,height:1180,availWidth:820,availHeight:1180},
+ const context={URL,Date:date,Number,Math,JSON,screen:{width:screenSize,height:screenSize,availWidth:screenSize,availHeight:screenSize},
   window:{visualViewport:{width:820,height:1100,offsetLeft:0,offsetTop:0,scale:1}},
   innerWidth:820,innerHeight:1100,outerWidth:820,outerHeight:1180,devicePixelRatio:2,
-  matchMedia:q=>({matches:q.includes('coarse')?coarse:true}),navigator:{standalone:true},
+  matchMedia:q=>({matches:q.includes('coarse')?coarse:true}),navigator:{standalone:true,maxTouchPoints:touch},
   location:{href:'https://example.com/radar/?secret=NEVER-SEND#private',pathname:'/radar/',origin:'https://example.com'},
   document:{currentScript:{src:'https://example.com/radar/robot-push/home-launch-abc.js?v=old'},readyState:'complete',body,
    documentElement:{clientWidth:820,scrollWidth:820},querySelector:()=>null,
@@ -29,3 +29,5 @@ test('expires without requests',()=>assert.equal(run({expired:true}).requests.le
 test('desktop stays untouched',()=>assert.equal(run({coarse:false}).requests.length,0));
 test('session cap applies across pages',()=>{assert.equal(run({total:17}).requests.length,1);assert.equal(run({total:18}).requests.length,0);});
 test('blocked storage cannot break navigation or send unbounded probes',()=>assert.equal(run({storageError:true}).requests.length,0));
+
+test('small outer-screen claims and touch devices with a fine primary pointer still report',()=>{assert.equal(run({screenSize:400}).requests.length,3);assert.equal(run({coarse:false,touch:5}).requests.length,3);});
