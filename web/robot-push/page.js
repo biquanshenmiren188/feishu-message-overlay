@@ -1,4 +1,5 @@
 import {ordinaryViewportHeight} from './feed-viewport.js?v=20261113-six1';
+import {createEntryPosition} from './entry-position.js';
 import {createPinHistory} from './pin-history.js';
 import {subscribePush} from './push-subscription.js';
 import {mobileScrollGate,stablePaneBottom,preserveCardViewport} from './mobile-scroll.js';
@@ -137,7 +138,7 @@ function fitFeed(force){
  const safeBottom=parseFloat(getComputedStyle($('board-shell')).paddingBottom)||0;
  const pane=document.querySelector('.feed-pane');
  const bottom=pane?stablePaneBottom(pane.getBoundingClientRect().bottom,viewportBottom,matchMedia('(max-width:900px)').matches):viewportBottom;
- const height=matchMedia('(max-width:900px)').matches?ordinaryViewportHeight([...feed.children].map(el=>el.getBoundingClientRect()),parseFloat(getComputedStyle(board).paddingTop)||0):Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
+ const height=matchMedia('(max-width:1199px)').matches?ordinaryViewportHeight([...feed.children].map(el=>el.getBoundingClientRect()),parseFloat(getComputedStyle(board).paddingTop)||0):Math.max(120,bottom-board.getBoundingClientRect().top-footerHeight-safeBottom-4);
  board.style.height=height+'px';
  const key=[lastWindowKey,lastPinKey,board.clientWidth,height].join('|');
  if(key===fitKey)return;fitKey=key;guardScroll();
@@ -152,7 +153,7 @@ function fitFeed(force){
  board.style.paddingBottom=required>available&&first?Math.max(0,available-(end-first.getBoundingClientRect().top))+'px':'0px';
  if(pin.offsetHeight>=board.clientHeight*.5)pin.style.position='relative';
  board.dataset.fitFont='13';board.dataset.fitPasses='1';board.dataset.fitRequired=String(required);board.dataset.fitAvailable=String(board.clientHeight);
- board.dataset.fitStatus=required<=board.clientHeight?'fully-fitted':'native-history';board.title='';updateProgress();
+ board.dataset.fitStatus=required<=board.clientHeight?'fully-fitted':'native-history';board.title='';if(pane)document.querySelector('main').style.setProperty('--bot-feed-pane-height',pane.getBoundingClientRect().height+'px');updateProgress();
 }
 
 function render(anchor=null){
@@ -175,14 +176,16 @@ function renderFeed(anchor){
  }
  for(const item of feed.children)item.dataset.reading=String(item.dataset.id===reader.current);
  $('empty').hidden=store.messages.length!==0||!!store.pinned;$('more').hidden=true;
- fitCards(layoutChanged);status();updateLatest();updateProgress();
+ fitCards(layoutChanged);status();updateLatest();updateProgress();entryPosition.update();
 }
 function schedule(){
  clearTimeout(timer);timer=null;status();if(document.hidden||manualHeld||touchActive||touchSettling||detailOpen||railDrag)return;
  const delay=reader.nextDelay(Date.now());if(delay===null)return;
  timer=setTimeout(()=>{const admitted=reader.tick(Date.now(),!document.hidden);render();if(admitted){const item=[...feed.children].find(el=>el.dataset.id===admitted);if(item){guardScroll();board.scrollTop+=item.getBoundingClientRect().top-board.getBoundingClientRect().top;}}updateLatest();updateProgress();schedule();},Math.max(1,delay));
 }
-let initialPositionPending=true,initialScrollToken=0;
+const entryPosition=createEntryPosition({board,feed,busy:()=>touchActive||touchSettling||detailOpen||mobileScrollGate.active,
+ prepare:()=>{reader.configure(reader.enabled,reader.seconds,Date.now());reader.show(reader.ids.at(-1));reader.focus(reader.ids.at(-1),Date.now());fitCards(true);guardScroll();},
+ settled:()=>{lastTop=board.scrollTop;newCount=0;status();updateLatest();updateProgress();schedule();}});
 function accept(batch,{audible=[],emptyMessage='等待新的机器人消息'}={}){
  return preserveReading(()=>acceptFeed(batch,{audible,emptyMessage}));
 }
@@ -199,15 +202,13 @@ function acceptFeed(batch,{audible,emptyMessage}){
  if(detailOpen&&!allowed.has(detailOpen.focus)&&!pinHistory.contains(detailOpen.focus)){detailOpen=null;$('detail-content').replaceChildren();$('message-detail').close();}
  reader.synchronize(store.messages.map(message=>message.id),Date.now());
  if(touchActive||touchSettling||detailOpen){deferredRefresh=true;return;}
- const initialJump=initialPositionPending&&reader.ids.length>0;
- if(initialJump){initialPositionPending=false;reader.show(reader.ids.at(-1));reader.focus(reader.window()[0],Date.now());}
  newCount+=added.length;render();
- if(initialJump){const token=++initialScrollToken;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token!==initialScrollToken||reader.paused||touchActive||touchSettling)return;fitCards();guardScroll();board.scrollTop=board.scrollHeight;updateLatest();updateProgress();}));}
+ entryPosition.update();
  const remaining=Math.max(0,reader.ids.length-1-reader.ids.indexOf(reader.current));
  $('new-messages').hidden=false;$('new-messages').textContent='到最新';
  schedule();
 }
-function manual(id=firstVisible()) {initialPositionPending=false;initialScrollToken++;reader.show(id);reader.manual(id,Date.now());status();updateProgress(true);schedule();}
+function manual(id=firstVisible()) {entryPosition.cancel();reader.show(id);reader.manual(id,Date.now());status();updateProgress(true);schedule();}
 let programmaticScroll=false,scrollGuardToken=0,lastTop=0,touchY=null;
 function guardScroll(){
  programmaticScroll=true;const token=++scrollGuardToken;
@@ -262,7 +263,7 @@ function touchRest(){
 }
 board.addEventListener('scroll',()=>{
  const delta=board.scrollTop-lastTop;
- if(!programmaticScroll&&Math.abs(delta)>.5&&(true)){
+ if(!programmaticScroll&&Math.abs(delta)>.5&&(touchActive||touchSettling||manualHeld)){
   manual(firstVisible());if(touchActive||touchSettling)touchRest();
  }
  lastTop=board.scrollTop;
@@ -294,7 +295,7 @@ function updateLatest(){
  let reached=!latest;
  if(item){const br=board.getBoundingClientRect(),ir=item.getBoundingClientRect(),top=br.top+(getComputedStyle(pin).position==='sticky'?pin.offsetHeight:0),height=br.bottom-top;
   reached=ir.bottom<=br.bottom+1&&(ir.top>=top-1||ir.height>height);}
- button.hidden=false;button.textContent='到最新';button.disabled=reached;button.setAttribute('aria-label',reached?'已到最新':'到最新');button.title=reached?'已到最新':'查看最新消息';
+ entryPosition.setAtTail(reached);button.hidden=false;button.textContent='到最新';button.disabled=reached;button.setAttribute('aria-label',reached?'已到最新':'到最新');button.title=reached?'已到最新':'查看最新消息';
 }
 $('new-messages').addEventListener('click',()=>{const id=reader.ids.at(-1);if(id){guardScroll();reader.configure(reader.enabled,reader.seconds,Date.now());reader.focus(id,Date.now());reader.show(id);render();if(board.dataset.fitStatus!=='fully-fitted')board.scrollTop=board.scrollHeight;}newCount=0;updateLatest();schedule();});
 board.addEventListener('scroll',updateLatest,{passive:true});
