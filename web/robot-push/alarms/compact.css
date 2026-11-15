@@ -159,7 +159,8 @@
 @media(min-width:601px){
  .alarm-page-heading .alarm-new-link{grid-column:3}
 }
-html:has(body.alarm-page){scrollbar-gutter:stable both-edges}
+/* Match the shared desktop gutter: reserve the scrollbar on the right only. */
+html:has(body.alarm-page){scrollbar-gutter:stable}
 .alarm-page .alarm-origin-cell>.alarm-source,.alarm-page .alarm-current-cell>.alarm-quote-note{position:absolute;top:21px;left:0;right:0;margin:2px 0 0}
 @media(max-width:1100px){
  html:has(body.alarm-page){scrollbar-gutter:auto}
