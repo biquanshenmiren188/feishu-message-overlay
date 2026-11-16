@@ -85,7 +85,7 @@ export function createPinHistory({element,renderCard,onLayout=()=>{}}){
  setInterval(wake,15000);
  queueMicrotask(()=>void refresh());
  return {
-  setCurrent(message){const changed=current?.id!==message?.id;current=message;check();render();if(changed||!lastFetch)void refresh();},
+  setCurrent(message){const changed=current?.id!==message?.id||current?.title!==message?.title||current?.body!==message?.body||current?.sentAt!==message?.sentAt;current=message;check();render();if(!lastFetch||(changed&&message&&!rows.some(row=>row.id===message.id&&row.title===message.title&&row.body===message.body&&row.sentAt===message.sentAt)))void refresh();},
   contains(id){return id===current?.id||rows.some(m=>m.id===id);},
   clear
  };

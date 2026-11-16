@@ -92,6 +92,30 @@ def qualification_key(q):
     return key
 
 
+class QuoteSnapshot(dict):
+    """Read-only-by-convention snapshot with a conservative candidate index.
+
+    Indexing never grants eligibility. Exact identity, conversion, freshness,
+    ambiguity and qualification checks still run in candidate()/select().
+    """
+    def __init__(self, quotes):
+        super().__init__(quotes)
+        self._spots = {}
+        for key, quote in self.items():
+            if key[1] != 'spot':
+                continue
+            self._spots.setdefault((key[0], 'base', quote.get('base')), {})[key] = quote
+            den = denomination(quote)
+            if den:
+                self._spots.setdefault((key[0], 'asset', den['assetId']), {})[key] = quote
+
+    def candidate_quotes(self, venue, asset):
+        rows = dict(self._spots.get((venue, 'base', asset['base']), {}))
+        if asset.get('denominationVersion'):
+            rows.update(self._spots.get((venue, 'asset', asset.get('assetId')), {}))
+        return rows.values()
+
+
 def select(rule, previous, quotes, now, advance=True):
     """Return effective quote, evaluation rule, routing state; no IO or config edits.
 
@@ -112,8 +136,9 @@ def select(rule, previous, quotes, now, advance=True):
     candidates = []
     if eligible(asset):
         for venue in backup_venues(rule):
-            matching = [c for k, q in quotes.items() if k[:2] == (venue, 'spot')
-                        and (c := candidate(q, asset)) is not None]
+            pool = (quotes.candidate_quotes(venue, asset) if isinstance(quotes, QuoteSnapshot)
+                    else (q for k, q in quotes.items() if k[:2] == (venue, 'spot')))
+            matching = [c for q in pool if (c := candidate(q, asset)) is not None]
             # Ambiguous listings in the same venue are never selected.
             if len(matching) == 1 and fresh(matching[0], 'last', now):
                 candidates.append(matching[0])

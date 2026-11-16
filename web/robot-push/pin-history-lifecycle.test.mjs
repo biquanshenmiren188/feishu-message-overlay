@@ -27,6 +27,10 @@ test('history starts independently, survives feed policy churn, isolates identit
   assert.equal(requests.length,1);assert.equal(requests[0].options.signal.aborted,false);
   reply(requests[0],{messages,currentId:'pin4',sourceCurrentId:'different-current'});await settle();
   assert.deepEqual(element.children.map(n=>n.dataset.id),messages.map(m=>m.id));
+  manager.setCurrent(messages[4]);await settle();assert.equal(requests.length,1,'loaded current pin needs no duplicate request');
+  manager.setCurrent({...messages[4],body:'edited'});await settle();assert.equal(requests.length,2,'same id edited content must refresh');
+  reply(requests[1],{messages,currentId:'pin4'});await settle();requests.splice(1,1);
+  manager.setCurrent(null);await settle();assert.equal(requests.length,1,'clearing pin does not refetch unchanged history');
   document.dispatchEvent(Object.assign(new Event('radar-feed-policy-snapshot'),{detail:{bound:true,ready:false}}));
   assert.equal(element.children.length,5,'unrelated policy refresh cannot clear independently filtered history');
   document.dispatchEvent(new Event('radar-rules-saved'));await settle();assert.equal(element.children.length,0);assert.equal(requests.length,2);

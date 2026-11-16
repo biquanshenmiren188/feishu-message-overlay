@@ -21,7 +21,7 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 MemoryMax=256M
 TasksMax=64
-CPUQuota=35%
+CPUQuota=100%
 
 [Install]
 WantedBy=multi-user.target

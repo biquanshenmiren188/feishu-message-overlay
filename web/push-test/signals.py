@@ -1,6 +1,7 @@
 """Normalize BOT rank percentages and explicit per-route strong-signal values."""
 import hashlib,json,re,unicodedata
 from datetime import datetime
+from functools import lru_cache
 
 EXCHANGES = {'BINANCE': 'BINANCE', 'BITGET': 'BITGET', 'BYBIT': 'BYBIT',
              'OKX': 'OKX', 'OKEX': 'OKX', 'GATE': 'GATE', 'GATE.IO': 'GATE',
@@ -184,3 +185,20 @@ def desktop_rows(message, now):
         add(head[1],head[2].upper(),'','',**extra)
     return result
 
+
+
+# Cache syntax parsing only. Age and clock validation run on EVERY call; mutable
+# OI/rule enrichment always receives fresh row dictionaries. Bounded per process.
+_parse_messages_uncached = parse_messages
+
+@lru_cache(maxsize=128)
+def _parsed_content(mid, title, body, sent_at, sent):
+    return _parse_messages_uncached(dict(senderType='bot', id=mid, title=title,
+                                        body=body, sentAt=sent_at), sent, max_age=None)
+
+def parse_messages(message, now, *, max_age=1800):
+    fields = message_fields(message, now, max_age=max_age)
+    if fields is None:
+        return []
+    mid, title, body, sent = fields
+    return [dict(row) for row in _parsed_content(mid, message['title'], message['body'], message['sentAt'], sent)]

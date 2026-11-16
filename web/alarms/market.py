@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from engine import number
+from sources import QuoteSnapshot
 from instruments import load as load_instruments
 
 VENUES = ('binance', 'bybit', 'okx', 'bitget', 'gate', 'aster')
@@ -37,6 +38,8 @@ class Market:
         self.meta = {}
         self.pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix='quotes')
         self.pending = {}
+        self.cached_snapshot = None
+        self.cached_quotes = None
 
     def instruments(self, exchange, market, root):
         key = exchange, market
@@ -131,6 +134,7 @@ class Market:
                     rows = future.result()
                     self.quotes = {k: v for k, v in self.quotes.items() if k[:2] != group}
                     self.quotes.update(rows)
+                    self.cached_snapshot = None
                     self.health[group] = dict(ok=True, checkedAt=now, count=len(rows))
                 except Exception as exc:
                     self.health[group] = dict(ok=False, checkedAt=now, error=type(exc).__name__)
@@ -143,4 +147,7 @@ class Market:
 
     def snapshot(self):
         with self.lock:
-            return dict(self.quotes), {'/'.join(k): dict(v) for k, v in self.health.items()}
+            if self.cached_snapshot is None or self.cached_quotes is not self.quotes:
+                self.cached_snapshot = QuoteSnapshot(self.quotes)
+                self.cached_quotes = self.quotes
+            return self.cached_snapshot, {'/'.join(k): dict(v) for k, v in self.health.items()}
