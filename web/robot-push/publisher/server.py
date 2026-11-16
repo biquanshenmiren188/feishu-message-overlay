@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from desktop_cards import read_cards
 from state_delta import state_request, conditional_state
+from pin_history import PinHistory
 
 ROUTE='/radar/api/robot-push/publish'
 CONFIG_ROUTE='/radar/api/robot-push/configure'
@@ -64,9 +65,11 @@ class Publisher:
             old=json.loads(path.read_text(encoding="utf-8"))
             self.normal={m['id']:m for m in old.get('messages',[])[:30]}
             self.pin=old.get('pinned');self.pin_group=old.get('pinnedGroupId','')
+        self.pin_history=PinHistory(self.db)
         self.write(False,time.time())
 
     def write(self,connected,now):
+        if self.pin:self.pin_history.remember(self.pin,utc(self.pin['sentAt']))
         # Retain the last 30 accepted rows across idle periods and page reloads.
         # Incoming-message freshness checks remain in the receiver/accept path.
         ordered=sorted(self.normal.values(),key=lambda m:utc(m['sentAt']),reverse=True)[:30]
@@ -140,6 +143,7 @@ class Publisher:
             self.normal[m['id']]=m;added+=1
         if pin_group!=self.pin_group or not pin_group:self.pin=None
         self.pin_group=pin_group
+        if new_pin is not None:self.pin_history.remember(new_pin,utc(new_pin['sentAt']))
         if new_pin is not None and (self.pin is None or utc(new_pin['sentAt'])>=utc(self.pin['sentAt'])):self.pin=new_pin
         self.accepted+=added;self.last_source=now if payload['sourceConnected'] else 0
         self.write(payload['sourceConnected'],now)
@@ -158,6 +162,11 @@ class Handler(BaseHTTPRequestHandler):
         if compress: self.send_header('Content-Encoding','gzip')
         self.send_header('Vary','Accept-Encoding');self.send_header('Content-Length',str(len(body)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(body)
     def do_GET(self):
+        if self.path=='/pinned-history':
+            receiver=getattr(self.server,'receiver',None)
+            if receiver is None:return self.respond(503,{'error':'history_unavailable'})
+            try:return self.respond(200,receiver.history())
+            except Rejected as error:return self.respond(error.code,{'error':error.reason})
         if self.path!='/health':self.respond(404,{'error':'not_found'});return
         p=self.server.publisher;self.respond(200,{'ready':True,'accepted':p.accepted,'duplicates':p.duplicates,'rejected':p.rejected,'normalCount':len(p.normal),'pinned':p.pin is not None,'lastSourceAge':round(time.time()-p.last_source,1) if p.last_source else None})
     def do_POST(self):
@@ -182,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                     if 'pushCode' in control:
                         from desktop_binding import desktop_state
                         from urllib.error import HTTPError
-                        try:result.update(desktop_state(control['pushCode'], self.headers.get('X-Publish-Key','')))
+                        try:result.update(desktop_state(control['pushCode'], self.headers.get('X-Publish-Key',''), pin_history=control.get('pinHistory')==1, history=receiver.history() if control.get('pinHistory')==1 else None))
                         except HTTPError as error:
                             status=400 if error.code == 400 else 503
                             error.close()

@@ -132,8 +132,12 @@ public partial class MainWindow
                 var mixed=CopyFixture(reverse?"aster":"bybit","ZERBROUSDT",reverse?"bybit":"aster","ZERBROUSDT");
                 var mixedView=opportunityBoard.Build(new OpportunityModel.Entry(mixed),now);
                 Buttons(mixedView).Single(b=>Equals(b.Content,"复制 GC")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                var expectedMixed=OpportunityModel.CopyGcStrategy(mixed);
                 var mixedClipboard=await ReadClipboard(()=>Clipboard.GetText());
-                Check(mixedClipboard==OpportunityModel.CopyGcStrategy(mixed),"real mixed GC button writes exact directional payload to clipboard");
+                // Copy handlers retry asynchronously if another process owns the clipboard.
+                for(var attempt=0;attempt<30 && mixedClipboard!=expectedMixed;attempt++)
+                {await Task.Delay(100);mixedClipboard=await ReadClipboard(()=>Clipboard.GetText());}
+                Check(mixedClipboard==expectedMixed,"real mixed GC button writes exact directional payload to clipboard");
             }
         }
         finally

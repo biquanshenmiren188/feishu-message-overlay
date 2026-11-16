@@ -170,7 +170,13 @@ class Live(Trial):
                 raise ValueError('invalid_feed')
             messages = messages + ([feed['pinned']] if isinstance(feed.get('pinned'), dict) else [])
             s = self.state['live']
-            old = json.dumps(s, sort_keys=True)
+            # Only these fields can change before delivery below. Advanced OI
+            # enrichment mutates nested history rows, so retain a deep snapshot
+            # in that case; avoid serializing the entire plan twice per tick.
+            before_seen = dict(s['seen'])
+            before_history = copy.deepcopy(s['history']) if s['settings'].get('advanced') else list(s['history'])
+            before_pending = list(s['pending'])
+            before_blocked = list(s.get('blockedHistory', []))
             s['seen'] = {k:v for k,v in s['seen'].items() if now-v < 172800}
             s['history'] = [r for r in s['history'] if now-r['at'] <= 1800]
             parsed = [r for m in messages for r in parse_messages(m, now)]
@@ -197,7 +203,8 @@ class Live(Trial):
             eligible = {r['id'] for r in s['history'] if matches(r, s['settings'])
                         and -30 <= now-r['at'] <= max(180, s['settings']['notify_interval_seconds']+30)}
             s['pending'] = [i for i in s['pending'] if i in eligible]
-            if json.dumps(s, sort_keys=True) != old:
+            if (s['seen'] != before_seen or s['history'] != before_history
+                    or s['pending'] != before_pending or s.get('blockedHistory', []) != before_blocked):
                 self.save()
             if (not s['settings']['notify_enabled'] or not self.state.get('subscription') or not s['pending']
                     or ('device' in self.state and not (self.state['device']['permission'] == 'granted' and self.state['device']['matches']))

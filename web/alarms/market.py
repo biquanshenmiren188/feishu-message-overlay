@@ -1,7 +1,7 @@
 """Shared official USDT ticker snapshots, with exact exchange symbols and units.
 
 REST sampling is intentionally explicit: crossings between snapshots can be missed.
-No browser display cache, bid/ask midpoint, or cross-exchange fallback is used.
+No browser display cache or bid/ask midpoint is used. Routing lives in sources.py.
 """
 import json
 import threading
@@ -9,6 +9,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from engine import number
+from sources import QuoteSnapshot
+from instruments import load as load_instruments
 
 VENUES = ('binance', 'bybit', 'okx', 'bitget', 'gate', 'aster')
 
@@ -36,21 +38,15 @@ class Market:
         self.meta = {}
         self.pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix='quotes')
         self.pending = {}
+        self.cached_snapshot = None
+        self.cached_quotes = None
 
     def instruments(self, exchange, market, root):
         key = exchange, market
         cached = self.meta.get(key)
         if cached and time.time() - cached[0] < 300:
             return cached[1]
-        if exchange in ('binance', 'aster'):
-            suffix = '?permissions=SPOT&showPermissionSets=false&symbolStatus=TRADING' if exchange == 'binance' and market == 'spot' else ''
-            rows = self.get(root + '/exchangeInfo' + suffix)['symbols']
-            names = {r['symbol'] for r in rows if r.get('status') == 'TRADING' and r.get('quoteAsset') == 'USDT' and (market == 'spot' or r.get('contractType') in ('PERPETUAL', 'TRADIFI_PERPETUAL'))}
-        elif exchange == 'gate':
-            rows = self.get('https://api.gateio.ws/api/v4/' + ('spot/currency_pairs' if market == 'spot' else 'futures/usdt/contracts'))
-            names = {r['id'] for r in rows if r.get('quote') == 'USDT' and r.get('trade_status') == 'tradable'} if market == 'spot' else {r['name'] for r in rows if not r.get('in_delisting') and r.get('status', 'trading') == 'trading'}
-        else:
-            names = None
+        names = load_instruments(self.get, exchange, market, root)
         self.meta[key] = time.time(), names
         return names
 
@@ -106,6 +102,7 @@ class Market:
                 if not symbol or not symbol.endswith('_USDT'):
                     continue
                 prices.append((symbol, symbol[:-5], r.get('last'), r.get('mark_price'), None, None))
+        names = names if names is not None else self.instruments(exchange, market, '')
         result = {}
         for symbol, base, last, mark, last_at, mark_at in prices:
             if names is not None and symbol not in names:
@@ -113,6 +110,7 @@ class Market:
             if exchange not in ('okx', 'gate') and not symbol.endswith('USDT'):
                 continue
             q = dict(exchange=exchange, market=market, symbol=symbol, base=base, quote='USDT', observedAt=started, unit=base)
+            q.update(names[symbol])
             for kind, value, stamp in [('last', last, last_at), ('mark', mark, mark_at)]:
                 try:
                     q[kind] = str(number(value))
@@ -136,16 +134,20 @@ class Market:
                     rows = future.result()
                     self.quotes = {k: v for k, v in self.quotes.items() if k[:2] != group}
                     self.quotes.update(rows)
+                    self.cached_snapshot = None
                     self.health[group] = dict(ok=True, checkedAt=now, count=len(rows))
                 except Exception as exc:
                     self.health[group] = dict(ok=False, checkedAt=now, error=type(exc).__name__)
-            for exchange in VENUES:
-                for market in ('spot', 'future'):
-                    group = exchange, market
-                    period = 2 if group in active else 60
-                    if group not in self.pending and now - self.health.get(group, {}).get('checkedAt', 0) >= period:
-                        self.pending[group] = self.pool.submit(self.fetch, *group)
+            groups = sorted(((e, m) for e in VENUES for m in ('spot', 'future')), key=lambda g: g not in active)
+            for exchange, market in groups:
+                group = exchange, market
+                period = 2 if group in active else 60
+                if group not in self.pending and now - self.health.get(group, {}).get('checkedAt', 0) >= period:
+                    self.pending[group] = self.pool.submit(self.fetch, *group)
 
     def snapshot(self):
         with self.lock:
-            return dict(self.quotes), {'/'.join(k): dict(v) for k, v in self.health.items()}
+            if self.cached_snapshot is None or self.cached_quotes is not self.quotes:
+                self.cached_snapshot = QuoteSnapshot(self.quotes)
+                self.cached_quotes = self.quotes
+            return self.cached_snapshot, {'/'.join(k): dict(v) for k, v in self.health.items()}

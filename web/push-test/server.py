@@ -305,6 +305,15 @@ def handler(trial):
             if self.path == BASE + 'api/card-oi' and desktop:
                 try:return self.reply(200, desktop.public_card_oi())
                 except Exception:return self.reply(503, {'error':'双边 OI 暂不可用'})
+            if self.path == BASE + 'api/pinned-history' and desktop:
+                account = self.authorized_account() if self.headers.get('Authorization') else None
+                if self.headers.get('Authorization') and account is None:
+                    return self.reply(401, {'error':'请重新连接自己的推送码'})
+                try:
+                    from pinned_history import visible_history
+                    result=visible_history(desktops.policy(account) if account is not None else None)
+                    return self.reply(200,result)
+                except Exception:return self.reply(503,{'error':'置顶历史暂时无法读取，请重试'})
             account = self.authorized_account()
             if account is None:
                 return self.reply(401, {'error': '请先用测试码连接'})
@@ -337,7 +346,8 @@ def handler(trial):
                 return self.reply(403, {'error': '来源不匹配'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 8192:
+                limit=16*1024*1024 if self.path=='/internal/desktop-binding' and self.client_address[0]=='127.0.0.1' else 8192
+                if not 0 < size <= limit:
                     return self.reply(413, {'error': '请求大小错误'})
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):

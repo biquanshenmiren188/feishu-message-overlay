@@ -7,6 +7,9 @@ PARTS = {'groups': ('groups',), 'messages': ('messages',),
          'pin': ('pinned', 'pinnedGroupId'), 'opportunities': ('opportunities',)}
 
 def state_request(value):
+    if isinstance(value,dict) and "pinHistory" in value:
+        if value["pinHistory"] != 1 or "pushCode" not in value:return False
+        value={k:v for k,v in value.items() if k!="pinHistory"}
     if isinstance(value, dict) and 'pushCode' in value:
         code = value['pushCode']
         if not isinstance(code, str) or code != '' and not re.fullmatch('[0-9]{8}', code) or value.get('desktopRules') != 1:

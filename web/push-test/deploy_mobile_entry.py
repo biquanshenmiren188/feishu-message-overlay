@@ -49,7 +49,7 @@ with open('/var/lib/funding-radar-storage/guard.lock','a') as lock:
   bot=new/'robot-push';index=bot/'index.html';html=index.read_text()
   assert '<head>' in html and 'id="feed"' in html
   if '<base ' not in html:html=html.replace('<head>','<head><base href="/radar/robot-push/">',1)
-  if 'manifest.webmanifest' not in html:html=html.replace('</head>','<link rel="manifest" href="/radar/push-test/manifest.webmanifest"></head>',1)
+  if 'manifest.webmanifest' not in html:html=html.replace('</head>','<link rel="manifest" href="/radar/push-test/manifest.webmanifest" crossorigin="use-credentials"></head>',1)
   html=re.sub(r'notification-settings\.js\?v=[^"\s]+','notification-settings.js?v=20261017-mobile1',html)
   index.write_text(html)
   shutil.copyfile(p/'notification-settings.js',bot/'notification-settings.js')

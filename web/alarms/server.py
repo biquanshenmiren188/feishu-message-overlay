@@ -84,10 +84,10 @@ def make_handler(store, market, auth=authenticate):
             self.started=time.perf_counter();self.auth_ms=0
             route = urlsplit(self.path)
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=7, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
+                return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
-            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event'):
+            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event', BASE + 'devices'):
                 return self.reply(404, dict(error='接口不存在'))
             try:
                 profile = auth(self.headers.get('Authorization', '').removeprefix('Bearer '))
@@ -95,12 +95,17 @@ def make_handler(store, market, auth=authenticate):
                 if not profile:
                     return self.reply(401, dict(error='请先连接推送码'))
                 query = parse_qs(route.query)
+                if not post and route.path == BASE + 'devices':
+                    with store.lock:
+                        return self.reply(200, dict(devices=store.device_list(profile, reveal=True), revision=store.view(profile)['revision']))
                 if not post and route.path == BASE + 'history':
                     return self.reply(200, store.history(profile, query))
                 if not post and route.path == BASE + 'event':
                     return self.reply(200, store.event_detail(profile, query.get('id',[''])[0]))
                 if not post and route.path == BASE + 'state' and query.get('events') == ['latest-test']:
-                    return self.reply(200, store.view(profile, compact=True))
+                    value = store.view(profile, compact=True)
+                    value.update(serverTime=time.time(), sampleInterval=2)
+                    return self.reply(200, value)
                 quotes, health = market.snapshot()
                 if not post and route.path == BASE + 'state':
                     value = store.view(profile)
@@ -160,7 +165,9 @@ def main():
             time.sleep(.5)
 
     threading.Thread(target=watch, daemon=True).start()
-    threading.Thread(target=deliver, daemon=True).start()
+    # A slow or failed device must not hold other devices behind its HTTP timeout.
+    for _ in range(8):
+        threading.Thread(target=deliver, daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('RADAR_ALARMS_PORT', 18886))), make_handler(store, market)).serve_forever()
 
 

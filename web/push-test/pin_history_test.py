@@ -1,0 +1,45 @@
+import copy, io, json, threading, unittest
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
+from unittest.mock import patch
+import desktop_binding_test as base
+from server import BASE, handler
+
+class PinHistoryTest(unittest.TestCase):
+    setUp=base.DesktopBindingTest.setUp
+    data=base.DesktopBindingTest.data
+
+    def test_public_bound_isolation_and_no_delivery_side_effects(self):
+        self.bindings.coins(dict(self.data(),request=dict(op='block',request=dict(requestId='history-fixture',coins=['BTC'],exchange='all'))))
+        first=json.loads(self.feed.read_text())['messages'][0]
+        first=dict(first,title='强信号聚集 | BTC | 1 组同时 ACTIVE',body='R2 | FF | 买 GATE → 卖 ASTER\nV2收敛 · 60秒 · 净均 +1.13% · ACTIVE 1s')
+        second=dict(first,id='b'*64,title='强信号聚集 | ETH | 1 组同时 ACTIVE')
+        envelope=dict(messages=[first,second],currentId=first['id'],limit=5)
+        before={p:p.read_bytes() for p in self.profiles.directory.rglob('*') if p.is_file()}
+        with patch('desktop_rules.DesktopRules',return_value=self.legacy):app=ThreadingHTTPServer(('127.0.0.1',0),handler(self.profiles))
+        thread=threading.Thread(target=app.serve_forever,daemon=True);thread.start()
+        def get(auth=None):
+            client=HTTPConnection('127.0.0.1',app.server_port)
+            client.request('GET',BASE+'api/pinned-history',headers={} if auth is None else {'Authorization':'Bearer '+auth})
+            response=client.getresponse();result=(response.status,json.loads(response.read()));client.close();return result
+        try:
+            with patch('urllib.request.urlopen',side_effect=lambda *a,**k:io.BytesIO(json.dumps(envelope).encode())) as fetch:
+                self.assertEqual(len(get()[1]['messages']),2)
+                code,value=get(self.codes[0]['token']);self.assertEqual(code,200);self.assertEqual([m['id'] for m in value['messages']],['b'*64]);self.assertEqual(value['hiddenCount'],1)
+                self.assertEqual(len(get(self.codes[1]['token'])[1]['messages']),2)
+                envelope['messages']=[dict(second,id='ordinary',title='ETH | FF | R2 +1.13%'),first]+[dict(second,id=str(n)*64) for n in range(1,7)]
+                code,value=get(self.codes[0]['token']);self.assertEqual(code,200)
+                self.assertEqual([m['id'] for m in value['messages']],[str(n)*64 for n in range(1,6)])
+                self.assertEqual(value['currentId'],'1'*64);self.assertEqual(value['sourceCurrentId'],first['id'])
+                self.assertEqual(len(get()[1]['messages']),5)
+                with patch('pinned_history.visible_history',return_value=value), patch.object(self.bindings.policy(self.bindings.account(self.data())),'evaluate',return_value=dict(messages={})):
+                    result=self.bindings.state(dict(self.data(),pinHistory=1,history=envelope))
+                self.assertEqual(len(result['pinnedHistory']),5)
+
+                calls=fetch.call_count;self.assertEqual(get('invalid')[0],401);self.assertEqual(fetch.call_count,calls)
+            with patch('urllib.request.urlopen',side_effect=OSError('offline')):self.assertEqual(get()[0],503)
+            self.assertEqual(before,{p:p.read_bytes() for p in self.profiles.directory.rglob('*') if p.is_file()})
+            self.assertEqual(self.sent,[])
+        finally:app.shutdown();thread.join();app.server_close()
+
+if __name__=='__main__':unittest.main()

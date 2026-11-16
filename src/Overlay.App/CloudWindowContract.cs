@@ -62,6 +62,29 @@ public partial class MainWindow
         await Until(()=>cloud.Rules.Revision==ruleCount&&PinnedCard.Content is null);
         if(readingQueue.Any(m=>m.Id==hideId)||soundRequests!=beforeSound)throw new InvalidOperationException("Hidden message rendered or sounded");
         checks.Add("rule_hide_suppresses_regular_and_pinned_display_and_sound");
+        var historyNode=System.Text.Json.Nodes.JsonNode.Parse(WithRules([muted,hidden],new(){{muteId,"mute"},{hideId,"hide"},{PublicWebPublisher.Digest("pin3"),"hide"}}))!.AsObject();
+        historyNode["pinnedHistory"]=JsonSerializer.SerializeToNode(Enumerable.Range(0,5).Select(i=>Message("oldpin"+i,pinGroup,old.AddMinutes(-10).AddSeconds(i))).Reverse().ToArray());
+        Volatile.Write(ref snapshot,historyNode.ToJsonString());
+        await Until(()=>OlderPinnedCards.Items.Count==4&&PinnedCard.Content is Overlay.Core.IncomingMessage m&&m.Id==PublicWebPublisher.Digest("oldpin4"));
+        UpdateLayout();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+        if(Math.Abs(PinnedArea.VerticalOffset-PinnedArea.ScrollableHeight)>2||soundRequests!=beforeSound)throw new InvalidOperationException("History must open at bottom silently");
+        var normalOffset=MessageScroll.VerticalOffset;PinnedArea.ScrollToTop();UpdateLayout();
+        if(PinnedArea.VerticalOffset>2||Math.Abs(MessageScroll.VerticalOffset-normalOffset)>2)throw new InvalidOperationException("Pinned history scrolling changed ordinary feed");
+        checks.Add("hidden_current_keeps_five_eligible_history_latest_below_silent_independent_scroll");
+        // Exercise the real sizing pass, which is normally disabled in smoke mode.
+        verifyContentFit=true;lastFitKey=null;RequestContentLayout();
+        for(var pass=0;pass<4;pass++){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
+        await File.WriteAllTextAsync(output+".pin-size.json",JsonSerializer.Serialize(new{viewport=PinnedArea.ViewportHeight,card=PinnedCard.ActualHeight,retained=OlderPinnedCards.Items.Count+1}));
+        if(PinnedArea.ViewportHeight>PinnedCard.ActualHeight+2)throw new InvalidOperationException("Pinned viewport must show only one card, not five expanded cards");
+        checks.Add("real_layout_limits_five_history_records_to_one_card_viewport");
+        foreach(var width in new[]{300d,600d})
+        {
+            Width=width;FontScale.Value=width==300?17:13;lastFitKey=null;RequestContentLayout();
+            for(var pass=0;pass<4;pass++){await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateLayout();}
+            if(PinnedArea.ViewportHeight>PinnedCard.ActualHeight+2||OlderPinnedCards.Items.Count!=4)throw new InvalidOperationException("Resize/font change expanded pinned history");
+        }
+        checks.Add("resize_and_font_change_keep_one_card_viewport_and_five_records");
+        verifyContentFit=false;
         var audible=Message("audible",normalGroup,DateTimeOffset.UtcNow);
         Volatile.Write(ref snapshot,WithRules([muted,hidden,audible],new(){{muteId,"mute"},{hideId,"hide"}}));
         await Until(()=>soundRequests==beforeSound+1);

@@ -70,6 +70,16 @@ public partial class MainWindow
     private string? lastFitKey;
     // Isolated smoke fixture only; never changes a normal application's work area.
     private double? contractFitHeight;
+    private void FitPinnedViewport(double? availableHeight=null)
+    {
+        if(PinnedCard.ActualHeight<=0)return;
+        var limit=availableHeight??Math.Max(MinHeight,ActualHeight);
+        var height=Math.Min(PinnedCard.ActualHeight,Math.Min(240,Math.Max(32,(limit-40)*.4)));
+        if(Math.Abs(PinnedArea.MaxHeight-height)<.1)return;
+        var following=PinnedArea.ScrollableHeight-PinnedArea.VerticalOffset<=2;
+        PinnedArea.MaxHeight=height;
+        if(following)Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(()=>PinnedArea.ScrollToBottom()));
+    }
     private void MeasureContentHeight()
     {
         var work=CurrentWorkArea();UpdateLayout();
@@ -84,7 +94,7 @@ public partial class MainWindow
         // Never shrink text to fit history. The regular list scrolls, while a
         // long pinned message gets its own bounded scrolling region.
         MessageList.FontSize=preferred;fitPasses=1;
-        PinnedArea.MaxHeight=Math.Max(32,(limit-40)*.4);
+        FitPinnedViewport(limit);
         if(initialFit)
         {
             fittingWindow=true;

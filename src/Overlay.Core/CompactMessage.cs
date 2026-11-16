@@ -55,7 +55,7 @@ public static class CompactMessage
                 var m=Match(lines[i],@"^(R\d+\+?)\s*[｜|]\s*(SF|FS|FF)\s*[｜|]\s*买\s+(\S+)\s*→\s*卖\s+(\S+)");if(!m.Success)continue;
                 var next=i+1<lines.Length?lines[i+1]:"";var value=Match(lines[i],@"净均\s*([+−-]?\d+(?:\.\d+)?%)");
                 // Known detail line only: no headline maximum or another route.
-                if(!value.Success)value=Match(next,@"^(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?净均[ \t]*([+−-]?\d+(?:\.\d+)?%)");
+                if(!value.Success)value=Match(next,@"^(?:V2收敛[ \t]*·[ \t]*[1-9]\d{0,5}秒[ \t]*·[ \t]*)?净均[ \t]*([+−-]?\d+(?:\.\d+)?%)");
                 signals.Add($"{m.Groups[1]}｜{m.Groups[2]}｜{Abbreviation(m.Groups[3].Value)}→{Abbreviation(m.Groups[4].Value)}"+(value.Success?"｜"+value.Groups[1].Value:""));
             }
             if(signals.Count>0){var count=Match(title,@"(\d+)\s*组");title=string.Join("｜",Regex.Split(Replace(title,@"^(?:🚨|\s)+","").Replace("强信号聚集","强信号"),@"[｜|]").Take(2).Select(s=>s.Trim()))+"｜"+(count.Success?count.Groups[1].Value:signals.Count.ToString(CultureInfo.InvariantCulture))+"组";}
