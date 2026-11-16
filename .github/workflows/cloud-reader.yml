@@ -24,6 +24,10 @@ jobs:
     if: github.repository == 'biquanshenmiren188/feishu-message-overlay' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Windows, X64, feishu-overlay]
     timeout-minutes: 15
+    env:
+      # Match Linux's UTF-8 defaults on Chinese Windows service accounts.
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
