@@ -1,0 +1,908 @@
+{
+  "reviewed": "2026-11-13",
+  "publicIndexComponents": [
+    {
+      "exchange": "binance",
+      "symbol": "1000LUNCUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000LUNCUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "LUNCUSDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "LUNC_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "LUNC-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "LUNCUSDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "LUNCUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000PEPEUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000PEPEUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "PEPEUSDT*1000"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "PEPE-USDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "PEPE_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "PEPE-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "PEPEUSDT*1000"
+        },
+        {
+          "exchange": "bitget",
+          "symbol": "PEPEUSDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "PEPEUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000CATUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000CATUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "1000CATUSDT"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "CAT-USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "CAT-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "CATUSDT*1000"
+        },
+        {
+          "exchange": "binance_cross2",
+          "symbol": "1000CATTRY/USDTTRY"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1MBABYDOGEUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1MBABYDOGEUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "1MBABYDOGEUSDT"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "BABYDOGE-USDT*1000000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "BABYDOGE_USDT*1000000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "BABYDOGE-USDT*1000000"
+        },
+        {
+          "exchange": "binance_cross2",
+          "symbol": "1MBABYDOGETRY/USDTTRY"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "BABYDOGEUSDT*1000000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000000MOGUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000000MOGUSDT",
+      "components": [
+        {
+          "exchange": "gateio",
+          "symbol": "MOG_USDT*1000000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "MOG-USDT*1000000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "MOGUSDT*1000000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "MOGUSDT*1000000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000RATSUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000RATSUSDT",
+      "components": [
+        {
+          "exchange": "gateio",
+          "symbol": "RATS_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "RATS-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "RATSUSDT*1000"
+        },
+        {
+          "exchange": "bitget",
+          "symbol": "RATSUSDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "RATSUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000SHIBUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000SHIBUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "SHIBUSDT*1000"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "SHIB-USDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "SHIB_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "SHIB-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "SHIBUSDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "SHIBUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000SATSUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000SATSUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "1000SATSUSDT"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "SATS-USDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "SATS_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "SATS-USDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "SATSUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000BONKUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000BONKUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "BONKUSDT*1000"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "BONK-USDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "BONK_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "BONK-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "BONKUSDT*1000"
+        },
+        {
+          "exchange": "bitget",
+          "symbol": "BONKUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000FLOKIUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000FLOKIUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "FLOKIUSDT*1000"
+        },
+        {
+          "exchange": "okex",
+          "symbol": "FLOKI-USDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "FLOKI_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "FLOKI-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "FLOKIUSDT*1000"
+        },
+        {
+          "exchange": "bitget",
+          "symbol": "FLOKIUSDT*1000"
+        },
+        {
+          "exchange": "bybit",
+          "symbol": "FLOKIUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000CHEEMSUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000CHEEMSUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "1000CHEEMSUSDT"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "CHEEMS_USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "CHEEMSUSDT*1000"
+        },
+        {
+          "exchange": "bitget",
+          "symbol": "CHEEMSUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "binance",
+      "symbol": "1000XECUSDT",
+      "url": "https://fapi.binance.com/fapi/v1/constituents?symbol=1000XECUSDT",
+      "components": [
+        {
+          "exchange": "binance",
+          "symbol": "XECUSDT*1000"
+        },
+        {
+          "exchange": "gateio",
+          "symbol": "XEC_USDT*1000"
+        },
+        {
+          "exchange": "kucoin",
+          "symbol": "XEC-USDT*1000"
+        },
+        {
+          "exchange": "mexc",
+          "symbol": "XECUSDT*1000"
+        }
+      ],
+      "responseCode": null
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000000BABYDOGEUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000000BABYDOGEUSDT",
+      "components": [
+        {
+          "exchange": "GateIO",
+          "spotPair": "BABYDOGE_USDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "BABYDOGEUSDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "BABYDOGEUSDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "BABYDOGE-USDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "BABYDOGE-USDT",
+          "multiplier": "1000000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000000MOGUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000000MOGUSDT",
+      "components": [
+        {
+          "exchange": "Bybit",
+          "spotPair": "MOGUSDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "MOGUSDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "MOG_USDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "MOGUSDT",
+          "multiplier": "1000000"
+        },
+        {
+          "exchange": "Kraken",
+          "spotPair": "MOG/USD",
+          "multiplier": "1000000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "10000NEXUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=10000NEXUSDT",
+      "components": [
+        {
+          "exchange": "CoinBase",
+          "spotPair": "NEX-USD",
+          "multiplier": "10000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "NEXUSDT",
+          "multiplier": "10000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "NEX-USDT",
+          "multiplier": "10000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "10000SATSUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=10000SATSUSDT",
+      "components": [
+        {
+          "exchange": "Bybit",
+          "spotPair": "SATSUSDT",
+          "multiplier": "10000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "SATS-USDT",
+          "multiplier": "10000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "SATS_USDT",
+          "multiplier": "10000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000BONKUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000BONKUSDT",
+      "components": [
+        {
+          "exchange": "Bitget",
+          "spotPair": "BONKUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "BONK_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "BONKUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "BONKUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "BONKUSDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000BTTUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000BTTUSDT",
+      "components": [
+        {
+          "exchange": "Bybit",
+          "spotPair": "BTTUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "BTTUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "BTT-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "BTTCUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "BTTUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "BTT_USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000CATUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000CATUSDT",
+      "components": [
+        {
+          "exchange": "KuCoin",
+          "spotPair": "CAT-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "CATUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "1000CATUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "CAT-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "CATUSDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000FLOKIUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000FLOKIUSDT",
+      "components": [
+        {
+          "exchange": "Bybit",
+          "spotPair": "FLOKIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "FLOKIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "FLOKIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "FLOKI-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "FLOKIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "FLOKI_USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000LUNCUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000LUNCUSDT",
+      "components": [
+        {
+          "exchange": "KuCoin",
+          "spotPair": "LUNC-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "LUNC_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "LUNCUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "LUNCUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "LUNCUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Kraken",
+          "spotPair": "LUNA/USD",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000NEIROCTOUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000NEIROCTOUSDT",
+      "components": [
+        {
+          "exchange": "Binance",
+          "spotPair": "NEIROUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "NEIROCTOUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "NEIROCTOUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "NEIROCTO-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "NEIROCTOUSDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000PEPEUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000PEPEUSDT",
+      "components": [
+        {
+          "exchange": "OkEx",
+          "spotPair": "PEPE-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "PEPEUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "PEPE_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Kraken",
+          "spotPair": "PEPE/USD",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "PEPEUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "PEPE-USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000RATSUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000RATSUSDT",
+      "components": [
+        {
+          "exchange": "Bybit",
+          "spotPair": "RATSUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "RATS_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bitget",
+          "spotPair": "RATSUSDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000TAGUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000TAGUSDT",
+      "components": [
+        {
+          "exchange": "Bitget",
+          "spotPair": "TAGUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "TAGUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "TAG-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "TAG_USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000TOSHIUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000TOSHIUSDT",
+      "components": [
+        {
+          "exchange": "GateIO",
+          "spotPair": "TOSHI_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "TOSHIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "TOSHIUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "TOSHI-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "TOSHI-USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000TURBOUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000TURBOUSDT",
+      "components": [
+        {
+          "exchange": "Binance",
+          "spotPair": "TURBOUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "TURBOUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "TURBO-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "TURBO_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "CoinBase",
+          "spotPair": "TURBO-USD",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "1000XECUSDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=1000XECUSDT",
+      "components": [
+        {
+          "exchange": "Mexc",
+          "spotPair": "XECUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "XECUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "XEC_USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "KuCoin",
+          "spotPair": "XEC-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Upbit",
+          "spotPair": "KRW-XEC",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    },
+    {
+      "exchange": "bybit",
+      "symbol": "SHIB1000USDT",
+      "url": "https://api.bybit.com/v5/market/index-price-components?indexName=SHIB1000USDT",
+      "components": [
+        {
+          "exchange": "KuCoin",
+          "spotPair": "SHIB-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Bybit",
+          "spotPair": "SHIBUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "OkEx",
+          "spotPair": "SHIB-USDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Binance",
+          "spotPair": "SHIBUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "Mexc",
+          "spotPair": "SHIBUSDT",
+          "multiplier": "1000"
+        },
+        {
+          "exchange": "GateIO",
+          "spotPair": "SHIB_USDT",
+          "multiplier": "1000"
+        }
+      ],
+      "responseCode": 0
+    }
+  ]
+}

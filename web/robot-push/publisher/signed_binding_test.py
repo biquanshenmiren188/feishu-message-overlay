@@ -67,6 +67,7 @@ class SignedBindingTest(unittest.TestCase):
                 ready=threading.Event();failure=[]
                 class Receiver:
                     def state(self):return dict(cloudMode=True,sourceConnected=True,groups=[],messages=[],pinned=None,pinnedGroupId='')
+                    def history(self):return dict(messages=[],currentId=None,limit=5)
                 def serve():
                     nonlocal http
                     try:
@@ -84,6 +85,8 @@ class SignedBindingTest(unittest.TestCase):
                     def state(code):return request(dict(action='state',desktopRules=1,pushCode=code))
                     before={p:p.read_bytes() for p in (phone/'state').rglob('state.json')}
                     status,unbound=state('');self.assertEqual(status,200);self.assertFalse(unbound['pushBinding']['bound']);self.assertTrue(unbound['desktopRules']['desktopEnabled'])
+                    for history_code in ['', '12345678', '87654321']:
+                        status,history=request(dict(action='state',desktopRules=1,pushCode=history_code,pinHistory=1));self.assertEqual(status,200);self.assertEqual(history['pinnedHistory'],[])
                     status,owner=state('12345678');self.assertEqual(status,200);self.assertFalse(owner['desktopRules']['desktopEnabled'])
                     status,personal=state('87654321');self.assertEqual(status,200);self.assertTrue(personal['desktopRules']['desktopEnabled'])
                     self.assertEqual(before,{p:p.read_bytes() for p in (phone/'state').rglob('state.json')})

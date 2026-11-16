@@ -1,0 +1,28 @@
+/* Device modal only. Other alarm, BOT and global layout selectors are untouched. */
+#bark-editor{width:min(620px,calc(100vw - 32px));padding:24px;box-sizing:border-box;max-height:calc(100dvh - 32px);overflow-y:auto;color:#243040}
+#bark-editor [hidden]{display:none!important}
+#bark-editor .dialog-title{margin-bottom:16px}
+#bark-editor h2{font-size:18px;line-height:26px;margin:0}
+#bark-editor button{min-height:44px;font-size:14px;cursor:pointer}
+#bark-editor button:disabled{cursor:default}
+#bark-editor button:focus-visible,#bark-editor input:focus-visible{outline:2px solid #0866dd;outline-offset:2px}
+#bark-editor .bark-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px;font-size:14px}
+#bark-editor #add-bark{border:1px solid #0866dd;color:#0866dd;background:#fff;padding:6px 12px;border-radius:8px;white-space:nowrap}
+#bark-editor .bark-device{border:1px solid #d1dbe8;border-radius:12px;padding:16px;margin:0 0 12px;min-width:0;background:#fff}
+#bark-editor .bark-device-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#bark-editor .bark-device-heading strong{font-size:16px;overflow-wrap:anywhere;line-height:24px}
+#bark-editor .bark-bound{padding:2px 7px;border-radius:5px;background:#e3f3e9;color:#11633d;font-size:12px;white-space:nowrap}
+#bark-editor .bark-key-label{font-size:13px;color:#65768e;margin:10px 0 5px}
+#bark-editor .bark-key{display:flex;align-items:center;gap:8px;min-width:0;border:1px solid #d1dbe8;border-radius:7px;background:#f4f6f8;padding:0 10px}
+#bark-editor .bark-key code{font:13px/1.6 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;min-width:0;flex:1;user-select:text}
+#bark-editor .bark-key button,#bark-editor .bark-device-actions button,#bark-editor #test-bark{background:transparent;color:#0866dd;border:0;padding:4px 8px;flex:none;white-space:nowrap}
+#bark-editor .bark-device-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap}
+#bark-editor .bark-device-actions .danger-text{color:#d52f36}
+#bark-editor .bark-footer{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #dce3ed;padding-top:16px;margin-top:18px}
+#bark-editor #bark-form{background:#f8fbff;border:1px solid #cbdcf0;border-radius:10px;padding:14px;margin-top:12px}
+#bark-editor #bark-form h3{font-size:15px;margin:0 0 10px}
+#bark-editor #bark-form input{font-size:16px;min-width:0;width:100%;box-sizing:border-box}
+#bark-editor .bark-edit-actions{display:flex;gap:8px;justify-content:flex-end}
+#bark-editor #bark-form-error:empty{display:none}
+#bark-editor #bark-device-feedback{font-size:13px;color:#65768e;overflow-wrap:anywhere}
+@media(max-width:600px){#bark-editor{padding:16px;width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}#bark-editor .bark-device{padding:12px}#bark-editor .bark-device-actions{gap:8px}#bark-editor .bark-key{padding:0 8px}#bark-editor .bark-key code{font-size:12px}}

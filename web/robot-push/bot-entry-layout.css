@@ -1,0 +1,35 @@
+/* BOT only: approved right-hand cards on unfolded/tablet widths. */
+@media(max-width:1199px){
+ html.split-layout{height:auto;overflow:auto}
+ html body.split-mode{height:auto;min-height:100svh;overflow:visible}
+ html body.split-mode main{overflow:visible;flex:none;align-items:start}
+ html body.split-mode .feed-pane{height:auto;min-height:350px;flex:none}
+ html body.split-mode #board{max-height:none;flex:none}
+}
+@media(min-width:720px) and (max-width:1199px){
+ html body.split-mode main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,1fr);gap:12px;margin:14px 16px}
+ html body.split-mode #basis-pane{height:var(--bot-feed-pane-height,680px);max-height:var(--bot-feed-pane-height,680px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border:1px solid #dce3e8;padding:8px;min-width:0}
+ html body.split-mode #basis-pane .bp-board{grid-template-columns:minmax(0,1fr)!important;gap:8px!important;align-items:start!important}
+ html body.split-mode #basis-pane .bp-card{padding:6px 8px!important;gap:3px!important;min-height:0!important;grid-template-rows:none!important;grid-auto-rows:auto!important}
+ html body.split-mode #basis-pane .bp-card-head{padding-bottom:4px!important;gap:4px!important;min-height:0!important}
+ html body.split-mode #basis-pane .bp-name h2{font-size:15px!important;line-height:19px!important}
+ html body.split-mode #basis-pane .bp-legs{padding:3px 0!important;margin:0!important;gap:7px!important;min-height:0!important}
+ html body.split-mode #basis-pane .bp-rate strong{font-size:16px!important;line-height:21px!important}
+ html body.split-mode #basis-pane .bp-metrics{grid-template-columns:repeat(4,minmax(0,1fr))!important;min-height:0!important;margin-bottom:3px!important;gap:0!important}
+ html body.split-mode #basis-pane .bp-metric{padding:2px!important;gap:1px!important;line-height:15px!important}
+ html body.split-mode #basis-pane .bp-metrics span{font-size:11px!important;white-space:normal!important}
+ html body.split-mode #basis-pane .bp-metrics strong{font-size:14px!important;line-height:19px!important}
+ html body.split-mode #basis-pane .bp-leg-stats .bp-metric{padding:0!important;font-size:11px!important;gap:3px!important;flex-direction:row!important}
+ html body.split-mode #basis-pane .bp-transfer-table :is(td,th){padding:1px 3px!important;line-height:15px!important}
+ html body.split-mode #basis-pane .bp-transfer-heading{margin-bottom:2px!important}
+ html body.split-mode #basis-pane .bp-card-foot{padding-top:4px!important;margin-top:2px!important;gap:5px!important}
+ html body.split-mode #basis-pane .bp-card-foot :is(a,button){min-height:36px!important;min-width:44px;padding:3px 6px!important;font-size:12px!important}
+}
+@media(max-width:719px){
+ html body.split-mode main{display:flex;flex-direction:column;align-items:stretch}
+ html body.split-mode #basis-pane{height:auto;max-height:none;overflow:visible;flex:none}
+}
+/* Large touch screens scroll the page from cards; message history stays independent. */
+@media(min-width:720px) and (max-width:1199px) and (hover:none) and (pointer:coarse){
+ html body.split-mode #basis-pane{height:auto;max-height:none;overflow:visible;overscroll-behavior:auto}
+}

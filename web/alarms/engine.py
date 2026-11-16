@@ -2,6 +2,7 @@
 from decimal import Decimal, InvalidOperation
 
 REPEAT_SECONDS = 30
+FALLBACK_VENUES = ('binance', 'okx', 'bybit', 'bitget', 'gate', 'aster')
 
 
 def number(value):
@@ -22,6 +23,21 @@ def validate(raw):
     rule = {k: raw.get(k) for k in ('exchange', 'market', 'symbol', 'priceType', 'condition')}
     if rule['exchange'] not in ('binance', 'bybit', 'okx', 'bitget', 'gate', 'aster'):
         raise ValueError('请选择支持的交易所')
+    fallback = raw.get('fallbackExchange', 'auto')
+    if not isinstance(fallback, str) or fallback not in ('auto', 'off', *FALLBACK_VENUES):
+        raise ValueError('请选择有效的备用现货源')
+    if fallback == rule['exchange']:
+        raise ValueError('备用现货源请选择其他交易所')
+    rule['fallbackExchange'] = fallback
+    if 'fallbackExchanges' in raw:
+        selected = raw['fallbackExchanges']
+        if (not isinstance(selected, list) or len(selected) > len(FALLBACK_VENUES)
+                or any(not isinstance(v, str) or v not in FALLBACK_VENUES or v == rule['exchange'] for v in selected)
+                or len(set(selected)) != len(selected)):
+            raise ValueError('请选择有效且不重复的其他交易所备用源')
+        rule['fallbackExchanges'] = [v for v in FALLBACK_VENUES if v in selected]
+        # Old single-choice clients must not interpret a subset as all venues.
+        rule['fallbackExchange'] = selected[0] if len(selected) == 1 else 'off'
     if rule['market'] not in ('spot', 'future') or rule['priceType'] not in ('last', 'mark'):
         raise ValueError('请选择市场和价格类型')
     if rule['market'] == 'spot' and rule['priceType'] != 'last':
@@ -60,7 +76,20 @@ def validate(raw):
     rule['note'] = raw.get('note', '')
     if not isinstance(rule['note'], str) or len(rule['note']) > 100:
         raise ValueError('备注最多 100 字')
+    rule['alarmContent'] = validate_content(raw.get('alarmContent', ''), 2000 if raw.get('alarmContentMode') == 'template' else 1000)
+    if 'alarmContentMode' in raw:
+        from content import validate_template
+        if raw['alarmContentMode'] != 'template':
+            raise ValueError('报警内容格式不正确')
+        validate_template(rule['alarmContent'])
+        rule['alarmContentMode'] = 'template'
     return rule
+
+
+def validate_content(value, limit=1000):
+    if not isinstance(value, str) or len(value) > limit:
+        raise ValueError(f'报警内容最多 {limit} 字')
+    return value.strip()
 
 
 def matches(rule, price):

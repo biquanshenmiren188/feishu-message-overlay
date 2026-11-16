@@ -23,9 +23,11 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-MemoryMax=128M
-TasksMax=16
-CPUQuota=20%
+# Multiple plans plus simultaneous BOT history/rule/status requests share this
+# process. Keep bounded headroom; the former trial budget throttled first load.
+MemoryMax=256M
+TasksMax=64
+CPUQuota=100%
 
 [Install]
 WantedBy=multi-user.target

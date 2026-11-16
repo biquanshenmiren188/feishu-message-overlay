@@ -40,3 +40,6 @@
 .alarm-toolbar{flex-wrap:nowrap}.alarm-toolbar input{flex:1 1 0;width:auto}.alarm-toolbar button{flex:none}
 
 .alarm-row.is-alarming{border-color:#f3c1bd;border-left-color:#c4332b;background:#fff8f7}.alarm-rule-title .alarm-badge.is-alarming{color:#a91d18;background:#ffe1dd;font-weight:650}
+
+/* Backup selection only; preserve all existing form/layout rules. */
+.alarm-fallback-options{display:flex;flex-wrap:wrap;gap:2px 20px}.alarm-fallback-options>label{display:flex;align-items:center;gap:7px;min-height:36px;cursor:pointer;font-size:13px;white-space:nowrap}.alarm-fallback-options input[type=checkbox]{width:16px;height:16px;min-height:0;margin:0;accent-color:var(--alarm-blue);flex:none}@media(max-width:700px){.alarm-fallback-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.alarm-fallback-options>label{min-height:44px}}

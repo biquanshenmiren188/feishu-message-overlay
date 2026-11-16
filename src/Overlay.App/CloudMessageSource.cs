@@ -20,6 +20,8 @@ internal sealed class CloudMessageSource : IMessageSource
     internal long ConnectionRevision{get;private set;}
     internal IReadOnlyDictionary<string,string> Groups{get;private set;}=new Dictionary<string,string>();
     internal IncomingMessage? Pinned{get;private set;}
+    internal IReadOnlyList<IncomingMessage> PinnedHistory{get;private set;}=[];
+    internal string PinHistorySignature{get;private set;}="";
     internal string PinnedGroupId{get;private set;}="";
     internal JsonElement? Opportunities{get;private set;}
     internal DesktopRuleDecisions Rules{get;private set;}=DesktopRuleDecisions.Empty;
@@ -50,7 +52,7 @@ internal sealed class CloudMessageSource : IMessageSource
         {
             try
             {
-                object payload=known is null?new{action="state",desktopRules=1,pushCode}:(object)new{action="state",known,desktopRules=1,pushCode};
+                object payload=known is null?new{action="state",desktopRules=1,pushCode,pinHistory=1}:(object)new{action="state",known,desktopRules=1,pushCode,pinHistory=1};
                 using var result=await request(payload,stop.Token);
                 var root=result.RootElement;if(!root.GetProperty("cloudMode").GetBoolean())throw new JsonException();
                 var nextRules=DesktopPushBinding.ValidateState(root,pushCode);
@@ -83,10 +85,12 @@ internal sealed class CloudMessageSource : IMessageSource
                 var pin=Field("pinned");var selected=mapping.GetValueOrDefault(pinHash)??"";
                 var pinned=pin.ValueKind==JsonValueKind.Null?null:ParseMessage(pin,mapping);
                 if(pinned is not null&&pinned.SourceId!=selected)throw new JsonException();
+                var history=root.TryGetProperty("pinnedHistory",out var archive)?archive.EnumerateArray().Take(6).Select(m=>ParseMessage(m,mapping)).ToArray():pinned is null?Array.Empty<IncomingMessage>():new[]{pinned};
+                if(history.Length>5||history.Any(m=>m.SourceId!=selected)||history.Select(m=>m.Id).Distinct().Count()!=history.Length)throw new JsonException();
                 lock(gate)
                 {
                     RulesConnected=true;Rules=nextRules;
-                    Groups=groups;Pinned=pinned;PinnedGroupId=selected;StateLoaded=true;
+                    Groups=groups;Pinned=pinned;PinnedHistory=history;PinHistorySignature=JsonSerializer.Serialize(history);PinnedGroupId=selected;StateLoaded=true;
                     Opportunities=root.TryGetProperty("opportunities",out var cards)?cards.Clone():conditional?Opportunities:null;
                     TransportConnected=true;
                     foreach(var key in seen.Where(p=>DateTimeOffset.UtcNow-p.Value>TimeSpan.FromMinutes(30)).Select(p=>p.Key).ToArray())seen.Remove(key);

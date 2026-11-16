@@ -44,7 +44,7 @@ export function mobileSummary(message) {
       // Only this route's inline value or its immediate, known-format detail
       // line is eligible. Never borrow a headline maximum or another route.
       const value=line.match(/净均\s*([+−-]?\d+(?:\.\d+)?%)/u)?.[1]
-        ??next.match(/^(?:V2收敛[ \t]*·[ \t]*180秒[ \t]*·[ \t]*)?净均[ \t]*([+−-]?\d+(?:\.\d+)?%)/u)?.[1];
+        ??next.match(/^(?:V2收敛[ \t]*·[ \t]*[1-9]\d{0,5}秒[ \t]*·[ \t]*)?净均[ \t]*([+−-]?\d+(?:\.\d+)?%)/u)?.[1];
       signals.push(`${signal[1]}｜${signal[2]}｜${abbreviation(signal[3])}→${abbreviation(signal[4])}${value?'｜'+value:''}`);
     }
     if(signals.length){
