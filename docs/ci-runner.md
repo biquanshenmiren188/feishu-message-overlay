@@ -8,6 +8,19 @@ account's included compute allowance was exhausted and its paid Actions budget
 was zero. The owner chose local execution without adding a payment method or
 increasing that budget.
 
+## Standing owner preference
+
+Confirmed again on 2026-11-16: use this free local build arrangement for future
+feature updates and keep the website and BOT push operating normally. The local
+runner is for verification and packaging only; production website, message
+receiver, alerts, and phone push remain on the cloud server. Turning off this
+computer must not stop those production services. Keep production bindings and
+notification rules intact, verify deployments, and retain a rollback path.
+
+The paid Actions budget remains zero unless the owner explicitly changes this
+decision. A build failure or an offline runner is not a reason to move production
+services, disable checks, or enable paid usage.
+
 ## Operation
 
 - Install directory: `C:\actions-runner\feishu-message-overlay`.
