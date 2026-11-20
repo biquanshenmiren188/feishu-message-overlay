@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 VERSION='20261106-independent1'
-LINKS=[('全市场费率','/radar/?tab=market'),('机会筛选','/radar/?tab=FF&amp;mode=FF'),('充提查询','/radar/?panel=transfer'),('HY限额查询','/radar/position-limits/'),('BOT','/radar/robot-push/'),('消息设置','/radar/robot-push/settings/'),('报警设置','/radar/robot-push/alarms/')]
+LINKS=[('全市场费率','/radar/?tab=market'),('机会筛选','/radar/?tab=FF&amp;mode=FF'),('充提查询','/radar/?panel=transfer'),('Boros 套利','/radar/boros/'),('BOT','/radar/robot-push/'),('消息设置','/radar/robot-push/settings/'),('报警设置','/radar/robot-push/alarms/')]
 
 def patch(raw, page):
     if page in ('main','HY限额查询'):
@@ -21,7 +21,8 @@ def patch(raw, page):
             links.append(f'<a href="{url}"{attr}>{name}</a>')
         return head+''.join(links)+'</nav>'
     raw=re.sub(pattern,nav,raw,flags=re.S)
-    for name in ['position-limits-nav.js','shared-account.js','notification-settings.js']:
+    raw=re.sub(r'/radar/position-limits-nav\.js(?:\?[^"]+)?', '/radar/radar-nav-b428fb6ffd4f.js', raw)
+    for name in ['shared-account.js','notification-settings.js']:
         raw=re.sub(re.escape(name)+r'(?:\?v=[^"\s]+)?',name+'?v='+VERSION,raw)
     for href in ['/radar/robot-push/shared-account.css','/radar/navigation-stable.css']:
         if href not in raw:raw=raw.replace('</head>',f'<link rel="stylesheet" href="{href}?v={'20261106-center2' if 'navigation-stable' in href else VERSION}"></head>')
@@ -38,7 +39,7 @@ def main():
         files['robot-push/'+name]=(repo/'web/robot-push'/name).read_bytes().replace(b'\r\n',b'\n')
     for name in ['index.html','style.css','app.js']:
         files['push-center/'+name]=(repo/'web/push-center/public'/name).read_bytes().replace(b'\r\n',b'\n')
-    for name in ['navigation-stable.css','position-limits-nav.js']:
+    for name in ['navigation-stable.css','radar-nav-b428fb6ffd4f.js']:
         files[name]=(args.radar/'public'/name).read_bytes().replace(b'\r\n',b'\n')
     for name,raw in files.items():
         target=args.out/'static'/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(raw)
