@@ -1,0 +1,10 @@
+[Unit]
+Description=Check GitHub for desktop releases every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
