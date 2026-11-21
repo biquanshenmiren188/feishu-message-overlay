@@ -29,6 +29,16 @@
 
 ## 验收
 
+### 雷达服务器上的签名更新源
+
+使用雷达更新源的小窗从 `https://leida.shenmiren.work/desktop-updates/latest.json` 手动检查。服务器上的 `radar-desktop-sync.timer` 每五分钟读取一次本仓库的 GitHub 最新正式 Release。同步独立于本地 Actions runner，当前使用公开仓库的只读接口。
+
+服务器按标签解析源码提交，验证资产大小和 GitHub SHA-256，再交给已部署的 `/usr/local/sbin/radar-update-receiver` 验证包内清单、签名并原子发布。同步脚本兼容历史无版本号的 ZIP；发布新包时仍须使用上文带版本号的文件名，以支持直接查询 GitHub 的客户端（包括 v2026.11.12.3）。同版本的内容变化或包缺失会使同步失败，服务器继续提供上一份有效清单，下一轮重新检查。
+
+部署文件在 `scripts/radar-desktop-sync/`，脚本对应服务器的 `/usr/local/lib/radar-desktop-sync/sync.py`，两个同名 systemd 单元位于 `/etc/systemd/system/`。用 `systemctl list-timers radar-desktop-sync.timer` 查看下次检查时间，用 `journalctl -u radar-desktop-sync.service` 查看同步结果。执行 `systemctl disable --now radar-desktop-sync.timer` 可暂停后续同步，已发布的包继续可用。
+
+### 客户端检查
+
 构建包含手动操作边界测试：旧自动配置关闭、启动无网络请求、重复点击合并、检查不下载、对话框阻止安装、损坏包不退出、失败不自动重试。还包含安装包安全检查及真实子进程安装测试：成功启动、启动崩溃、损坏回执、下载校验失败，核对最终进程及配置保留。
 
 私有仓库联网下载可另用 `FeishuMessageOverlay.exe --verify-update-source <新的空目录>` 检查；此明确请求会下载并校验当前正式 ZIP，写入不含令牌的结果，不安装或修改用户配置。CI 不使用私人登录运行此联网检查。
