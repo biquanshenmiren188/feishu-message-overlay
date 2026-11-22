@@ -61,6 +61,36 @@ class PriceAlertTests(unittest.TestCase):
         with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
             alerts.tick(self.store)
 
+    def test_early_bitcoin_deposit_push(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(alerts,'DEPOSITS',Path(d)/'deposits.json'):
+            cfg=alerts.configure(self.store,'alice',dict(target=None,revision=1,depositEnabled=True))
+            t=time.time()
+            base=dict(txid='a'*64,vout=0,depositor='recipient',status='mempool',sats=3000000001,
+                      revealedAt=t-500,verifiedAt=t)
+            def write(*rows):
+                alerts.DEPOSITS.write_text(json.dumps(dict(time=int(t),deposits=rows)))
+                alerts.read_deposits.cache_clear()
+            write(dict(base,sats=3000000000),dict(base,vout=1,status='unverified'),dict(base,vout=2,verifiedAt=t-10),
+                  dict(base,vout=3,sats=1600000000),dict(base,vout=4,sats=1600000000))
+            alerts.tick(self.store)
+            self.assertIsNone(self.store.claim())
+            write(base)
+            alerts.tick(self.store)
+            event=self.store.claim()
+            self.assertEqual(event['rule_id'],alerts.DEPOSIT_RULE)
+            self.assertIn('30.00000001 BTC',json.loads(event['payload'])['title'])
+            self.assertTrue(self.store.begin_send(event))
+            self.store.finish(event,'accepted')
+            write(dict(base,status='confirmed'))
+            alerts.tick(self.store)
+            self.assertIsNone(self.store.claim())
+            self.assertFalse(self.store.view('bob')['events'])
+            write(dict(base,vout=5,status='confirmed'))
+            alerts.tick(self.store)
+            event=self.store.claim()
+            alerts.configure(self.store,'alice',dict(target=None,revision=cfg['revision'],depositThreshold='40'))
+            self.assertFalse(self.store.begin_send(event))
+
     def test_uses_second_rank_until_both_supporting_quotes_expire(self):
         row=dict(currency="cbBTC",size=1,reverse=False,at=99,rawOut=str(2*10**18),route="best")
         with tempfile.TemporaryDirectory() as d,patch.object(alerts,"SNAPSHOT",Path(d)/"q"):

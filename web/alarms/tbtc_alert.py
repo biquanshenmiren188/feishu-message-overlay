@@ -11,6 +11,8 @@ SNAPSHOT = Path('/var/lib/radar-tbtc/public/quotes.json')
 RULE = 'tbtc-price'
 MINT_RULE = 'tbtc-mint'
 LARGE_RULE = 'tbtc-backed-mint'
+DEPOSIT_RULE = 'tbtc-btc-deposit'
+DEPOSITS = SNAPSHOT.with_name('deposits.json')
 SUPPLY = SNAPSHOT.with_name('supply.json')
 
 
@@ -36,6 +38,9 @@ def initialize(store):
             for row in store.db.execute('SELECT profile FROM tbtc_price_alerts').fetchall():
                 store.cancel(row['profile'],RULE)
             store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL')
+        if 'deposit_since' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN deposit_since REAL')
+            store.db.execute("ALTER TABLE tbtc_price_alerts ADD COLUMN deposit_threshold TEXT NOT NULL DEFAULT '30'")
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_mint_sent(
             profile TEXT NOT NULL, chain TEXT NOT NULL, tx TEXT NOT NULL,
             PRIMARY KEY(profile,chain,tx))""")
@@ -62,7 +67,9 @@ def state(store, profile):
                     barkEnabled=bool(row['bark_enabled']) if row else True, mintEnabled=bool(row and row['mint_since'] is not None),
                     mintThreshold=row['mint_threshold'] if row else '10',devices=len(store.device_list(profile)),
                     largeMintEnabled=bool(row and row['large_mint_since'] is not None),
-                    largeMintThreshold=row['large_mint_threshold'] if row else '30')
+                    largeMintThreshold=row['large_mint_threshold'] if row else '30',
+                    depositEnabled=bool(row and row['deposit_since'] is not None),
+                    depositThreshold=row['deposit_threshold'] if row else '30')
 
 
 def mint_threshold(value,label):
@@ -85,10 +92,13 @@ def configure(store, profile, data):
         minimum=mint_threshold(data.get('mintThreshold',old['mintThreshold']),'铸币缺口阈值')
         large=data.get('largeMintEnabled',old['largeMintEnabled'])
         large_min=mint_threshold(data.get('largeMintThreshold',old['largeMintThreshold']),'单笔正常铸币阈值')
-        if not all(type(x) is bool for x in (page,bark,mint,large)):
+        deposit=data.get('depositEnabled',old['depositEnabled'])
+        deposit_min=mint_threshold(data.get('depositThreshold',old['depositThreshold']),'单笔 BTC 入金阈值')
+        deposit_changed=(deposit,deposit_min)!=(old['depositEnabled'],old['depositThreshold'])
+        if not all(type(x) is bool for x in (page,bark,mint,large,deposit)):
             raise ValueError('提醒方式无效')
         large_changed=(large,large_min)!=(old['largeMintEnabled'],old['largeMintThreshold'])
-        if not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
+        if not deposit_changed and not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
             return old
         store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled)
                             VALUES(?,?,?,?,?) ON CONFLICT(profile) DO UPDATE SET target=excluded.target,
@@ -105,6 +115,10 @@ def configure(store, profile, data):
             store.db.execute('UPDATE tbtc_price_alerts SET large_mint_threshold=?,large_mint_since=? WHERE profile=?',
                              (large_min,time.time() if large else None,profile))
             store.cancel(profile,LARGE_RULE)
+        if deposit_changed:
+            store.db.execute('UPDATE tbtc_price_alerts SET deposit_threshold=?,deposit_since=? WHERE profile=?',
+                             (deposit_min,time.time() if deposit else None,profile))
+            store.cancel(profile,DEPOSIT_RULE)
         return state(store,profile)
 
 
@@ -187,9 +201,59 @@ def mint_delivery(store,profile,payload,now,rule_id=MINT_RULE):
     return bool(item and (item[0]['kind']=='matched')==large and eligible_amount(*item,subscribed))
 
 
+@lru_cache(maxsize=1)
+def read_deposits(path, inode, mtime):
+    data=json.loads(path.read_bytes())
+    return data['time'],{f"{r['txid']}:{r['vout']}":r for r in data['deposits']}
+
+
+def deposit_data(now):
+    try:
+        stat=DEPOSITS.stat()
+        stamp,rows=read_deposits(DEPOSITS,stat.st_ino,stat.st_mtime_ns)
+        if 0<=now-stamp<180:return rows
+    except (OSError,ValueError,TypeError,KeyError):
+        pass
+    return None
+
+
+def qualifies_deposit(row,rule):
+    return (row['status'] in ('confirmed','mempool') and row.get('verifiedAt',0)>=rule['deposit_since']
+            and row['sats']>int(Decimal(rule['deposit_threshold'])*10**8))
+
+
+def enqueue_deposits(store,now):
+    rules=store.db.execute('SELECT profile,deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE deposit_since IS NOT NULL').fetchall()
+    if not rules:return
+    for key,row in (deposit_data(now) or {}).items():
+        for rule in rules:
+            if not qualifies_deposit(row,rule):continue
+            profile=rule['profile']
+            inserted=store.db.execute("INSERT OR IGNORE INTO tbtc_mint_sent VALUES(?,'Bitcoin',?)",(profile,key))
+            if not inserted.rowcount:continue
+            amount=format(Decimal(row['sats']).scaleb(-8).normalize(),'f')
+            status='BTC 已确认' if row['status']=='confirmed' else 'BTC 已广播，待打包'
+            payload=dict(title=f'tBTC 入金 {amount} BTC',body=f"{status} · 单笔超过 {rule['deposit_threshold']} BTC\n存款人 {row['depositor']}",
+                         group='tBTC 大额入金',level='critical',outpoint=key,
+                         url=f"https://mempool.space/tx/{row['txid']}#vout={row['vout']}")
+            devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
+            for device in devices or [None]:store.event(profile,DEPOSIT_RULE,payload,device,now)
+
+
+def deposit_delivery(store,profile,payload,now):
+    rule=store.db.execute('SELECT deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE profile=? AND deposit_since IS NOT NULL',(profile,)).fetchone()
+    if not rule:return False
+    rows=deposit_data(now)
+    if rows is None:return None
+    row=rows.get(payload['outpoint'])
+    if row and row['status']=='unverified':return None
+    return bool(row and qualifies_deposit(row,rule))
+
+
 def tick(store):
     now = time.time()
     with store.lock, store.db:
+        enqueue_deposits(store,now)
         enqueue_mints(store,now)
         rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
