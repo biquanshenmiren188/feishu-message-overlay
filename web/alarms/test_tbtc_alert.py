@@ -61,6 +61,27 @@ class PriceAlertTests(unittest.TestCase):
         with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
             alerts.tick(self.store)
 
+    def test_personal_history_groups_devices_and_retried_page_reports(self):
+        now=time.time()
+        page=dict(at=now,venue='venue',rawOut=str(10030*10**14),target='1.0026')
+        for _ in range(2):alerts.record_page(self.store,'alice',page)
+        with self.store.db:
+            for _ in range(2):
+                self.store.event('alice',alerts.MINT_RULE,dict(title='异常铸币',body='10 tBTC',tx='a'),None,now-1)
+            for profile,rule in [('bob',alerts.RULE),('alice','unrelated')]:
+                self.store.event(profile,rule,dict(title='其他记录',body='其他'),None,now-1)
+            for i in range(6):
+                self.store.event('alice',alerts.DEPOSIT_RULE,dict(title=str(i),body='BTC',outpoint=str(i)),None,now-2)
+        first=alerts.history(self.store,'alice',{})
+        self.assertEqual(first['total'],8)
+        self.assertEqual(len(first['items']),6)
+        self.assertEqual(first['items'][0]['kind'],'page')
+        self.assertEqual(first['items'][1]['statuses'],['no_device','no_device'])
+        second=alerts.history(self.store,'alice',dict(page=['2'],before=[first['before']]))
+        self.assertEqual(len(second['items']),2)
+        self.assertTrue({r['title'] for r in first['items']}.isdisjoint(r['title'] for r in second['items']))
+        self.assertEqual(alerts.history(self.store,'bob',{})['total'],1)
+
     def test_early_bitcoin_deposit_push(self):
         with tempfile.TemporaryDirectory() as d,patch.object(alerts,'DEPOSITS',Path(d)/'deposits.json'):
             cfg=alerts.configure(self.store,'alice',dict(target=None,revision=1,depositEnabled=True))

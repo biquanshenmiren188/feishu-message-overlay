@@ -1,5 +1,6 @@
 """Per-push-code tBTC alerts using the existing authenticated Bark outbox."""
 import json
+import math
 import re
 import time
 from decimal import Decimal
@@ -19,6 +20,9 @@ SUPPLY = SNAPSHOT.with_name('supply.json')
 def initialize(store):
     with store.lock, store.db:
         store.db.execute("BEGIN IMMEDIATE")
+        store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_page_history(
+            profile TEXT NOT NULL, at REAL NOT NULL, venue TEXT NOT NULL, target TEXT NOT NULL,
+            price TEXT NOT NULL, PRIMARY KEY(profile,at,venue,target))""")
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_price_alerts(
             profile TEXT PRIMARY KEY,target TEXT,revision INTEGER NOT NULL,last_sample TEXT,
             hits INTEGER NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0)""")
@@ -70,6 +74,46 @@ def state(store, profile):
                     largeMintThreshold=row['large_mint_threshold'] if row else '30',
                     depositEnabled=bool(row and row['deposit_since'] is not None),
                     depositThreshold=row['deposit_threshold'] if row else '30')
+
+
+def record_page(store,profile,data):
+    at,venue,raw=data.get('at'),data.get('venue'),data.get('rawOut')
+    if (type(at) not in (float,int) or not math.isfinite(at) or not -10<=time.time()-at<=120
+            or not isinstance(venue,str) or not 1<=len(venue)<=64 or not venue.isprintable()
+            or not isinstance(raw,str) or not re.fullmatch(r'[0-9]{1,30}',raw)):
+        raise ValueError('页面报警数据无效')
+    price=Decimal(raw).scaleb(-18)
+    with store.lock,store.db:
+        config=state(store,profile)
+        if config['pageEnabled'] and config['target'] and config['target']==data.get('target') and price>=Decimal(config['target']):
+            store.db.execute('INSERT OR IGNORE INTO tbtc_page_history VALUES (?,?,?,?,?)',
+                             (profile,at,venue,config['target'],format(price,'.4f')))
+            store.db.execute('DELETE FROM tbtc_page_history WHERE profile=? AND at<?',(profile,time.time()-30*86400))
+    return {'ok':True}
+
+
+def history(store,profile,query):
+    page=int(query.get('page',['1'])[0])
+    before=float(query.get('before',[time.time()])[0])
+    if not 1<=page<=100000 or not 0<before<=time.time()+60:
+        raise ValueError('页码或查询时间无效')
+    bounds=(profile,before-30*86400,before)
+    sql="""WITH deliveries AS (
+        SELECT at,rule_id,json_extract(payload,'$.title') title,json_extract(payload,'$.body') body,
+               coalesce(json_extract(payload,'$.tx'),json_extract(payload,'$.outpoint'),'') ref,status
+        FROM events WHERE profile=? AND at BETWEEN ? AND ? AND rule_id IN (?,?,?,?)
+    ), alerts AS (
+        SELECT at,rule_id,title,body,ref,json_group_array(status) statuses FROM deliveries
+        GROUP BY at,rule_id,title,body,ref
+        UNION ALL SELECT at,'page','页面报价达标 · '||venue,'1 cbBTC ≈ '||price||' tBTC · 目标 '||target,'','[]'
+        FROM tbtc_page_history WHERE profile=? AND at BETWEEN ? AND ?
+    ) SELECT at,rule_id,title,body,statuses,COUNT(*) OVER () total FROM alerts
+    ORDER BY at DESC,rule_id,title,body,ref LIMIT 6 OFFSET ?"""
+    with store.lock:
+        rows=store.db.execute(sql,(*bounds,RULE,MINT_RULE,LARGE_RULE,DEPOSIT_RULE,*bounds,(page-1)*6)).fetchall()
+    return dict(before=before,total=rows[0]['total'] if rows else 0,pageSize=6,
+                items=[dict(at=r['at'],kind=r['rule_id'],title=r['title'],body=r['body'],
+                            statuses=json.loads(r['statuses'])) for r in rows])
 
 
 def mint_threshold(value,label):

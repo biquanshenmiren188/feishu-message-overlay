@@ -97,11 +97,15 @@ def make_handler(store, market, auth=authenticate):
                     return self.reply(401, dict(error='请先连接推送码'))
                 query = parse_qs(route.query)
                 if route.path == BASE+'tbtc':
+                    if not post and query.get('view')==['history']:
+                        return self.reply(200,tbtc_alert.history(store,profile,query))
                     if not post: return self.reply(200,tbtc_alert.state(store,profile))
                     size=int(self.headers.get('Content-Length',0))
                     if not 0<size<=8192: return self.reply(413,dict(error='请求过大'))
                     data=json.loads(self.rfile.read(size))
                     if not isinstance(data,dict): raise ValueError('请求格式错误')
+                    if query.get('action')==['page-alert']:
+                        return self.reply(200,tbtc_alert.record_page(store,profile,data))
                     return self.reply(200,tbtc_alert.configure(store,profile,data))
                 if not post and route.path == BASE + 'devices':
                     with store.lock:
