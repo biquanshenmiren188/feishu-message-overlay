@@ -2,13 +2,16 @@
 import json
 import math
 import re
+import sqlite3
 import time
+from contextlib import closing
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from store import Conflict
 
 SNAPSHOT = Path('/var/lib/radar-tbtc/public/quotes.json')
+ROUND_HISTORY = SNAPSHOT.parent.parent / 'quote-rounds.sqlite'
 RULE = 'tbtc-price'
 MINT_RULE = 'tbtc-mint'
 LARGE_RULE = 'tbtc-backed-mint'
@@ -27,6 +30,11 @@ def initialize(store):
             profile TEXT PRIMARY KEY,target TEXT,revision INTEGER NOT NULL,last_sample TEXT,
             hits INTEGER NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0)""")
         columns={r['name'] for r in store.db.execute('PRAGMA table_info(tbtc_price_alerts)')}
+        if 'round_cursor' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN round_cursor REAL NOT NULL DEFAULT 0')
+            store.db.execute('UPDATE tbtc_price_alerts SET round_cursor=?',(time.time(),))
+        store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_price_settings_history(
+            profile TEXT NOT NULL, at REAL NOT NULL, target TEXT, bark INTEGER NOT NULL)""")
         for column in ('page_enabled','bark_enabled'):
             if column not in columns:
                 store.db.execute(f'ALTER TABLE tbtc_price_alerts ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1')
@@ -48,6 +56,9 @@ def initialize(store):
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_mint_sent(
             profile TEXT NOT NULL, chain TEXT NOT NULL, tx TEXT NOT NULL,
             PRIMARY KEY(profile,chain,tx))""")
+        if 'round_cursor' not in columns:
+            store.db.execute("""INSERT INTO tbtc_price_settings_history
+                SELECT profile,round_cursor,target,bark_enabled FROM tbtc_price_alerts""")
 
 
 def sample(now):
@@ -150,7 +161,9 @@ def configure(store, profile, data):
                          (profile,target,old['revision']+1,page,bark))
         if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
-            store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL WHERE profile=?',(profile,))
+            changed=time.time()
+            store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL,round_cursor=? WHERE profile=?',(changed,profile))
+            store.db.execute('INSERT INTO tbtc_price_settings_history VALUES(?,?,?,?)',(profile,changed,target,bark))
         if mint!=old['mintEnabled'] or minimum!=old['mintThreshold']:
             store.db.execute('UPDATE tbtc_price_alerts SET mint_threshold=? WHERE profile=?',(minimum,profile))
             store.db.execute('UPDATE tbtc_price_alerts SET mint_since=? WHERE profile=?',(time.time() if mint else None,profile))
@@ -294,28 +307,60 @@ def deposit_delivery(store,profile,payload,now):
     return bool(row and qualifies_deposit(row,rule))
 
 
-def tick(store):
+def tick_chain(store):
     now = time.time()
     with store.lock, store.db:
         enqueue_deposits(store,now)
         enqueue_mints(store,now)
+
+
+def tick_prices(store):
+    now = time.time()
+    with store.lock, store.db:
         rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
-        quote = sample(now)
-        if not quote:return
-        stamp,price = quote
-        for r in rules:
-            reached = price>=Decimal(r['target'])
-            if reached==bool(r['fired']):continue
-            if reached:
-                devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(r['profile'],)).fetchall()
-                payload=dict(title='tBTC 次优报价已达 '+r['target'],body=f'触发时 1 cbBTC ≈ {price:.4f} tBTC',
-                             target=r['target'],
-                             group='tBTC 价格报警',level='critical',url='https://leida.shenmiren.work/radar/tbtc/')
-                for device in devices or [None]:
-                    store.event(r['profile'],RULE,payload,device,now)
-            store.db.execute('UPDATE tbtc_price_alerts SET last_sample=?,hits=?,fired=? WHERE profile=?',
-                             (stamp,int(reached),int(reached),r['profile']))
+        if ROUND_HISTORY.is_file():
+            with closing(sqlite3.connect(ROUND_HISTORY.as_uri()+'?mode=ro',uri=True)) as reader:
+                rounds=reader.execute("""SELECT captured,second_raw,venue,quoted_at FROM quote_rounds
+                    WHERE captured>? AND captured<=? ORDER BY captured LIMIT 256""",
+                    (min(r['round_cursor'] for r in rules),now)).fetchall()
+            if not rounds:return
+            samples=[(captured,Decimal(raw).scaleb(-18),venue,at)
+                     for captured,raw,venue,at in rounds if raw is not None]
+            through=rounds[-1][0]
+        else:
+            # Keep reading the live snapshot when running with the previous collector.
+            quote=sample(now)
+            if not quote:return
+            stamp,price=quote
+            samples=[(now,price,stamp.split(':')[0],now)]
+            through=now
+        for rule in rules:
+            if through<=rule['round_cursor']:continue
+            fired=bool(rule['fired'])
+            last=rule['last_sample']
+            for captured,price,venue,at in samples:
+                if captured<=rule['round_cursor']:continue
+                reached=price>=Decimal(rule['target'])
+                if reached==fired:continue
+                fired=reached
+                last=f'{venue}:{at}'
+                if reached:
+                    clock=time.strftime('%H:%M:%S',time.gmtime(at+8*3600))
+                    payload=dict(title='tBTC 次优报价已达 '+rule['target'],
+                                 body=f'触发时 1 cbBTC ≈ {price:.4f} tBTC · {venue} · {clock}（北京）',
+                                 target=rule['target'],quoteAt=at,quotePrice=str(price),venue=venue,
+                                 group='tBTC 价格报警',level='critical',url='https://leida.shenmiren.work/radar/tbtc/')
+                    devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(rule['profile'],)).fetchall()
+                    for device in devices or [None]:
+                        store.event(rule['profile'],RULE,payload,device,now)
+            store.db.execute('UPDATE tbtc_price_alerts SET last_sample=?,hits=?,fired=?,round_cursor=? WHERE profile=?',
+                             (last,int(fired),int(fired),through,rule['profile']))
+
+
+def tick(store):
+    tick_prices(store)
+    tick_chain(store)
 
 
 def valid_delivery(store, profile, payload):

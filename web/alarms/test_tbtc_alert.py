@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import json
+import sqlite3
 import time
 from pathlib import Path
 from decimal import Decimal
@@ -14,6 +15,9 @@ class PriceAlertTests(unittest.TestCase):
     def setUp(self):
         temp=tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
+        history_patch=patch.object(alerts,'ROUND_HISTORY',Path(temp.name)/'rounds.sqlite')
+        history_patch.start()
+        self.addCleanup(history_patch.stop)
         self.store=Store(temp.name)
         self.addCleanup(self.store.db.close)
         alerts.initialize(self.store)
@@ -159,6 +163,33 @@ class PriceAlertTests(unittest.TestCase):
         self.assertTrue(self.store.begin_send(event))
         self.update_price('4','1.0026')
         self.assertIsNotNone(self.store.claim())
+
+    def test_replay_crossing_gap_and_dip_with_atomic_cursor(self):
+        with sqlite3.connect(alerts.ROUND_HISTORY) as db:
+            db.execute("CREATE TABLE quote_rounds(captured REAL, second_raw TEXT, venue TEXT, quoted_at REAL)")
+            now=time.time()
+            for delay,value in [(-10,'1.010'),(1,'1.006'),(2,None),(3,'1.006'),(4,'1.001')]:
+                raw=str(int(Decimal(value)*10**18)) if value else None
+                db.execute("INSERT INTO quote_rounds VALUES(?,?,?,?)",(now+delay,raw,'OKX',now+delay))
+        with patch('time.time',return_value=now+12):
+            with patch.object(self.store,'event',side_effect=RuntimeError('interrupted')):
+                with self.assertRaises(RuntimeError):alerts.tick_prices(self.store)
+            alerts.tick_prices(self.store)
+            alerts.tick_prices(self.store)
+            for profile in ('alice','bob'):
+                records=self.store.db.execute("SELECT payload FROM events WHERE rule_id=? AND profile=?",
+                                              (alerts.RULE,profile)).fetchall()
+                self.assertEqual(len(records),1)
+                self.assertEqual(json.loads(records[0][0])['quoteAt'],now+1)
+            self.assertTrue(self.store.begin_send(self.store.claim()))
+            alerts.configure(self.store,'alice',dict(target='1.008',revision=1))
+        with sqlite3.connect(alerts.ROUND_HISTORY) as db:
+            for delay in (11,13):
+                db.execute("INSERT INTO quote_rounds VALUES(?,?,?,?)",(now+delay,str(1009*10**15),'0x',now+delay))
+        with patch('time.time',return_value=now+14):
+            alerts.tick_prices(self.store)
+        latest=self.store.db.execute("SELECT payload FROM events WHERE profile='alice' ORDER BY at DESC LIMIT 1").fetchone()
+        self.assertEqual(json.loads(latest[0])['quoteAt'],now+13)
 
     def test_channels_preserve_target_and_cancel_only_bark(self):
         def update(page,bark):
