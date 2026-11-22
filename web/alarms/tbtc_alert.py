@@ -93,11 +93,12 @@ def read_mints(path, inode, mtime):
     flagged={}
     for chain in book['chains']:
         name=chain['name']
-        if not chain['ok']:continue
+        if not chain['ok'] or chain.get('asset','tBTC')!='tBTC':continue
         ready[name]=chain['stamp']
         for r in chain.get('history',[]):
-            if r.get('kind')=='review' and r.get('tx') and int(r['raw'])>0:
-                flagged[name,r['tx']]=(dict(r,asset=chain.get('asset','tBTC')),chain['decimals'])
+            key=r.get('tx') or r.get('eventId')
+            if r.get('kind')=='review' and key and int(r['raw'])>0:
+                flagged[name,key]=(r,chain['decimals'])
     return book['time'],ready,flagged
 
 
@@ -126,7 +127,9 @@ def enqueue_mints(store,now):
             digits=str(int(record['raw'])).zfill(decimals+1)
             amount=(digits[:-decimals]+'.'+digits[-decimals:]).rstrip('0').rstrip('.') if decimals else digits
             clock=time.strftime('%m/%d %H:%M:%S',time.gmtime(record['time']+8*3600))
-            payload=dict(title=chain+' 疑似异常铸币',body=f"本笔铸币 {amount} {record['asset']} · {clock}（北京）\n{record['reason']}\n{tx}",
+            detail=f"本笔铸币 {amount} tBTC" if record.get('tx') else f"链上总供应 {amount} tBTC"
+            reference="\n"+record['tx'] if record.get('tx') else ""
+            payload=dict(title=chain+' 疑似异常铸币',body=f"{detail} · {clock}（北京）\n{record['reason']}{reference}",
                          group='tBTC 异常铸币',level='critical',url='https://leida.shenmiren.work/radar/tbtc/#issuance',
                          chain=chain,tx=tx)
             devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
