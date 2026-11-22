@@ -49,3 +49,33 @@ class PriceAlertTests(unittest.TestCase):
         event=self.store.claim()
         with patch.object(alerts,'sample',return_value=None):
             self.assertFalse(self.store.begin_send(event))
+
+    def test_channels_preserve_target_and_cancel_only_bark(self):
+        def update(page,bark):
+            return alerts.configure(self.store,'alice',dict(target='1.0026',pageEnabled=page,
+              barkEnabled=bark,revision=alerts.state(self.store,'alice')['revision']))
+        self.update_price('1','1.0026')
+        update(False,True)
+        self.update_price('2','1.0026')
+        event=self.store.claim()
+        self.assertEqual(event['profile'],'alice')
+        result=update(False,False)
+        self.assertEqual(result['target'],'1.0026')
+        with patch.object(alerts,'sample',return_value=('3',Decimal('1.0026'))):
+            self.assertFalse(self.store.begin_send(event))
+        update(True,False)
+        self.update_price('4','1.0026')
+        self.update_price('5','1.0026')
+        self.assertIsNone(self.store.claim())
+        self.assertTrue(alerts.state(self.store,'bob')['barkEnabled'])
+
+    def test_upgrade_preserves_old_rule_and_hit_state(self):
+        with self.store.db:
+            self.store.db.execute('DROP TABLE tbtc_price_alerts')
+            self.store.db.execute('CREATE TABLE tbtc_price_alerts(profile TEXT PRIMARY KEY,target TEXT,revision INTEGER,last_sample TEXT,hits INTEGER DEFAULT 0,fired INTEGER DEFAULT 0)')
+            self.store.db.execute("INSERT INTO tbtc_price_alerts VALUES('alice','1.0035',12,'kyber:123',2,1)")
+        alerts.initialize(self.store)
+        alerts.initialize(self.store)
+        result=alerts.state(self.store,'alice')
+        self.assertEqual((result['target'],result['revision'],result['pageEnabled'],result['barkEnabled']),('1.0035',12,True,True))
+        self.assertEqual(self.store.db.execute('SELECT fired FROM tbtc_price_alerts').fetchone()[0],1)

@@ -12,9 +12,14 @@ RULE = 'tbtc-price'
 
 def initialize(store):
     with store.lock, store.db:
+        store.db.execute("BEGIN IMMEDIATE")
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_price_alerts(
             profile TEXT PRIMARY KEY,target TEXT,revision INTEGER NOT NULL,last_sample TEXT,
             hits INTEGER NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0)""")
+        columns={r['name'] for r in store.db.execute('PRAGMA table_info(tbtc_price_alerts)')}
+        for column in ('page_enabled','bark_enabled'):
+            if column not in columns:
+                store.db.execute(f'ALTER TABLE tbtc_price_alerts ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1')
 
 
 def sample(now):
@@ -31,9 +36,10 @@ def sample(now):
 
 def state(store, profile):
     with store.lock:
-        row = store.db.execute('SELECT target,revision FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+        row = store.db.execute('SELECT target,revision,page_enabled,bark_enabled FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
-                    devices=len(store.device_list(profile)))
+                    pageEnabled=bool(row['page_enabled']) if row else True,
+                    barkEnabled=bool(row['bark_enabled']) if row else True, devices=len(store.device_list(profile)))
 
 
 def configure(store, profile, data):
@@ -45,17 +51,25 @@ def configure(store, profile, data):
         old = state(store,profile)
         if type(data.get('revision')) is not int or data['revision'] != old['revision']:
             raise Conflict('设置已更新，请重新打开铃铛')
-        if target != old['target']:
+        page = data.get('pageEnabled',old['pageEnabled'])
+        bark = data.get('barkEnabled',old['barkEnabled'])
+        if type(page) is not bool or type(bark) is not bool:
+            raise ValueError('提醒方式无效')
+        if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
-            store.db.execute('INSERT OR REPLACE INTO tbtc_price_alerts VALUES(?,?,?,NULL,0,0)',
-                             (profile,target,old['revision']+1))
+            store.db.execute('INSERT OR REPLACE INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled) VALUES(?,?,?,?,?)',
+                             (profile,target,old['revision']+1,page,bark))
+        elif page != old['pageEnabled']:
+            store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled) VALUES(?,?,?,?,?)
+                                ON CONFLICT(profile) DO UPDATE SET revision=excluded.revision,page_enabled=excluded.page_enabled""",
+                             (profile,target,old['revision']+1,page,bark))
         return state(store,profile)
 
 
 def tick(store):
     now = time.time()
     with store.lock, store.db:
-        rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL').fetchall()
+        rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
         quote = sample(now)
         for r in rules:
@@ -80,6 +94,6 @@ def tick(store):
 
 
 def valid_delivery(store, profile, now):
-    row=store.db.execute('SELECT target,fired FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+    row=store.db.execute('SELECT target,fired FROM tbtc_price_alerts WHERE profile=? AND bark_enabled=1',(profile,)).fetchone()
     quote=sample(now)
     return bool(row and row['target'] and row['fired'] and quote and quote[1]>=Decimal(row['target']))
