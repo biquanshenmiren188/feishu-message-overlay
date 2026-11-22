@@ -25,6 +25,8 @@ def initialize(store):
                 store.db.execute(f'ALTER TABLE tbtc_price_alerts ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1')
         if 'mint_since' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN mint_since REAL')
+        if 'mint_threshold' not in columns:
+            store.db.execute("ALTER TABLE tbtc_price_alerts ADD COLUMN mint_threshold TEXT NOT NULL DEFAULT '10'")
         if 'quote_rank' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN quote_rank INTEGER DEFAULT 2')
             for row in store.db.execute('SELECT profile FROM tbtc_price_alerts').fetchall():
@@ -54,7 +56,7 @@ def state(store, profile):
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
                     pageEnabled=bool(row['page_enabled']) if row else True,
                     barkEnabled=bool(row['bark_enabled']) if row else True, mintEnabled=bool(row and row['mint_since'] is not None),
-                    devices=len(store.device_list(profile)))
+                    mintThreshold=row['mint_threshold'] if row else '10',devices=len(store.device_list(profile)))
 
 
 def configure(store, profile, data):
@@ -69,9 +71,13 @@ def configure(store, profile, data):
         page = data.get('pageEnabled',old['pageEnabled'])
         bark = data.get('barkEnabled',old['barkEnabled'])
         mint = data.get('mintEnabled',old['mintEnabled'])
+        minimum=data.get('mintThreshold',old['mintThreshold'])
+        if not isinstance(minimum,str) or not re.fullmatch(r'[0-9]{1,12}(?:\.[0-9]{1,8})?',minimum) or Decimal(minimum)<=0:
+            raise ValueError('铸币缺口阈值须大于零，最多 8 位小数')
+        minimum=format(Decimal(minimum).normalize(),'f')
         if not all(type(x) is bool for x in (page,bark,mint)):
             raise ValueError('提醒方式无效')
-        if (target,page,bark,mint)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled']):
+        if (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
             return old
         store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled)
                             VALUES(?,?,?,?,?) ON CONFLICT(profile) DO UPDATE SET target=excluded.target,
@@ -80,7 +86,8 @@ def configure(store, profile, data):
         if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
             store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL WHERE profile=?',(profile,))
-        if mint!=old['mintEnabled']:
+        if mint!=old['mintEnabled'] or minimum!=old['mintThreshold']:
+            store.db.execute('UPDATE tbtc_price_alerts SET mint_threshold=? WHERE profile=?',(minimum,profile))
             store.db.execute('UPDATE tbtc_price_alerts SET mint_since=? WHERE profile=?',(time.time() if mint else None,profile))
             if not mint:store.cancel(profile,MINT_RULE)
         return state(store,profile)
@@ -113,7 +120,7 @@ def mint_data(now):
 
 
 def enqueue_mints(store,now):
-    rules=store.db.execute('SELECT profile,mint_since FROM tbtc_price_alerts WHERE mint_since IS NOT NULL').fetchall()
+    rules=store.db.execute('SELECT profile,mint_since,mint_threshold FROM tbtc_price_alerts WHERE mint_since IS NOT NULL').fetchall()
     if not rules:return
     ready,flagged=mint_data(now)
     for (chain,tx),(record,decimals) in flagged.items():
@@ -121,13 +128,17 @@ def enqueue_mints(store,now):
         detected=record.get('flaggedAt',record['time'])
         for rule in rules:
             profile=rule['profile']
-            if detected<rule['mint_since']:continue
+            if detected<rule['mint_since'] or not meets_mint_threshold(record,decimals,rule['mint_threshold']):continue
             inserted=store.db.execute('INSERT OR IGNORE INTO tbtc_mint_sent VALUES(?,?,?)',(profile,chain,tx))
             if not inserted.rowcount:continue
             digits=str(int(record['raw'])).zfill(decimals+1)
             amount=(digits[:-decimals]+'.'+digits[-decimals:]).rstrip('0').rstrip('.') if decimals else digits
             clock=time.strftime('%m/%d %H:%M:%S',time.gmtime(record['time']+8*3600))
             detail=f"本笔铸币 {amount} tBTC" if record.get('tx') else f"链上总供应 {amount} tBTC"
+            if str(record.get('eventId','')).startswith('unlogged-mint:'):detail=f"未匹配铸币日志的供应增量 {amount} tBTC"
+            if 'unbackedRaw' in record and record.get('tx') and not record.get('supplyLimit'):
+                missing=Decimal(record['unbackedRaw']).scaleb(-decimals)
+                detail+=f" · 入金缺口 {format(missing.normalize(),'f')} tBTC"
             reference="\n"+record['tx'] if record.get('tx') else ""
             payload=dict(title=chain+' 疑似异常铸币',body=f"{detail} · {clock}（北京）\n{record['reason']}{reference}",
                          group='tBTC 异常铸币',level='critical',url='https://leida.shenmiren.work/radar/tbtc/#issuance',
@@ -136,12 +147,17 @@ def enqueue_mints(store,now):
             for device in devices or [None]:store.event(profile,MINT_RULE,payload,device,now)
 
 
+def meets_mint_threshold(record,decimals,minimum):
+    raw=int(record.get('unbackedRaw',record['raw']))
+    return raw>=int(Decimal(minimum)*10**decimals)
+
 def mint_delivery(store,profile,payload,now):
-    subscribed=store.db.execute('SELECT 1 FROM tbtc_price_alerts WHERE profile=? AND mint_since IS NOT NULL',(profile,)).fetchone()
+    subscribed=store.db.execute('SELECT mint_threshold FROM tbtc_price_alerts WHERE profile=? AND mint_since IS NOT NULL',(profile,)).fetchone()
     if not subscribed:return False
     ready,flagged=mint_data(now)
     if payload['chain'] not in ready or not 0<=now-ready[payload['chain']]<180:return None
-    return (payload['chain'],payload['tx']) in flagged
+    item=flagged.get((payload['chain'],payload['tx']))
+    return bool(item and meets_mint_threshold(*item,subscribed['mint_threshold']))
 
 
 def tick(store):

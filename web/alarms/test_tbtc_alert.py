@@ -22,6 +22,19 @@ class PriceAlertTests(unittest.TestCase):
                               revision=0,requestId=str(i)*32),{})
             alerts.configure(self.store,profile,dict(target=('1.0026','1.0040')[i],revision=0))
 
+    def test_mint_gap_is_personal_and_decided_on_missing_units(self):
+        a=alerts.configure(self.store,'alice',dict(target='1.0026',revision=1,mintThreshold='0.00000001',mintEnabled=True))
+        self.assertEqual(a['mintThreshold'],'0.00000001')
+        self.assertEqual(alerts.state(self.store,'bob')['mintThreshold'],'10')
+        legacy=alerts.configure(self.store,'alice',dict(target='1.0030',revision=a['revision']))
+        self.assertEqual(legacy['mintThreshold'],a['mintThreshold'])
+        for invalid in ('-1','0','1e3','0.000000001'):
+            with self.assertRaises(ValueError):
+                alerts.configure(self.store,'alice',dict(target=legacy['target'],revision=legacy['revision'],mintThreshold=invalid))
+        record=dict(raw=str(12*10**18),unbackedRaw=str(10**18))
+        self.assertFalse(alerts.meets_mint_threshold(record,18,'10'))
+        self.assertTrue(alerts.meets_mint_threshold(record,18,'1'))
+
     def update_price(self,stamp,value):
         with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
             alerts.tick(self.store)
@@ -99,7 +112,7 @@ class PriceAlertTests(unittest.TestCase):
             cfg=alerts.configure(self.store,'alice',dict(target=None,pageEnabled=False,barkEnabled=False,mintEnabled=True,revision=1))
             self.assertTrue(cfg['mintEnabled'])
             ts=time.time()
-            record=dict(kind='review',time=int(ts)-60,flaggedAt=ts,tx='tx1',raw='100300001',reason='归集不符')
+            record=dict(kind='review',time=int(ts)-60,flaggedAt=ts,tx='tx1',raw='1000300001',reason='归集不符')
             def write(rows,ok=True):
                 alerts.SUPPLY.write_text(json.dumps(dict(time=int(ts),chains=[dict(name='Sui',ok=ok,stamp=int(ts),decimals=8,history=rows)])))
                 alerts.read_mints.cache_clear()
@@ -109,7 +122,7 @@ class PriceAlertTests(unittest.TestCase):
             self.assertFalse(self.store.view('bob')['events'])
             self.assertEqual(len(self.store.view('alice')['events']),1)
             event=self.store.claim()
-            self.assertIn('1.00300001 tBTC',json.loads(event['payload'])['body'])
+            self.assertIn('10.00300001 tBTC',json.loads(event['payload'])['body'])
             self.assertEqual(event['rule_id'],'tbtc-mint')
             self.assertTrue(self.store.begin_send(event))
             self.store.finish(event,'accepted')
