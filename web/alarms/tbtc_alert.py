@@ -3,11 +3,14 @@ import json
 import re
 import time
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import Path
 from store import Conflict
 
 SNAPSHOT = Path('/var/lib/radar-tbtc/public/quotes.json')
 RULE = 'tbtc-price'
+MINT_RULE = 'tbtc-mint'
+SUPPLY = SNAPSHOT.with_name('supply.json')
 
 
 def initialize(store):
@@ -20,6 +23,11 @@ def initialize(store):
         for column in ('page_enabled','bark_enabled'):
             if column not in columns:
                 store.db.execute(f'ALTER TABLE tbtc_price_alerts ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1')
+        if 'mint_since' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN mint_since REAL')
+        store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_mint_sent(
+            profile TEXT NOT NULL, chain TEXT NOT NULL, tx TEXT NOT NULL,
+            PRIMARY KEY(profile,chain,tx))""")
 
 
 def sample(now):
@@ -36,10 +44,11 @@ def sample(now):
 
 def state(store, profile):
     with store.lock:
-        row = store.db.execute('SELECT target,revision,page_enabled,bark_enabled FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+        row = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
                     pageEnabled=bool(row['page_enabled']) if row else True,
-                    barkEnabled=bool(row['bark_enabled']) if row else True, devices=len(store.device_list(profile)))
+                    barkEnabled=bool(row['bark_enabled']) if row else True, mintEnabled=bool(row and row['mint_since'] is not None),
+                    devices=len(store.device_list(profile)))
 
 
 def configure(store, profile, data):
@@ -53,22 +62,83 @@ def configure(store, profile, data):
             raise Conflict('设置已更新，请重新打开铃铛')
         page = data.get('pageEnabled',old['pageEnabled'])
         bark = data.get('barkEnabled',old['barkEnabled'])
-        if type(page) is not bool or type(bark) is not bool:
+        mint = data.get('mintEnabled',old['mintEnabled'])
+        if not all(type(x) is bool for x in (page,bark,mint)):
             raise ValueError('提醒方式无效')
+        if (target,page,bark,mint)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled']):
+            return old
+        store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled)
+                            VALUES(?,?,?,?,?) ON CONFLICT(profile) DO UPDATE SET target=excluded.target,
+                            revision=excluded.revision,page_enabled=excluded.page_enabled,bark_enabled=excluded.bark_enabled""",
+                         (profile,target,old['revision']+1,page,bark))
         if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
-            store.db.execute('INSERT OR REPLACE INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled) VALUES(?,?,?,?,?)',
-                             (profile,target,old['revision']+1,page,bark))
-        elif page != old['pageEnabled']:
-            store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled) VALUES(?,?,?,?,?)
-                                ON CONFLICT(profile) DO UPDATE SET revision=excluded.revision,page_enabled=excluded.page_enabled""",
-                             (profile,target,old['revision']+1,page,bark))
+            store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL WHERE profile=?',(profile,))
+        if mint!=old['mintEnabled']:
+            store.db.execute('UPDATE tbtc_price_alerts SET mint_since=? WHERE profile=?',(time.time() if mint else None,profile))
+            if not mint:store.cancel(profile,MINT_RULE)
         return state(store,profile)
+
+
+@lru_cache(maxsize=1)
+def read_mints(path, inode, mtime):
+    book=json.loads(path.read_bytes())
+    ready={}
+    flagged={}
+    for chain in book['chains']:
+        name=chain['name']
+        if not chain['ok']:continue
+        ready[name]=chain['stamp']
+        for r in chain.get('history',[]):
+            if r.get('kind')=='review' and r.get('tx') and int(r['raw'])>0:
+                flagged[name,r['tx']]=(r,chain['decimals'])
+    return book['time'],ready,flagged
+
+
+def mint_data(now):
+    try:
+        stat=SUPPLY.stat()
+        stamp,ready,flagged=read_mints(SUPPLY,stat.st_ino,stat.st_mtime_ns)
+        if 0<=now-stamp<180:return ready,flagged
+    except (OSError,TypeError,ValueError,KeyError):
+        pass
+    return {},{}
+
+
+def enqueue_mints(store,now):
+    rules=store.db.execute('SELECT profile,mint_since FROM tbtc_price_alerts WHERE mint_since IS NOT NULL').fetchall()
+    if not rules:return
+    ready,flagged=mint_data(now)
+    for (chain,tx),(record,decimals) in flagged.items():
+        if not 0<=now-ready[chain]<180:continue
+        detected=record.get('flaggedAt',record['time'])
+        for rule in rules:
+            profile=rule['profile']
+            if detected<rule['mint_since']:continue
+            inserted=store.db.execute('INSERT OR IGNORE INTO tbtc_mint_sent VALUES(?,?,?)',(profile,chain,tx))
+            if not inserted.rowcount:continue
+            digits=str(int(record['raw'])).zfill(decimals+1)
+            amount=(digits[:-decimals]+'.'+digits[-decimals:]).rstrip('0').rstrip('.') if decimals else digits
+            clock=time.strftime('%m/%d %H:%M:%S',time.gmtime(record['time']+8*3600))
+            payload=dict(title=chain+' 疑似异常铸币',body=f"本笔铸币 {amount} tBTC · {clock}（北京）\n{record['reason']}\n{tx}",
+                         group='tBTC 异常铸币',level='critical',url='https://leida.shenmiren.work/radar/tbtc/#issuance',
+                         chain=chain,tx=tx)
+            devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
+            for device in devices or [None]:store.event(profile,MINT_RULE,payload,device,now)
+
+
+def mint_delivery(store,profile,payload,now):
+    subscribed=store.db.execute('SELECT 1 FROM tbtc_price_alerts WHERE profile=? AND mint_since IS NOT NULL',(profile,)).fetchone()
+    if not subscribed:return False
+    ready,flagged=mint_data(now)
+    if payload['chain'] not in ready or not 0<=now-ready[payload['chain']]<180:return None
+    return (payload['chain'],payload['tx']) in flagged
 
 
 def tick(store):
     now = time.time()
     with store.lock, store.db:
+        enqueue_mints(store,now)
         rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
         quote = sample(now)

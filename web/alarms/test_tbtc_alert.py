@@ -1,5 +1,8 @@
 import tempfile
 import unittest
+import json
+import time
+from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -79,3 +82,35 @@ class PriceAlertTests(unittest.TestCase):
         result=alerts.state(self.store,'alice')
         self.assertEqual((result['target'],result['revision'],result['pageEnabled'],result['barkEnabled']),('1.0035',12,True,True))
         self.assertEqual(self.store.db.execute('SELECT fired FROM tbtc_price_alerts').fetchone()[0],1)
+
+    def test_mint_push_opt_in_is_independent_and_deduplicated(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(alerts,'SUPPLY',Path(directory)/'supply.json'):
+            cfg=alerts.configure(self.store,'alice',dict(target=None,pageEnabled=False,barkEnabled=False,mintEnabled=True,revision=1))
+            self.assertTrue(cfg['mintEnabled'])
+            ts=time.time()
+            record=dict(kind='review',time=int(ts)-60,flaggedAt=ts,tx='tx1',raw='100300001',reason='归集不符')
+            def write(rows,ok=True):
+                alerts.SUPPLY.write_text(json.dumps(dict(time=int(ts),chains=[dict(name='Sui',ok=ok,stamp=int(ts),decimals=8,history=rows)])))
+                alerts.read_mints.cache_clear()
+            write([dict(record,tx='old',flaggedAt=ts-600),dict(record,tx='pending',kind='pending'),
+                   dict(record,tx=None),dict(record,tx='matched',kind='matched'),record])
+            alerts.tick(self.store);alerts.tick(self.store)
+            self.assertFalse(self.store.view('bob')['events'])
+            self.assertEqual(len(self.store.view('alice')['events']),1)
+            event=self.store.claim()
+            self.assertIn('1.00300001 tBTC',json.loads(event['payload'])['body'])
+            self.assertEqual(event['rule_id'],'tbtc-mint')
+            self.assertTrue(self.store.begin_send(event))
+            self.store.finish(event,'accepted')
+            # Older price-setting clients omit the new field.
+            alerts.configure(self.store,'alice',dict(target='1.0020',revision=cfg['revision']))
+            self.assertTrue(alerts.state(self.store,'alice')['mintEnabled'])
+            write([dict(record,tx='tx2')]);alerts.tick(self.store);event=self.store.claim()
+            write([]);self.assertFalse(self.store.begin_send(event))
+            write([dict(record,tx='tx3')]);alerts.tick(self.store);event=self.store.claim()
+            alerts.configure(self.store,'alice',dict(target='1.0020',mintEnabled=False,revision=3))
+            self.assertFalse(self.store.begin_send(event))
+            alerts.initialize(self.store)
+            cfg=alerts.configure(self.store,'alice',dict(target='1.0020',mintEnabled=True,revision=4))
+            write([dict(record,flaggedAt=time.time())]);alerts.tick(self.store)
+            self.assertIsNone(self.store.claim())
