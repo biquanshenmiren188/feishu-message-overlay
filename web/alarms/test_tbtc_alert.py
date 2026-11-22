@@ -26,6 +26,17 @@ class PriceAlertTests(unittest.TestCase):
         with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
             alerts.tick(self.store)
 
+    def test_uses_second_rank_until_both_supporting_quotes_expire(self):
+        row=dict(currency="cbBTC",size=1,reverse=False,at=99,rawOut=str(2*10**18),route="best")
+        with tempfile.TemporaryDirectory() as d,patch.object(alerts,"SNAPSHOT",Path(d)/"q"):
+            def write():alerts.SNAPSHOT.write_text(json.dumps(dict(time=99,quotes=[row])))
+            write()
+            self.assertIsNone(alerts.sample(100))
+            row["second"]=dict(rawOut="1002600000000000000",at=98,validUntil=102,venue="1inch")
+            write()
+            self.assertEqual(alerts.sample(100),("1inch:98",Decimal("1.0026")))
+            self.assertIsNone(alerts.sample(102))
+
     def test_personal_target_and_recovery(self):
         for stamp in ('1','1','2','3'):
             self.update_price(stamp,'1.0026')
@@ -72,7 +83,7 @@ class PriceAlertTests(unittest.TestCase):
         self.assertIsNone(self.store.claim())
         self.assertTrue(alerts.state(self.store,'bob')['barkEnabled'])
 
-    def test_upgrade_preserves_old_rule_and_hit_state(self):
+    def test_upgrade_preserves_rule_and_restarts_confirmation_on_new_rank(self):
         with self.store.db:
             self.store.db.execute('DROP TABLE tbtc_price_alerts')
             self.store.db.execute('CREATE TABLE tbtc_price_alerts(profile TEXT PRIMARY KEY,target TEXT,revision INTEGER,last_sample TEXT,hits INTEGER DEFAULT 0,fired INTEGER DEFAULT 0)')
@@ -81,7 +92,7 @@ class PriceAlertTests(unittest.TestCase):
         alerts.initialize(self.store)
         result=alerts.state(self.store,'alice')
         self.assertEqual((result['target'],result['revision'],result['pageEnabled'],result['barkEnabled']),('1.0035',12,True,True))
-        self.assertEqual(self.store.db.execute('SELECT fired FROM tbtc_price_alerts').fetchone()[0],1)
+        self.assertEqual(self.store.db.execute('SELECT fired FROM tbtc_price_alerts').fetchone()[0],0)
 
     def test_mint_push_opt_in_is_independent_and_deduplicated(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(alerts,'SUPPLY',Path(directory)/'supply.json'):

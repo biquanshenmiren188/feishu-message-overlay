@@ -25,6 +25,11 @@ def initialize(store):
                 store.db.execute(f'ALTER TABLE tbtc_price_alerts ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1')
         if 'mint_since' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN mint_since REAL')
+        if 'quote_rank' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN quote_rank INTEGER DEFAULT 2')
+            for row in store.db.execute('SELECT profile FROM tbtc_price_alerts').fetchall():
+                store.cancel(row['profile'],RULE)
+            store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL')
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_mint_sent(
             profile TEXT NOT NULL, chain TEXT NOT NULL, tx TEXT NOT NULL,
             PRIMARY KEY(profile,chain,tx))""")
@@ -34,9 +39,10 @@ def sample(now):
     try:
         book = json.loads(SNAPSHOT.read_bytes())
         row = next(r for r in book['quotes'] if r['currency']=='cbBTC' and r['size']==1 and not r['reverse'])
-        at, raw = row['at'], int(row['rawOut'])
-        if raw > 0 and 0 <= now-at <= 9 and 0 <= now-book['time'] <= 9:
-            return str(row['route'])+':'+str(at), Decimal(raw).scaleb(-18)
+        second = row['second']
+        at, raw = second['at'], int(second['rawOut'])
+        if raw > 0 and 0 <= now-at < 9 and now<second['validUntil'] and 0 <= now-book['time'] < 9:
+            return str(second['venue']).lower()+':'+str(at), Decimal(raw).scaleb(-18)
     except (OSError, ValueError, KeyError, StopIteration, TypeError):
         pass
     return None
@@ -91,7 +97,7 @@ def read_mints(path, inode, mtime):
         ready[name]=chain['stamp']
         for r in chain.get('history',[]):
             if r.get('kind')=='review' and r.get('tx') and int(r['raw'])>0:
-                flagged[name,r['tx']]=(r,chain['decimals'])
+                flagged[name,r['tx']]=(dict(r,asset=chain.get('asset','tBTC')),chain['decimals'])
     return book['time'],ready,flagged
 
 
@@ -120,7 +126,7 @@ def enqueue_mints(store,now):
             digits=str(int(record['raw'])).zfill(decimals+1)
             amount=(digits[:-decimals]+'.'+digits[-decimals:]).rstrip('0').rstrip('.') if decimals else digits
             clock=time.strftime('%m/%d %H:%M:%S',time.gmtime(record['time']+8*3600))
-            payload=dict(title=chain+' 疑似异常铸币',body=f"本笔铸币 {amount} tBTC · {clock}（北京）\n{record['reason']}\n{tx}",
+            payload=dict(title=chain+' 疑似异常铸币',body=f"本笔铸币 {amount} {record['asset']} · {clock}（北京）\n{record['reason']}\n{tx}",
                          group='tBTC 异常铸币',level='critical',url='https://leida.shenmiren.work/radar/tbtc/#issuance',
                          chain=chain,tx=tx)
             devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
@@ -153,7 +159,7 @@ def tick(store):
             fired = bool(hits and r['fired'])
             if hits==2 and not fired:
                 devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(r['profile'],)).fetchall()
-                payload=dict(title='tBTC 兑换价已达 '+r['target'],body=f'1 cbBTC ≈ {price:.4f} tBTC',
+                payload=dict(title='tBTC 次优报价已达 '+r['target'],body=f'1 cbBTC ≈ {price:.4f} tBTC',
                              group='tBTC 价格报警',level='critical',url='https://leida.shenmiren.work/radar/tbtc/')
                 for device in devices or [None]:
                     store.event(r['profile'],RULE,payload,device,now)
