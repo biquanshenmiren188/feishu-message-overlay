@@ -302,28 +302,22 @@ def tick(store):
         rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
         quote = sample(now)
+        if not quote:return
+        stamp,price = quote
         for r in rules:
-            if not quote:
-                if r['hits']:
-                    store.db.execute('UPDATE tbtc_price_alerts SET hits=0,last_sample=NULL WHERE profile=?',(r['profile'],))
-                continue
-            stamp,price = quote
-            if r['last_sample']==stamp: continue
-            hits = min(2,r['hits']+1) if price>=Decimal(r['target']) else 0
-            fired = bool(hits and r['fired'])
-            if hits==2 and not fired:
+            reached = price>=Decimal(r['target'])
+            if reached==bool(r['fired']):continue
+            if reached:
                 devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(r['profile'],)).fetchall()
-                payload=dict(title='tBTC 次优报价已达 '+r['target'],body=f'1 cbBTC ≈ {price:.4f} tBTC',
+                payload=dict(title='tBTC 次优报价已达 '+r['target'],body=f'触发时 1 cbBTC ≈ {price:.4f} tBTC',
+                             target=r['target'],
                              group='tBTC 价格报警',level='critical',url='https://leida.shenmiren.work/radar/tbtc/')
                 for device in devices or [None]:
                     store.event(r['profile'],RULE,payload,device,now)
-                fired=True
-            if not hits and r['fired']: store.cancel(r['profile'],RULE)
             store.db.execute('UPDATE tbtc_price_alerts SET last_sample=?,hits=?,fired=? WHERE profile=?',
-                             (stamp,hits,int(fired),r['profile']))
+                             (stamp,int(reached),int(reached),r['profile']))
 
 
-def valid_delivery(store, profile, now):
-    row=store.db.execute('SELECT target,fired FROM tbtc_price_alerts WHERE profile=? AND bark_enabled=1',(profile,)).fetchone()
-    quote=sample(now)
-    return bool(row and row['target'] and row['fired'] and quote and quote[1]>=Decimal(row['target']))
+def valid_delivery(store, profile, payload):
+    row=store.db.execute('SELECT target FROM tbtc_price_alerts WHERE profile=? AND bark_enabled=1',(profile,)).fetchone()
+    return bool(row and row['target'] and row['target']==payload.get('target'))

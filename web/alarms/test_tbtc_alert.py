@@ -124,7 +124,9 @@ class PriceAlertTests(unittest.TestCase):
             self.assertIsNone(alerts.sample(102))
 
     def test_personal_target_and_recovery(self):
-        for stamp in ('1','1','2','3'):
+        self.update_price('1','1.0026')
+        self.assertEqual(len(self.store.view('alice')['events']),1)
+        for stamp in ('1','2','3'):
             self.update_price(stamp,'1.0026')
         events=self.store.view('alice')['events']
         self.assertEqual(len(events),1)
@@ -143,12 +145,20 @@ class PriceAlertTests(unittest.TestCase):
         self.assertIsNone(self.store.claim())
         self.assertEqual(alerts.state(self.store,'bob')['target'],'1.0040')
 
-    def test_expired_quote_cannot_be_sent(self):
+    def test_single_hit_survives_gap_and_dip_before_delivery(self):
+        with patch.object(alerts,'sample',return_value=None):
+            alerts.tick(self.store)
+        self.assertIsNone(self.store.claim())
         self.update_price('1','1.0027')
-        self.update_price('2','1.0027')
         event=self.store.claim()
         with patch.object(alerts,'sample',return_value=None):
-            self.assertFalse(self.store.begin_send(event))
+            alerts.tick(self.store)
+        self.update_price('2','1.0027')
+        self.assertIsNone(self.store.claim())
+        self.update_price('3','1.0024')
+        self.assertTrue(self.store.begin_send(event))
+        self.update_price('4','1.0026')
+        self.assertIsNotNone(self.store.claim())
 
     def test_channels_preserve_target_and_cancel_only_bark(self):
         def update(page,bark):
