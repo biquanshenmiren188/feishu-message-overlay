@@ -35,6 +35,28 @@ class PriceAlertTests(unittest.TestCase):
         self.assertFalse(alerts.meets_mint_threshold(record,18,'10'))
         self.assertTrue(alerts.meets_mint_threshold(record,18,'1'))
 
+    def test_backed_mints_are_strictly_per_tx_and_independent_of_shortfall(self):
+        config=alerts.configure(self.store,'alice',dict(target=None,revision=1,largeMintEnabled=True))
+        self.assertFalse(config['mintEnabled'])
+        self.assertEqual(config['largeMintThreshold'],'30')
+        with tempfile.TemporaryDirectory() as tmp,patch.object(alerts,'SUPPLY',Path(tmp)/'supply.json'):
+            now=int(time.time())+1
+            def record(tx,raw,kind='matched'):
+                return dict(tx=tx,raw=str(raw),reason='test',time=now,kind=kind)
+            rows=[record('a',16*10**8),record('b',16*10**8),record('equal',30*10**8),
+                  record('over',30*10**8+1),record('pending',100*10**8,'pending'),
+                  record('review',100*10**8,'review')]
+            alerts.SUPPLY.write_text(json.dumps(dict(time=now,chains=[dict(name='Sui',stamp=now,ok=True,decimals=8,history=rows)])))
+            with patch('time.time',return_value=now+0.5):
+                alerts.tick(self.store);alerts.tick(self.store)
+                e=self.store.claim()
+                self.assertEqual(e['rule_id'],alerts.LARGE_RULE)
+                self.assertEqual(json.loads(e['payload'])['tx'],'over')
+                self.assertEqual(len(self.store.view('alice')['events']),1)
+                self.assertFalse(self.store.view('bob')['events'])
+                alerts.configure(self.store,'alice',dict(target=None,revision=config['revision'],largeMintEnabled=False))
+                self.assertFalse(self.store.begin_send(e))
+
     def update_price(self,stamp,value):
         with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
             alerts.tick(self.store)
