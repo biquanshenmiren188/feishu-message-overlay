@@ -162,9 +162,17 @@ def main():
                 quotes, _ = market.snapshot()
                 active = store.tick(quotes, time.time())
                 market.poll(active)
-                tbtc_alert.tick(store)
+                tbtc_alert.tick_chain(store)
             except Exception as exc:
                 print('watch:', type(exc).__name__, flush=True)
+            time.sleep(.5)
+
+    def watch_tbtc_prices():
+        while True:
+            try:
+                tbtc_alert.tick_prices(store)
+            except Exception as exc:
+                print('tbtc price reader:', type(exc).__name__, flush=True)
             time.sleep(.5)
 
     def deliver():
@@ -179,6 +187,7 @@ def main():
             time.sleep(.5)
 
     threading.Thread(target=watch, daemon=True).start()
+    threading.Thread(target=watch_tbtc_prices, daemon=True).start()
     # A slow or failed device must not hold other devices behind its HTTP timeout.
     for _ in range(8):
         threading.Thread(target=deliver, daemon=True).start()
