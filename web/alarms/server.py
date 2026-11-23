@@ -84,6 +84,16 @@ def make_handler(store, market, auth=authenticate):
         def dispatch(self, post=False):
             self.started=time.perf_counter();self.auth_ms=0
             route = urlsplit(self.path)
+            if route.path=='/internal/tbtc-sales' and post:
+                if (self.client_address[0]!='127.0.0.1' or self.headers.get('Host')!='127.0.0.1:18886'
+                        or self.headers.get('Origin') or self.headers.get('X-Forwarded-For')
+                        or self.headers.get('Content-Length')!='0'):
+                    return self.reply(403,{})
+                # The webhook is a wake-up signal. Only our scanner's verified
+                # snapshot supplies the amounts and transaction identifiers.
+                with store.lock,store.db:
+                    tbtc_alert.enqueue_sales(store,time.time())
+                return self.reply(200,{'ok':True})
             if route.path == BASE + 'health' and not post:
                 return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):

@@ -69,7 +69,7 @@ class Store:
                 self.cancel(profile['id'])
                 self.db.execute('UPDATE profiles SET enabled=1,revision=revision+1 WHERE id=?', (profile['id'],))
             self.db.execute("UPDATE events SET status='unknown',error='发送过程中服务重启，结果未知' WHERE status='sending'")
-            self.db.execute("UPDATE events SET status='queued' WHERE status='claimed' AND rule_id IN ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit')")
+            self.db.execute("UPDATE events SET status='queued' WHERE status='claimed' AND rule_id IN ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale')")
             self.db.execute("UPDATE events SET status='queued' WHERE status='claimed' AND rule_id='tbtc-price' AND json_extract(payload,'$.target') IS NOT NULL")
             self.db.execute("UPDATE events SET status='cancelled',error='服务重启，取消尚未发送的消息' WHERE status='claimed'")
             for row in self.db.execute('SELECT id,state FROM rules').fetchall():
@@ -361,10 +361,12 @@ class Store:
             if valid and row['rule_id'] == 'tbtc-price':
                 from tbtc_alert import valid_delivery
                 valid = valid_delivery(self, row['profile'], json.loads(row['payload']))
-            elif valid and row['rule_id'] in ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit'):
-                from tbtc_alert import deposit_delivery, mint_delivery
+            elif valid and row['rule_id'] in ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale'):
+                from tbtc_alert import deposit_delivery, mint_delivery, sale_delivery
                 payload=json.loads(row['payload'])
-                if row['rule_id']=='tbtc-btc-deposit':
+                if row['rule_id']=='tbtc-large-sale':
+                    valid=sale_delivery(self,row['profile'],payload,now)
+                elif row['rule_id']=='tbtc-btc-deposit':
                     valid=deposit_delivery(self,row['profile'],payload,now)
                 else:
                     valid=mint_delivery(self,row['profile'],payload,now,row['rule_id'])
@@ -401,7 +403,7 @@ class Store:
             if not valid:
                 self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
                 return False
-            if row['rule_id'] not in ('test','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit') and rule['repeat']:
+            if row['rule_id'] not in ('test','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
                 last = self.db.execute('SELECT at FROM device_dispatch WHERE rule_id=? AND fingerprint=?', (row['rule_id'], row['fingerprint'])).fetchone()
                 if last and now < last['at'] + REPEAT_SECONDS:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?", (last['at'] + REPEAT_SECONDS, row['id']))
