@@ -129,7 +129,7 @@ class PriceAlertTests(unittest.TestCase):
                 self.assertFalse(self.store.begin_send(e))
 
     def update_price(self,stamp,value):
-        with patch.object(alerts,'sample',return_value=(Decimal(value),'test',int(stamp),False)):
+        with patch.object(alerts,'sample',return_value=(Decimal(value),'test',int(stamp),'second')):
             alerts.tick(self.store)
 
     def test_personal_history_groups_devices_and_retried_page_reports(self):
@@ -191,7 +191,7 @@ class PriceAlertTests(unittest.TestCase):
             self.assertIsNone(alerts.sample(100))
             row["second"]=dict(rawOut="1002600000000000000",at=98,validUntil=102,venue="1inch")
             write()
-            self.assertEqual(alerts.sample(100),(Decimal("1.0026"),"1inch",98,False))
+            self.assertEqual(alerts.sample(100),(Decimal("1.0026"),"1inch",98,"second"))
             self.assertIsNone(alerts.sample(102))
 
     def test_personal_target_and_recovery(self):
