@@ -415,9 +415,22 @@ class Store:
             self.db.execute("UPDATE events SET status='sending',attempts=attempts+1 WHERE id=?", (row['id'],))
             return True
 
+    def record_sale_send(self, identity):
+        with self.lock,self.db:
+            self.db.execute("""UPDATE events SET payload=json_insert(
+                json_insert(payload,'$.barkAttempts',json('[]')),
+                '$.barkAttempts[#]',json_object('sentAt',?)) WHERE id=? AND status='sending'""",
+                (time.time(),identity))
+
     def finish(self, event, status, error=None):
         with self.lock, self.db:
             attempt = event['attempts'] + 1
             if status == 'retry' and attempt >= 3:
                 status = 'failed'
-            self.db.execute("UPDATE events SET status=?,error=?,next_at=? WHERE id=? AND status='sending'", (status, error, time.time() + 5 * 2 ** attempt, event['id']))
+            finished=time.time()
+            if event.get('rule_id')=='tbtc-large-sale':
+                self.db.execute("""UPDATE events SET payload=json_set(payload,
+                    '$.barkAttempts[#-1].status',?, '$.barkAttempts[#-1].finishedAt',?,
+                    '$.barkAttempts[#-1].error',?) WHERE id=? AND status='sending'
+                    AND json_array_length(payload,'$.barkAttempts')>0""",(status,finished,error,event['id']))
+            self.db.execute("UPDATE events SET status=?,error=?,next_at=? WHERE id=? AND status='sending'", (status, error, finished + 5 * 2 ** attempt, event['id']))

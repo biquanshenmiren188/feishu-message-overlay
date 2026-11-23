@@ -25,6 +25,8 @@ SUPPLY = SNAPSHOT.with_name('supply.json')
 def initialize(store):
     with store.lock, store.db:
         store.db.execute("BEGIN IMMEDIATE")
+        store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_sale_webhooks(
+            batch TEXT PRIMARY KEY, received REAL NOT NULL)""")
         store.db.execute("""CREATE TABLE IF NOT EXISTS tbtc_page_history(
             profile TEXT NOT NULL, at REAL NOT NULL, venue TEXT NOT NULL, target TEXT NOT NULL,
             price TEXT NOT NULL, PRIMARY KEY(profile,at,venue,target))""")
@@ -119,20 +121,39 @@ def history(store,profile,query):
     bounds=(profile,before-30*86400,before)
     sql="""WITH deliveries AS (
         SELECT at,rule_id,json_extract(payload,'$.title') title,json_extract(payload,'$.body') body,
-               coalesce(json_extract(payload,'$.tx'),json_extract(payload,'$.outpoint'),'') ref,status
+               coalesce(json_extract(payload,'$.tx'),json_extract(payload,'$.outpoint'),'') ref,status,id
         FROM events WHERE profile=? AND at BETWEEN ? AND ? AND rule_id IN (?,?,?,?,?)
     ), alerts AS (
-        SELECT at,rule_id,title,body,ref,json_group_array(status) statuses FROM deliveries
+        SELECT at,rule_id,title,body,ref,json_group_array(status) statuses,json_group_array(id) ids FROM deliveries
         GROUP BY at,rule_id,title,body,ref
-        UNION ALL SELECT at,'page','页面报价达标 · '||venue,'1 cbBTC ≈ '||price||' tBTC · 目标 '||target,'','[]'
+        UNION ALL SELECT at,'page','页面报价达标 · '||venue,'1 cbBTC ≈ '||price||' tBTC · 目标 '||target,'','[]','[]'
         FROM tbtc_page_history WHERE profile=? AND at BETWEEN ? AND ?
-    ) SELECT at,rule_id,title,body,statuses,COUNT(*) OVER () total FROM alerts
+    ) SELECT at,rule_id,title,body,statuses,ids,COUNT(*) OVER () total FROM alerts
     ORDER BY at DESC,rule_id,title,body,ref LIMIT 6 OFFSET ?"""
     with store.lock:
         rows=store.db.execute(sql,(*bounds,RULE,MINT_RULE,LARGE_RULE,DEPOSIT_RULE,SALE_RULE,*bounds,(page-1)*6)).fetchall()
-    return dict(before=before,total=rows[0]['total'] if rows else 0,pageSize=6,
-                items=[dict(at=r['at'],kind=r['rule_id'],title=r['title'],body=r['body'],
-                            statuses=json.loads(r['statuses'])) for r in rows])
+        items=[]
+        for r in rows:
+            item=dict(at=r['at'],kind=r['rule_id'],title=r['title'],body=r['body'],statuses=json.loads(r['statuses']))
+            if r['rule_id']==SALE_RULE:
+                item['sale']=sale_history(store,profile,r['ids'])
+            items.append(item)
+    return dict(before=before,total=rows[0]['total'] if rows else 0,pageSize=6,items=items)
+
+
+def sale_history(store,profile,ids):
+    devices=[]
+    rows=store.db.execute("""SELECT e.payload,e.status,e.error,w.received FROM events e
+        LEFT JOIN tbtc_sale_webhooks w ON w.batch=json_extract(e.payload,'$.scanBatch')
+        WHERE e.profile=? AND e.id IN (SELECT value FROM json_each(?))
+        ORDER BY json_extract(e.payload,'$.deviceLabel'),e.id""",(profile,ids))
+    for row in rows:
+        payload=json.loads(row['payload'])
+        devices.append(dict(label=payload.get('deviceLabel'),status=row['status'],error=row['error'],
+                            attempts=payload.get('barkAttempts',[])))
+    return dict(tx=payload['tx'],seller=payload['seller'],amount=payload.get('sold'),
+                tradedAt=payload.get('tradedAt'),scannedAt=payload.get('scannedAt'),
+                trigger=payload.get('trigger'),webhookAt=row['received'],devices=devices)
 
 
 def mint_threshold(value,label):
@@ -339,10 +360,14 @@ def qualifies_sale(rule,row):
     return bool(rule and rule['sale_since'] is not None and row['time']>=rule['sale_since']
                 and int(row['soldRaw'])>int(Decimal(rule['sale_threshold']).scaleb(18)))
 
-def enqueue_sales(store,now):
+def enqueue_sales(store,now,batch=None):
+    rows=sale_data(now) or {}
+    if batch and any(r.get('scanBatch')==batch for r in rows.values()):
+        store.db.execute('INSERT OR IGNORE INTO tbtc_sale_webhooks VALUES(?,?)',(batch,now))
+        store.db.execute('DELETE FROM tbtc_sale_webhooks WHERE received<?',(now-31*86400,))
     rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE sale_since IS NOT NULL').fetchall()
     if not rules:return
-    for (tx,seller),row in (sale_data(now) or {}).items():
+    for (tx,seller),row in rows.items():
         for rule in rules:
             if not qualifies_sale(rule,row):continue
             profile=rule['profile']
@@ -352,7 +377,9 @@ def enqueue_sales(store,now):
             clock=time.strftime('%H:%M:%S',time.gmtime(row['time']+28800))
             position='Aave 仓位' if row.get('source')=='aave' else '卖家'
             payload=dict(title=f'ETH 链上卖出 {sold} tBTC',body=f'{position} {seller} · {clock}（北京）',
-                         tx=tx,seller=seller,group='tBTC 大额卖出',level='critical',url='https://etherscan.io/tx/'+tx)
+                         tx=tx,seller=seller,sold=sold,tradedAt=row['time'],scannedAt=row.get('scannedAt'),
+                         scanBatch=row.get('scanBatch'),trigger='webhook' if batch and row.get('scanBatch')==batch else 'poll',
+                         group='tBTC 大额卖出',level='critical',url='https://etherscan.io/tx/'+tx)
             devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
             for device in devices or [None]:store.event(profile,SALE_RULE,payload,device,now)
 
