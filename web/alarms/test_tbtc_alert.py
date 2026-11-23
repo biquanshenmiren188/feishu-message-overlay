@@ -45,6 +45,24 @@ class PriceAlertTests(unittest.TestCase):
             self.assertEqual(sent,{'one','two'})
             self.assertIsNone(self.store.claim())
 
+    def test_sale_threshold_is_personal_strict_and_applies_to_new_sales(self):
+        self.assertEqual(alerts.state(self.store,'alice')['saleThreshold'],'5')
+        with patch('time.time',return_value=100):
+            for profile,limit in [('alice','2.5'),('bob','10')]:
+                alerts.configure(self.store,profile,dict(revision=1,target=None,saleEnabled=True,saleThreshold=limit))
+        rows={}
+        for tx,raw,stamp in [('before',8*10**18,99),('equal',25*10**17,101),('above',25*10**17+1,102)]:
+            rows[tx,'seller']=dict(tx=tx,address='seller',time=stamp,soldRaw=str(raw))
+        with patch.object(alerts,'sale_data',return_value=rows),self.store.db:
+            alerts.enqueue_sales(self.store,time.time())
+            event=self.store.claim()
+            self.assertEqual((event['profile'],json.loads(event['payload'])['tx']),('alice','above'))
+            self.assertTrue(self.store.begin_send(event))
+            self.assertIsNone(self.store.claim())
+        with self.assertRaises(ValueError):
+            alerts.configure(self.store,'alice',dict(target=None,revision=2,saleThreshold='0'))
+        self.assertEqual(alerts.configure(self.store,'alice',dict(target=None,revision=2))['saleThreshold'],'2.5')
+
     def test_mint_gap_is_personal_and_decided_on_missing_units(self):
         a=alerts.configure(self.store,'alice',dict(target='1.0026',revision=1,mintThreshold='0.00000001',mintEnabled=True))
         self.assertEqual(a['mintThreshold'],'0.00000001')
