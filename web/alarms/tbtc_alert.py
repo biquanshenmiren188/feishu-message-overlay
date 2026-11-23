@@ -34,6 +34,8 @@ def initialize(store):
         columns={r['name'] for r in store.db.execute('PRAGMA table_info(tbtc_price_alerts)')}
         if 'sale_since' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN sale_since REAL')
+        if 'sale_threshold' not in columns:
+            store.db.execute("ALTER TABLE tbtc_price_alerts ADD COLUMN sale_threshold TEXT NOT NULL DEFAULT '5'")
         if 'round_cursor' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN round_cursor REAL NOT NULL DEFAULT 0')
             store.db.execute('UPDATE tbtc_price_alerts SET round_cursor=?',(time.time(),))
@@ -83,6 +85,7 @@ def state(store, profile):
         row = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
                     saleEnabled=bool(row and row['sale_since'] is not None),
+                    saleThreshold=row['sale_threshold'] if row else '5',
                     pageEnabled=bool(row['page_enabled']) if row else True,
                     barkEnabled=bool(row['bark_enabled']) if row else True, mintEnabled=bool(row and row['mint_since'] is not None),
                     mintThreshold=row['mint_threshold'] if row else '10',devices=len(store.device_list(profile)),
@@ -150,6 +153,8 @@ def configure(store, profile, data):
         bark = data.get('barkEnabled',old['barkEnabled'])
         mint = data.get('mintEnabled',old['mintEnabled'])
         sale = data.get('saleEnabled',old['saleEnabled'])
+        sale_min=mint_threshold(data.get('saleThreshold',old['saleThreshold']),'单笔卖出阈值')
+        sale_changed=(sale,sale_min)!=(old['saleEnabled'],old['saleThreshold'])
         minimum=mint_threshold(data.get('mintThreshold',old['mintThreshold']),'铸币缺口阈值')
         large=data.get('largeMintEnabled',old['largeMintEnabled'])
         large_min=mint_threshold(data.get('largeMintThreshold',old['largeMintThreshold']),'单笔正常铸币阈值')
@@ -159,14 +164,15 @@ def configure(store, profile, data):
         if not all(type(x) is bool for x in (page,bark,mint,large,deposit,sale)):
             raise ValueError('提醒方式无效')
         large_changed=(large,large_min)!=(old['largeMintEnabled'],old['largeMintThreshold'])
-        if sale==old['saleEnabled'] and not deposit_changed and not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
+        if not sale_changed and not deposit_changed and not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
             return old
         store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled)
                             VALUES(?,?,?,?,?) ON CONFLICT(profile) DO UPDATE SET target=excluded.target,
                             revision=excluded.revision,page_enabled=excluded.page_enabled,bark_enabled=excluded.bark_enabled""",
                          (profile,target,old['revision']+1,page,bark))
-        if sale!=old['saleEnabled']:
-            store.db.execute('UPDATE tbtc_price_alerts SET sale_since=? WHERE profile=?',(time.time() if sale else None,profile))
+        if sale_changed:
+            store.db.execute('UPDATE tbtc_price_alerts SET sale_threshold=?,sale_since=? WHERE profile=?',
+                             (sale_min,time.time() if sale else None,profile))
             store.cancel(profile,SALE_RULE)
         if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
@@ -331,7 +337,7 @@ def sale_data(now):
 
 def qualifies_sale(rule,row):
     return bool(rule and rule['sale_since'] is not None and row['time']>=rule['sale_since']
-                and int(row['soldRaw'])>5*10**18)
+                and int(row['soldRaw'])>int(Decimal(rule['sale_threshold']).scaleb(18)))
 
 def enqueue_sales(store,now):
     rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE sale_since IS NOT NULL').fetchall()
@@ -351,7 +357,7 @@ def enqueue_sales(store,now):
             for device in devices or [None]:store.event(profile,SALE_RULE,payload,device,now)
 
 def sale_delivery(store,profile,payload,now):
-    rule=store.db.execute('SELECT sale_since FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+    rule=store.db.execute('SELECT sale_since,sale_threshold FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
     if not rule or rule['sale_since'] is None:return False
     rows=sale_data(now)
     if rows is None:return None
