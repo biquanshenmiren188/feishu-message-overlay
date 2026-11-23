@@ -73,10 +73,11 @@ def sample(now):
     try:
         book = json.loads(SNAPSHOT.read_bytes())
         row = next(r for r in book['quotes'] if r['currency']=='cbBTC' and r['size']==1 and not r['reverse'])
-        second = row['second']
-        at, raw = second['at'], int(second['rawOut'])
-        if raw > 0 and 0 <= now-at < 9 and now<second['validUntil'] and 0 <= now-book['time'] < 9:
-            return str(second['venue']).lower()+':'+str(at), Decimal(raw).scaleb(-18)
+        fallback = 'single' if row.get('venueCount')==1 else 'second'
+        quote = row.get('selected') or row[fallback]
+        at, raw = quote['at'], int(quote['rawOut'])
+        if raw > 0 and 0 <= now-at < 9 and now<quote['validUntil'] and 0 <= now-book['time'] < 9:
+            return Decimal(raw).scaleb(-18),quote['venue'],at,quote.get('mode',fallback)
     except (OSError, ValueError, KeyError, StopIteration, TypeError):
         pass
     return None
@@ -399,6 +400,22 @@ def tick_chain(store):
         enqueue_mints(store,now)
 
 
+def price_rounds(reader, after, through):
+    # Old rounds keep the policy in effect when they were collected. An empty
+    # selection in a new round means the collector had no valid quote.
+    legacy="""SELECT captured,CASE WHEN venues=1 THEN best_raw ELSE second_raw END AS raw,
+              venue,quoted_at,CASE WHEN venues=1 THEN 'single' ELSE 'second' END AS mode
+              FROM quote_rounds WHERE captured>? AND captured<=?"""
+    bounds=(after,through)
+    if reader.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_selection'").fetchone():
+        legacy+=" AND NOT EXISTS (SELECT 1 FROM quote_selection s WHERE s.captured=quote_rounds.captured)"
+        query="SELECT captured,raw,venue,quoted_at,mode FROM quote_selection WHERE captured>? AND captured<=? UNION ALL "+legacy
+        bounds+=bounds
+    else:
+        query=legacy
+    return reader.execute(query+" ORDER BY captured LIMIT 256",bounds).fetchall()
+
+
 def tick_prices(store):
     now = time.time()
     with store.lock, store.db:
@@ -406,25 +423,22 @@ def tick_prices(store):
         if not rules: return
         if ROUND_HISTORY.is_file():
             with closing(sqlite3.connect(ROUND_HISTORY.as_uri()+'?mode=ro',uri=True)) as reader:
-                rounds=reader.execute("""SELECT captured,second_raw,venue,quoted_at FROM quote_rounds
-                    WHERE captured>? AND captured<=? ORDER BY captured LIMIT 256""",
-                    (min(r['round_cursor'] for r in rules),now)).fetchall()
+                rounds=price_rounds(reader,min(r['round_cursor'] for r in rules),now)
             if not rounds:return
-            samples=[(captured,Decimal(raw).scaleb(-18),venue,at)
-                     for captured,raw,venue,at in rounds if raw is not None]
+            samples=[(captured,Decimal(raw).scaleb(-18),venue,at,mode)
+                     for captured,raw,venue,at,mode in rounds if raw is not None and venue and at is not None]
             through=rounds[-1][0]
         else:
             # Keep reading the live snapshot when running with the previous collector.
             quote=sample(now)
             if not quote:return
-            stamp,price=quote
-            samples=[(now,price,stamp.split(':')[0],now)]
+            samples=[(now,*quote)]
             through=now
         for rule in rules:
             if through<=rule['round_cursor']:continue
             fired=bool(rule['fired'])
             last=rule['last_sample']
-            for captured,price,venue,at in samples:
+            for captured,price,venue,at,mode in samples:
                 if captured<=rule['round_cursor']:continue
                 reached=price>=Decimal(rule['target'])
                 if reached==fired:continue
@@ -432,9 +446,10 @@ def tick_prices(store):
                 last=f'{venue}:{at}'
                 if reached:
                     clock=time.strftime('%H:%M:%S',time.gmtime(at+8*3600))
-                    payload=dict(title='tBTC 次优报价已达 '+rule['target'],
+                    label={'okx':'OKX 优先报价','single':'单源最优价','second':'次优报价'}[mode]
+                    payload=dict(title='tBTC '+label+'已达 '+rule['target'],
                                  body=f'触发时 1 cbBTC ≈ {price:.4f} tBTC · {venue} · {clock}（北京）',
-                                 target=rule['target'],quoteAt=at,quotePrice=str(price),venue=venue,
+                                 target=rule['target'],quoteAt=at,quotePrice=str(price),venue=venue,quoteMode=mode,
                                  group='tBTC 价格报警',level='critical',url='https://leida.shenmiren.work/radar/tbtc/')
                     devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(rule['profile'],)).fetchall()
                     for device in devices or [None]:

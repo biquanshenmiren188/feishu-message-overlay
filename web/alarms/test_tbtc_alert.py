@@ -129,7 +129,7 @@ class PriceAlertTests(unittest.TestCase):
                 self.assertFalse(self.store.begin_send(e))
 
     def update_price(self,stamp,value):
-        with patch.object(alerts,'sample',return_value=(stamp,Decimal(value))):
+        with patch.object(alerts,'sample',return_value=(Decimal(value),'test',int(stamp),'second')):
             alerts.tick(self.store)
 
     def test_personal_history_groups_devices_and_retried_page_reports(self):
@@ -191,7 +191,7 @@ class PriceAlertTests(unittest.TestCase):
             self.assertIsNone(alerts.sample(100))
             row["second"]=dict(rawOut="1002600000000000000",at=98,validUntil=102,venue="1inch")
             write()
-            self.assertEqual(alerts.sample(100),("1inch:98",Decimal("1.0026")))
+            self.assertEqual(alerts.sample(100),(Decimal("1.0026"),"1inch",98,"second"))
             self.assertIsNone(alerts.sample(102))
 
     def test_personal_target_and_recovery(self):
@@ -233,11 +233,11 @@ class PriceAlertTests(unittest.TestCase):
 
     def test_replay_crossing_gap_and_dip_with_atomic_cursor(self):
         with sqlite3.connect(alerts.ROUND_HISTORY) as db:
-            db.execute("CREATE TABLE quote_rounds(captured REAL, second_raw TEXT, venue TEXT, quoted_at REAL)")
+            db.execute("CREATE TABLE quote_rounds(captured REAL, second_raw TEXT, venue TEXT, quoted_at REAL,venues INTEGER DEFAULT 2,best_raw TEXT)")
             now=time.time()
             for delay,value in [(-10,'1.010'),(1,'1.006'),(2,None),(3,'1.006'),(4,'1.001')]:
                 raw=str(int(Decimal(value)*10**18)) if value else None
-                db.execute("INSERT INTO quote_rounds VALUES(?,?,?,?)",(now+delay,raw,'OKX',now+delay))
+                db.execute("INSERT INTO quote_rounds(captured,second_raw,venue,quoted_at) VALUES(?,?,?,?)",(now+delay,raw,'OKX',now+delay))
         with patch('time.time',return_value=now+12):
             with patch.object(self.store,'event',side_effect=RuntimeError('interrupted')):
                 with self.assertRaises(RuntimeError):alerts.tick_prices(self.store)
@@ -252,7 +252,7 @@ class PriceAlertTests(unittest.TestCase):
             alerts.configure(self.store,'alice',dict(target='1.008',revision=1))
         with sqlite3.connect(alerts.ROUND_HISTORY) as db:
             for delay in (11,13):
-                db.execute("INSERT INTO quote_rounds VALUES(?,?,?,?)",(now+delay,str(1009*10**15),'0x',now+delay))
+                db.execute("INSERT INTO quote_rounds(captured,second_raw,venue,quoted_at) VALUES(?,?,?,?)",(now+delay,str(1009*10**15),'0x',now+delay))
         with patch('time.time',return_value=now+14):
             alerts.tick_prices(self.store)
         latest=self.store.db.execute("SELECT payload FROM events WHERE profile='alice' ORDER BY at DESC LIMIT 1").fetchone()
