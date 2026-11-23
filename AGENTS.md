@@ -1,10 +1,9 @@
 # Repository maintenance requirements
 
-Owner instruction confirmed on 2026-11-16:
+Owner instructions updated on 2026-11-23:
 
-- Use the existing dedicated local Windows GitHub Actions runner for future
-  feature updates, verification, and packaging. Keep the paid Actions budget at
-  zero. Do not switch back to paid hosted runners without explicit authorization.
+- Run verification and packaging on standard GitHub-hosted runners. Keep
+  the paid Actions budget at zero.
 - Read [the runner maintenance guide](docs/ci-runner.md) before changing CI.
   Bring older feature branches' workflow configuration up to date before use.
 - The production website, cloud BOT receiver, alerts, and phone push services
