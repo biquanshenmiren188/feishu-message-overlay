@@ -26,6 +26,25 @@ class PriceAlertTests(unittest.TestCase):
                               revision=0,requestId=str(i)*32),{})
             alerts.configure(self.store,profile,dict(target=('1.0026','1.0040')[i],revision=0))
 
+    def test_sale_webhook_and_poll_deduplicate_both_aave_sales(self):
+        with patch('time.time',return_value=100):
+            alerts.configure(self.store,'alice',dict(target=None,revision=1,saleEnabled=True))
+        def row(tx,stamp,amount):
+            return dict(tx=tx,address='seller',time=stamp,soldRaw=str(amount),source='aave')
+        rows={(r['tx'],r['address']):r for r in (row('one',101,10*10**18),row('two',102,9995*10**15),
+              row('equal',103,5*10**18),row('small',104,1),row('old',99,11*10**18))}
+        with patch.object(alerts,'sale_data',return_value=rows),self.store.db:
+            alerts.enqueue_sales(self.store,time.time())
+            alerts.enqueue_sales(self.store,time.time())
+            sent=set()
+            for _ in range(2):
+                event=self.store.claim()
+                self.assertEqual(event['rule_id'],alerts.SALE_RULE)
+                sent.add(json.loads(event['payload'])['tx'])
+                self.assertTrue(self.store.begin_send(event))
+            self.assertEqual(sent,{'one','two'})
+            self.assertIsNone(self.store.claim())
+
     def test_mint_gap_is_personal_and_decided_on_missing_units(self):
         a=alerts.configure(self.store,'alice',dict(target='1.0026',revision=1,mintThreshold='0.00000001',mintEnabled=True))
         self.assertEqual(a['mintThreshold'],'0.00000001')

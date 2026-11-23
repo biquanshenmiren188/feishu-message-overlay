@@ -16,6 +16,8 @@ RULE = 'tbtc-price'
 MINT_RULE = 'tbtc-mint'
 LARGE_RULE = 'tbtc-backed-mint'
 DEPOSIT_RULE = 'tbtc-btc-deposit'
+SALE_RULE = 'tbtc-large-sale'
+SELLERS = SNAPSHOT.with_name('sellers.json')
 DEPOSITS = SNAPSHOT.with_name('deposits.json')
 SUPPLY = SNAPSHOT.with_name('supply.json')
 
@@ -30,6 +32,8 @@ def initialize(store):
             profile TEXT PRIMARY KEY,target TEXT,revision INTEGER NOT NULL,last_sample TEXT,
             hits INTEGER NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0)""")
         columns={r['name'] for r in store.db.execute('PRAGMA table_info(tbtc_price_alerts)')}
+        if 'sale_since' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN sale_since REAL')
         if 'round_cursor' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN round_cursor REAL NOT NULL DEFAULT 0')
             store.db.execute('UPDATE tbtc_price_alerts SET round_cursor=?',(time.time(),))
@@ -78,6 +82,7 @@ def state(store, profile):
     with store.lock:
         row = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
+                    saleEnabled=bool(row and row['sale_since'] is not None),
                     pageEnabled=bool(row['page_enabled']) if row else True,
                     barkEnabled=bool(row['bark_enabled']) if row else True, mintEnabled=bool(row and row['mint_since'] is not None),
                     mintThreshold=row['mint_threshold'] if row else '10',devices=len(store.device_list(profile)),
@@ -112,7 +117,7 @@ def history(store,profile,query):
     sql="""WITH deliveries AS (
         SELECT at,rule_id,json_extract(payload,'$.title') title,json_extract(payload,'$.body') body,
                coalesce(json_extract(payload,'$.tx'),json_extract(payload,'$.outpoint'),'') ref,status
-        FROM events WHERE profile=? AND at BETWEEN ? AND ? AND rule_id IN (?,?,?,?)
+        FROM events WHERE profile=? AND at BETWEEN ? AND ? AND rule_id IN (?,?,?,?,?)
     ), alerts AS (
         SELECT at,rule_id,title,body,ref,json_group_array(status) statuses FROM deliveries
         GROUP BY at,rule_id,title,body,ref
@@ -121,7 +126,7 @@ def history(store,profile,query):
     ) SELECT at,rule_id,title,body,statuses,COUNT(*) OVER () total FROM alerts
     ORDER BY at DESC,rule_id,title,body,ref LIMIT 6 OFFSET ?"""
     with store.lock:
-        rows=store.db.execute(sql,(*bounds,RULE,MINT_RULE,LARGE_RULE,DEPOSIT_RULE,*bounds,(page-1)*6)).fetchall()
+        rows=store.db.execute(sql,(*bounds,RULE,MINT_RULE,LARGE_RULE,DEPOSIT_RULE,SALE_RULE,*bounds,(page-1)*6)).fetchall()
     return dict(before=before,total=rows[0]['total'] if rows else 0,pageSize=6,
                 items=[dict(at=r['at'],kind=r['rule_id'],title=r['title'],body=r['body'],
                             statuses=json.loads(r['statuses'])) for r in rows])
@@ -144,21 +149,25 @@ def configure(store, profile, data):
         page = data.get('pageEnabled',old['pageEnabled'])
         bark = data.get('barkEnabled',old['barkEnabled'])
         mint = data.get('mintEnabled',old['mintEnabled'])
+        sale = data.get('saleEnabled',old['saleEnabled'])
         minimum=mint_threshold(data.get('mintThreshold',old['mintThreshold']),'铸币缺口阈值')
         large=data.get('largeMintEnabled',old['largeMintEnabled'])
         large_min=mint_threshold(data.get('largeMintThreshold',old['largeMintThreshold']),'单笔正常铸币阈值')
         deposit=data.get('depositEnabled',old['depositEnabled'])
         deposit_min=mint_threshold(data.get('depositThreshold',old['depositThreshold']),'单笔 BTC 入金阈值')
         deposit_changed=(deposit,deposit_min)!=(old['depositEnabled'],old['depositThreshold'])
-        if not all(type(x) is bool for x in (page,bark,mint,large,deposit)):
+        if not all(type(x) is bool for x in (page,bark,mint,large,deposit,sale)):
             raise ValueError('提醒方式无效')
         large_changed=(large,large_min)!=(old['largeMintEnabled'],old['largeMintThreshold'])
-        if not deposit_changed and not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
+        if sale==old['saleEnabled'] and not deposit_changed and not large_changed and (target,page,bark,mint,minimum)==(old['target'],old['pageEnabled'],old['barkEnabled'],old['mintEnabled'],old['mintThreshold']):
             return old
         store.db.execute("""INSERT INTO tbtc_price_alerts(profile,target,revision,page_enabled,bark_enabled)
                             VALUES(?,?,?,?,?) ON CONFLICT(profile) DO UPDATE SET target=excluded.target,
                             revision=excluded.revision,page_enabled=excluded.page_enabled,bark_enabled=excluded.bark_enabled""",
                          (profile,target,old['revision']+1,page,bark))
+        if sale!=old['saleEnabled']:
+            store.db.execute('UPDATE tbtc_price_alerts SET sale_since=? WHERE profile=?',(time.time() if sale else None,profile))
+            store.cancel(profile,SALE_RULE)
         if target != old['target'] or bark != old['barkEnabled']:
             store.cancel(profile,RULE)
             changed=time.time()
@@ -307,9 +316,52 @@ def deposit_delivery(store,profile,payload,now):
     return bool(row and qualifies_deposit(row,rule))
 
 
+@lru_cache(maxsize=1)
+def read_sales(path,inode,mtime):
+    data=json.loads(path.read_bytes())
+    return data['time'],{(r['tx'],r['address']):r for r in data['largeSales']}
+
+def sale_data(now):
+    try:
+        stat=SELLERS.stat()
+        stamp,rows=read_sales(SELLERS,stat.st_ino,stat.st_mtime_ns)
+        if 0<=now-stamp<180:return rows
+    except (OSError,ValueError,KeyError,TypeError):
+        pass
+
+def qualifies_sale(rule,row):
+    return bool(rule and rule['sale_since'] is not None and row['time']>=rule['sale_since']
+                and int(row['soldRaw'])>5*10**18)
+
+def enqueue_sales(store,now):
+    rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE sale_since IS NOT NULL').fetchall()
+    if not rules:return
+    for (tx,seller),row in (sale_data(now) or {}).items():
+        for rule in rules:
+            if not qualifies_sale(rule,row):continue
+            profile=rule['profile']
+            exists=store.db.execute("INSERT OR IGNORE INTO tbtc_mint_sent VALUES(?,?,?)",(profile,SALE_RULE,tx+seller))
+            if not exists.rowcount:continue
+            sold=format(Decimal(row['soldRaw']).scaleb(-18).normalize(),'f')
+            clock=time.strftime('%H:%M:%S',time.gmtime(row['time']+28800))
+            position='Aave 仓位' if row.get('source')=='aave' else '卖家'
+            payload=dict(title=f'ETH 链上卖出 {sold} tBTC',body=f'{position} {seller} · {clock}（北京）',
+                         tx=tx,seller=seller,group='tBTC 大额卖出',level='critical',url='https://etherscan.io/tx/'+tx)
+            devices=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchall()
+            for device in devices or [None]:store.event(profile,SALE_RULE,payload,device,now)
+
+def sale_delivery(store,profile,payload,now):
+    rule=store.db.execute('SELECT sale_since FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+    if not rule or rule['sale_since'] is None:return False
+    rows=sale_data(now)
+    if rows is None:return None
+    row=rows.get((payload['tx'],payload['seller']))
+    return bool(row and qualifies_sale(rule,row))
+
 def tick_chain(store):
     now = time.time()
     with store.lock, store.db:
+        enqueue_sales(store,now)
         enqueue_deposits(store,now)
         enqueue_mints(store,now)
 
