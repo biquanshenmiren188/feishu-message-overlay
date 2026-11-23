@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import json
 import sqlite3
+import io
 import time
 from pathlib import Path
 from decimal import Decimal
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 import tbtc_alert as alerts
 from store import Store, Conflict
+from server import send_event
 
 
 class PriceAlertTests(unittest.TestCase):
@@ -44,6 +46,34 @@ class PriceAlertTests(unittest.TestCase):
                 self.assertTrue(self.store.begin_send(event))
             self.assertEqual(sent,{'one','two'})
             self.assertIsNone(self.store.claim())
+
+    def test_sale_history_records_late_webhook_and_separate_device_receipts(self):
+        self.store.mutate('alice',dict(action='bind',key='synthetic-key-tablet',label='tablet',
+                          revision=1,requestId='a'*32),{})
+        with patch('time.time',return_value=100):
+            alerts.configure(self.store,'alice',dict(target=None,revision=1,saleEnabled=True))
+        batch='d'*32
+        row=dict(tx='tx',address='seller',time=101,soldRaw=str(9995*10**15),source='aave',
+                 scannedAt=105,scanBatch=batch)
+        with patch.object(alerts,'sale_data',return_value={('tx','seller'):row}),patch('time.time',return_value=110):
+            with self.store.db:
+                alerts.enqueue_sales(self.store,106)
+                alerts.enqueue_sales(self.store,107,batch)
+                alerts.enqueue_sales(self.store,108,batch)
+            with patch('server.build_opener') as opener:
+                opener.return_value.open.side_effect=[io.BytesIO(b'{"code":200}'),TimeoutError()]
+                for _ in range(2):
+                    send_event(self.store,self.store.claim())
+                self.assertIsNone(self.store.claim())
+            item,=alerts.history(self.store,'alice',{})['items']
+            sale=item['sale']
+            self.assertEqual((sale['trigger'],sale['scannedAt'],sale['webhookAt'],sale['amount']),('poll',105,107,'9.995'))
+            self.assertEqual({d['label'] for d in sale['devices']},{'alice','tablet'})
+            self.assertCountEqual(item['statuses'],['accepted','unknown'])
+            for d in sale['devices']:
+                attempt,=d['attempts']
+                self.assertEqual((attempt['sentAt'],attempt['finishedAt'],attempt['status']),(110,110,d['status']))
+            self.assertFalse(alerts.history(self.store,'bob',{})['items'])
 
     def test_sale_threshold_is_personal_strict_and_applies_to_new_sales(self):
         self.assertEqual(alerts.state(self.store,'alice')['saleThreshold'],'5')

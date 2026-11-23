@@ -39,6 +39,8 @@ def send_event(store, event, market=None):
     body.update(level='critical', volume=5, call='1')
     body.update(device_key=store.cipher.decrypt(event['secret'].encode()).decode(), isArchive='1')
     req = Request('https://api.day.app/push', data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+    if event['rule_id']==tbtc_alert.SALE_RULE:
+        store.record_sale_send(event['id'])
     try:
         with build_opener(NoRedirect).open(req, timeout=10) as response:
             result = json.loads(response.read(65536))
@@ -91,8 +93,11 @@ def make_handler(store, market, auth=authenticate):
                     return self.reply(403,{})
                 # The webhook is a wake-up signal. Only our scanner's verified
                 # snapshot supplies the amounts and transaction identifiers.
+                batch=self.headers.get('X-Radar-Sale-Batch')
+                if batch is not None and not re.fullmatch('[0-9a-f]{32}',batch):
+                    return self.reply(400,{})
                 with store.lock,store.db:
-                    tbtc_alert.enqueue_sales(store,time.time())
+                    tbtc_alert.enqueue_sales(store,time.time(),batch)
                 return self.reply(200,{'ok':True})
             if route.path == BASE + 'health' and not post:
                 return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
