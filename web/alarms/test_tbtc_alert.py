@@ -1,3 +1,4 @@
+from contextlib import closing
 import tempfile
 import unittest
 import json
@@ -27,6 +28,32 @@ class PriceAlertTests(unittest.TestCase):
             self.store.mutate(profile,dict(action='bind',key='synthetic-key-'+profile,label=profile,
                               revision=0,requestId=str(i)*32),{})
             alerts.configure(self.store,profile,dict(target=('1.0026','1.0040')[i],revision=0))
+
+    def test_master_switch_is_personal_preserves_options_and_drops_old_events(self):
+        store=self.store
+        rules=(alerts.RULE,alerts.MINT_RULE,alerts.LARGE_RULE,alerts.DEPOSIT_RULE,alerts.SALE_RULE)
+        old=alerts.configure(store,'alice',dict(target='1.0026',revision=1,saleEnabled=True,
+                             mintEnabled=True,depositEnabled=True,largeMintEnabled=False))
+        with store.db:
+            for profile in ('alice','bob'):
+                device=store.db.execute('SELECT * FROM devices WHERE profile=?',(profile,)).fetchone()
+                for rule in rules:store.event(profile,rule,{'title':'test'},device,time.time())
+        paused=alerts.configure(store,'alice',dict(masterEnabled=False,revision=old['revision']))
+        for profile,status in [('alice','cancelled'),('bob','queued')]:
+            rows=store.db.execute('SELECT status FROM events WHERE profile=?',(profile,)).fetchall()
+            self.assertEqual([r[0] for r in rows],[status]*5)
+        with self.assertRaises(Conflict):
+            alerts.configure(store,'alice',dict(masterEnabled=True,revision=old['revision']))
+        page=dict(at=time.time(),target=old['target'],venue='okx',rawOut='1003000000000000000')
+        self.assertFalse(alerts.record_page(store,'alice',page)['allowed'])
+        restored=alerts.configure(store,'alice',dict(masterEnabled=True,revision=paused['revision']))
+        for key in old.keys()-{'revision','masterSince'}:self.assertEqual(old[key],restored[key])
+        self.assertFalse(alerts.record_page(store,'alice',dict(page,at=restored['masterSince']-1))['allowed'])
+        self.assertTrue(alerts.record_page(store,'alice',dict(page,at=time.time()))['allowed'])
+        row=store.db.execute("SELECT * FROM tbtc_price_alerts WHERE profile='alice'").fetchone()
+        for col in ('sale_since','deposit_since','mint_since','round_cursor'):
+            self.assertEqual(row[col],restored['masterSince'])
+        self.assertIsNone(row['large_mint_since'])
 
     def test_sale_webhook_and_poll_deduplicate_both_aave_sales(self):
         with patch('time.time',return_value=100):
@@ -232,7 +259,7 @@ class PriceAlertTests(unittest.TestCase):
         self.assertIsNotNone(self.store.claim())
 
     def test_replay_crossing_gap_and_dip_with_atomic_cursor(self):
-        with sqlite3.connect(alerts.ROUND_HISTORY) as db:
+        with closing(sqlite3.connect(alerts.ROUND_HISTORY)) as db, db:
             db.execute("CREATE TABLE quote_rounds(captured REAL, second_raw TEXT, venue TEXT, quoted_at REAL,venues INTEGER DEFAULT 2,best_raw TEXT)")
             now=time.time()
             for delay,value in [(-10,'1.010'),(1,'1.006'),(2,None),(3,'1.006'),(4,'1.001')]:
@@ -250,7 +277,7 @@ class PriceAlertTests(unittest.TestCase):
                 self.assertEqual(json.loads(records[0][0])['quoteAt'],now+1)
             self.assertTrue(self.store.begin_send(self.store.claim()))
             alerts.configure(self.store,'alice',dict(target='1.008',revision=1))
-        with sqlite3.connect(alerts.ROUND_HISTORY) as db:
+        with closing(sqlite3.connect(alerts.ROUND_HISTORY)) as db, db:
             for delay in (11,13):
                 db.execute("INSERT INTO quote_rounds(captured,second_raw,venue,quoted_at) VALUES(?,?,?,?)",(now+delay,str(1009*10**15),'0x',now+delay))
         with patch('time.time',return_value=now+14):

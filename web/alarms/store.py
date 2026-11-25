@@ -357,6 +357,9 @@ class Store:
                 return False
             device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            if valid and row['rule_id'] in ('tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale'):
+                valid = self.db.execute("""SELECT 1 FROM tbtc_price_alerts
+                    WHERE profile=? AND master_enabled=1 AND master_since<=?""",(row['profile'],row['at'])).fetchone()
             round_id = json.loads(row['payload']).get('roundId', row['id'])
             if valid and row['rule_id'] == 'tbtc-price':
                 from tbtc_alert import valid_delivery
