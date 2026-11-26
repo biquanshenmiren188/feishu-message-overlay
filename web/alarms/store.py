@@ -297,7 +297,7 @@ class Store:
         self.db.execute('INSERT INTO events VALUES (?,?,?,?,?,?,0,?,?,?,?)', (event_id, profile, identity, now, dump(payload), 'queued' if device else 'no_device', now, now + payload.get('repeatInterval', 120), device['fingerprint'] if device else None, None if device else '未绑定 Bark，事件已记录'))
 
     def tick(self, quotes, now):
-        active = set()
+        active = {}
         with self.lock, self.db:
             rows = self.db.execute('SELECT * FROM rules').fetchall()
             for row in rows:
@@ -312,7 +312,13 @@ class Store:
                     transition = dict(at=now, status=state.get('sourceStatus'), source=state.get('source') if selected else None, reason=state.get('routingReason'))
                     state['routingHistory'] = [*previous.get('routingHistory', []), transition][-12:]
                 if state['status'] not in ('paused', 'expired', 'triggered'):
-                    active.update(active_groups(rule, state))
+                    for group in active_groups(rule, state):
+                        # A backup group needs its complete candidate set for exact-asset routing.
+                        wanted = rule['symbol'] if group == key[:2] else None
+                        if group not in active:
+                            active[group] = wanted
+                        elif active[group] != wanted:
+                            active[group] = None
                 if state != previous:
                     self.db.execute('UPDATE rules SET state=? WHERE id=?', (dump(state), row['id']))
                 if rule['repeat'] and state['status'] != 'alarming':
