@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import site_tasks
 from pathlib import Path
 import re
 import secrets
@@ -357,7 +358,9 @@ class Store:
                 return False
             device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
-            if valid and row['rule_id'] in ('tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale'):
+            if valid and row['rule_id'] in site_tasks.SOURCES:
+                valid = row['at'] >= site_tasks.since(row['rule_id'])
+            if valid and row['rule_id'] in site_tasks.SOURCES:
                 valid = self.db.execute("""SELECT 1 FROM tbtc_price_alerts
                     WHERE profile=? AND master_enabled=1 AND master_since<=?""",(row['profile'],row['at'])).fetchone()
             round_id = json.loads(row['payload']).get('roundId', row['id'])
