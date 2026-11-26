@@ -66,13 +66,9 @@ class Market:
         if exchange in ('binance', 'aster'):
             root = ('https://fapi.binance.com/fapi/v1' if future else 'https://api.binance.com/api/v3') if exchange == 'binance' else ('https://fapi.asterdex.com/fapi/v1' if future else 'https://sapi.asterdex.com/api/v1')
             names = self.instruments(exchange, market, root)
-            query = '?' + urlencode({'symbol':symbol}) if symbol else ''
-            raw = self.get(root + '/ticker/24hr' + query)
-            if symbol:
-                raw = [raw]
+            raw = self.get(root + '/ticker/24hr')
             if future:
-                mark = self.get(root + '/premiumIndex' + query)
-                marks = {x['symbol']: x for x in ([mark] if symbol else mark)}
+                marks = {x['symbol']: x for x in self.get(root + '/premiumIndex')}
             for r in raw:
                 m = marks.get(r['symbol'], {})
                 prices.append((r['symbol'], r['symbol'][:-4], r.get('lastPrice'), m.get('markPrice'), r.get('closeTime'), m.get('time')))
@@ -176,7 +172,8 @@ class Market:
                 period = 2 if group in active else 60
                 if group not in self.pending and now - self.health.get(group, {}).get('checkedAt', 0) >= period:
                     symbol = active.get(group) if isinstance(active, dict) else None
-                    if (symbol and exchange in ('binance', 'okx') and
+                    # Binance's individual 24hr feed can lag its bulk feed. Keep that native source.
+                    if (symbol and exchange == 'okx' and
                             now - self.last_catalog.get(group, 0) < 60 and (*group, symbol) in self.quotes):
                         self.partial[group] = symbol
                         self.pending[group] = self.pool.submit(self.fetch, *group, symbol)
