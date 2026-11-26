@@ -4,10 +4,12 @@ REST sampling is intentionally explicit: crossings between snapshots can be miss
 No browser display cache or bid/ask midpoint is used. Routing lives in sources.py.
 """
 import json
+import gzip
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.parse import urlencode
 from engine import number
 from sources import QuoteSnapshot
 from instruments import load as load_instruments
@@ -21,9 +23,13 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def get(url):
-    request = Request(url, headers={'Accept': 'application/json', 'User-Agent': 'RadarPriceAlarms/1'})
+    request = Request(url, headers={'Accept': 'application/json', 'Accept-Encoding': 'gzip', 'User-Agent': 'RadarPriceAlarms/1'})
     with build_opener(NoRedirect).open(request, timeout=8) as response:
-        data = response.read(8000001)
+        if response.headers.get('Content-Encoding', '').lower() == 'gzip':
+            with gzip.GzipFile(fileobj=response) as stream:
+                data = stream.read(8000001)
+        else:
+            data = response.read(8000001)
         if len(data) > 8000000:
             raise ValueError('market_response_too_large')
         return json.loads(data)
@@ -38,6 +44,8 @@ class Market:
         self.meta = {}
         self.pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix='quotes')
         self.pending = {}
+        self.partial = {}
+        self.last_catalog = {}
         self.cached_snapshot = None
         self.cached_quotes = None
 
@@ -50,16 +58,21 @@ class Market:
         self.meta[key] = time.time(), names
         return names
 
-    def fetch(self, exchange, market):
+    def fetch(self, exchange, market, symbol=None):
         started = time.time()
+        wanted = symbol
         future = market == 'future'
         prices, marks, names = [], {}, None
         if exchange in ('binance', 'aster'):
             root = ('https://fapi.binance.com/fapi/v1' if future else 'https://api.binance.com/api/v3') if exchange == 'binance' else ('https://fapi.asterdex.com/fapi/v1' if future else 'https://sapi.asterdex.com/api/v1')
             names = self.instruments(exchange, market, root)
-            raw = self.get(root + '/ticker/24hr')
+            query = '?' + urlencode({'symbol':symbol}) if symbol else ''
+            raw = self.get(root + '/ticker/24hr' + query)
+            if symbol:
+                raw = [raw]
             if future:
-                marks = {x['symbol']: x for x in self.get(root + '/premiumIndex')}
+                mark = self.get(root + '/premiumIndex' + query)
+                marks = {x['symbol']: x for x in ([mark] if symbol else mark)}
             for r in raw:
                 m = marks.get(r['symbol'], {})
                 prices.append((r['symbol'], r['symbol'][:-4], r.get('lastPrice'), m.get('markPrice'), r.get('closeTime'), m.get('time')))
@@ -72,11 +85,14 @@ class Market:
                     continue
                 prices.append((r['symbol'], r['symbol'][:-4], r.get('lastPrice'), r.get('markPrice'), raw.get('time'), raw.get('time')))
         elif exchange == 'okx':
-            raw = self.get('https://www.okx.com/api/v5/market/tickers?instType=' + ('SWAP' if future else 'SPOT'))
+            kind = 'SWAP' if future else 'SPOT'
+            endpoint = 'ticker?' + urlencode({'instId':symbol}) if symbol else 'tickers?instType=' + kind
+            raw = self.get('https://www.okx.com/api/v5/market/' + endpoint)
             if raw.get('code') != '0':
                 raise ValueError('okx_rejected')
             if future:
-                mark = self.get('https://www.okx.com/api/v5/public/mark-price?instType=SWAP')
+                query = '&' + urlencode({'instId':symbol}) if symbol else ''
+                mark = self.get('https://www.okx.com/api/v5/public/mark-price?instType=SWAP' + query)
                 if mark.get('code') != '0':
                     raise ValueError('okx_mark_rejected')
                 marks = {r['instId']: r for r in mark['data']}
@@ -105,6 +121,8 @@ class Market:
         names = names if names is not None else self.instruments(exchange, market, '')
         result = {}
         for symbol, base, last, mark, last_at, mark_at in prices:
+            if wanted and symbol != wanted:
+                continue
             if names is not None and symbol not in names:
                 continue
             if exchange not in ('okx', 'gate') and not symbol.endswith('USDT'):
@@ -119,6 +137,10 @@ class Market:
                     q[kind] = None
             if q.get('last') or q.get('mark'):
                 result[(exchange, market, symbol)] = q
+        if wanted and future:
+            quote = result.get((exchange, market, wanted), {})
+            if not (quote.get('mark') and quote.get('last')):
+                raise ValueError('incomplete_single_ticker')
         if not result:
             raise ValueError('empty_market')
         return result
@@ -130,20 +152,36 @@ class Market:
                 if not future.done():
                     continue
                 del self.pending[group]
+                symbol = self.partial.pop(group, None)
                 try:
                     rows = future.result()
-                    self.quotes = {k: v for k, v in self.quotes.items() if k[:2] != group}
+                    if symbol:
+                        self.quotes = self.quotes.copy()
+                    else:
+                        self.quotes = {k: v for k, v in self.quotes.items() if k[:2] != group}
+                        self.last_catalog[group] = now
                     self.quotes.update(rows)
                     self.cached_snapshot = None
-                    self.health[group] = dict(ok=True, checkedAt=now, count=len(rows))
+                    count = self.health.get(group, {}).get('count', len(rows)) if symbol else len(rows)
+                    self.health[group] = dict(ok=True, checkedAt=now, count=count)
                 except Exception as exc:
                     self.health[group] = dict(ok=False, checkedAt=now, error=type(exc).__name__)
+                    if symbol:
+                        # Retry the original full endpoint in this polling cycle when a single-ticker call fails.
+                        self.last_catalog.pop(group, None)
+                        self.pending[group] = self.pool.submit(self.fetch, *group)
             groups = sorted(((e, m) for e in VENUES for m in ('spot', 'future')), key=lambda g: g not in active)
             for exchange, market in groups:
                 group = exchange, market
                 period = 2 if group in active else 60
                 if group not in self.pending and now - self.health.get(group, {}).get('checkedAt', 0) >= period:
-                    self.pending[group] = self.pool.submit(self.fetch, *group)
+                    symbol = active.get(group) if isinstance(active, dict) else None
+                    if (symbol and exchange in ('binance', 'okx') and
+                            now - self.last_catalog.get(group, 0) < 60 and (*group, symbol) in self.quotes):
+                        self.partial[group] = symbol
+                        self.pending[group] = self.pool.submit(self.fetch, *group, symbol)
+                    else:
+                        self.pending[group] = self.pool.submit(self.fetch, *group)
 
     def snapshot(self):
         with self.lock:
