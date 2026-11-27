@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import site_tasks
 from pathlib import Path
 import re
 import secrets
@@ -69,6 +70,8 @@ class Store:
                 self.cancel(profile['id'])
                 self.db.execute('UPDATE profiles SET enabled=1,revision=revision+1 WHERE id=?', (profile['id'],))
             self.db.execute("UPDATE events SET status='unknown',error='发送过程中服务重启，结果未知' WHERE status='sending'")
+            self.db.execute("UPDATE events SET status='queued' WHERE status='claimed' AND rule_id IN ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale')")
+            self.db.execute("UPDATE events SET status='queued' WHERE status='claimed' AND rule_id='tbtc-price' AND json_extract(payload,'$.target') IS NOT NULL")
             self.db.execute("UPDATE events SET status='cancelled',error='服务重启，取消尚未发送的消息' WHERE status='claimed'")
             for row in self.db.execute('SELECT id,state FROM rules').fetchall():
                 state = json.loads(row['state'])
@@ -361,8 +364,31 @@ class Store:
                 return False
             device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            if valid and row['rule_id'] not in site_tasks.SOURCES and row['rule_id'] != 'test':
+                feature = 'bot-bark' if row['rule_id'] == 'bot-bark' else 'price-alerts'
+                valid = row['at'] >= site_tasks.enabled_since(feature)
+            if valid and row['rule_id'] in site_tasks.SOURCES:
+                valid = row['at'] >= site_tasks.since(row['rule_id'])
+            if valid and row['rule_id'] in site_tasks.SOURCES:
+                valid = self.db.execute("""SELECT 1 FROM tbtc_price_alerts
+                    WHERE profile=? AND master_enabled=1 AND master_since<=?""",(row['profile'],row['at'])).fetchone()
             round_id = json.loads(row['payload']).get('roundId', row['id'])
-            if valid and row['rule_id'] != 'test':
+            if valid and row['rule_id'] == 'tbtc-price':
+                from tbtc_alert import valid_delivery
+                valid = valid_delivery(self, row['profile'], json.loads(row['payload']))
+            elif valid and row['rule_id'] in ('tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale'):
+                from tbtc_alert import deposit_delivery, mint_delivery, sale_delivery
+                payload=json.loads(row['payload'])
+                if row['rule_id']=='tbtc-large-sale':
+                    valid=sale_delivery(self,row['profile'],payload,now)
+                elif row['rule_id']=='tbtc-btc-deposit':
+                    valid=deposit_delivery(self,row['profile'],payload,now)
+                else:
+                    valid=mint_delivery(self,row['profile'],payload,now,row['rule_id'])
+                if valid is None:
+                    self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?",(now+5,row['id']))
+                    return False
+            elif valid and row['rule_id'] not in ('test', 'bot-bark'):
                 saved = self.db.execute('SELECT config,state FROM rules WHERE id=? AND profile=?', (row['rule_id'], row['profile'])).fetchone()
                 valid = bool(saved)
                 if saved:
@@ -392,7 +418,7 @@ class Store:
             if not valid:
                 self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
                 return False
-            if row['rule_id'] != 'test' and rule['repeat']:
+            if row['rule_id'] not in ('test','bot-bark','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
                 last = self.db.execute('SELECT at FROM device_dispatch WHERE rule_id=? AND fingerprint=?', (row['rule_id'], row['fingerprint'])).fetchone()
                 if last and now < last['at'] + REPEAT_SECONDS:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?", (last['at'] + REPEAT_SECONDS, row['id']))
@@ -404,9 +430,22 @@ class Store:
             self.db.execute("UPDATE events SET status='sending',attempts=attempts+1 WHERE id=?", (row['id'],))
             return True
 
+    def record_sale_send(self, identity):
+        with self.lock,self.db:
+            self.db.execute("""UPDATE events SET payload=json_insert(
+                json_insert(payload,'$.barkAttempts',json('[]')),
+                '$.barkAttempts[#]',json_object('sentAt',?)) WHERE id=? AND status='sending'""",
+                (time.time(),identity))
+
     def finish(self, event, status, error=None):
         with self.lock, self.db:
             attempt = event['attempts'] + 1
             if status == 'retry' and attempt >= 3:
                 status = 'failed'
-            self.db.execute("UPDATE events SET status=?,error=?,next_at=? WHERE id=? AND status='sending'", (status, error, time.time() + 5 * 2 ** attempt, event['id']))
+            finished=time.time()
+            if event.get('rule_id')=='tbtc-large-sale':
+                self.db.execute("""UPDATE events SET payload=json_set(payload,
+                    '$.barkAttempts[#-1].status',?, '$.barkAttempts[#-1].finishedAt',?,
+                    '$.barkAttempts[#-1].error',?) WHERE id=? AND status='sending'
+                    AND json_array_length(payload,'$.barkAttempts')>0""",(status,finished,error,event['id']))
+            self.db.execute("UPDATE events SET status=?,error=?,next_at=? WHERE id=? AND status='sending'", (status, error, finished + 5 * 2 ** attempt, event['id']))

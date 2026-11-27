@@ -289,6 +289,43 @@ def handler(trial):
                 self.close_connection = True
 
         def do_GET(self):
+            if self.path.startswith('/internal/bot-bark/'):
+                if self.client_address[0] != '127.0.0.1' or desktop is None:
+                    return self.reply(404, {})
+                key = self.path.removeprefix('/internal/bot-bark/')
+                account = trial.accounts.get(key)
+                if not account:
+                    return self.reply(404, {})
+                try:
+                    policy = desktops.policy(account)
+                    # Check the file revision before opening or evaluating the feed.
+                    revision = str(policy.feed.stat().st_mtime_ns)
+                    if self.headers.get('If-None-Match') == revision:
+                        self.send_response(304)
+                        self.end_headers()
+                        return
+                    if policy.feed.stat().st_size > 2 * 1024 * 1024:
+                        raise ValueError('feed_oversize')
+                    feed = json.loads(policy.feed.read_text(encoding='utf8'))
+                    pinned = (feed.get('pinned') or {}).get('id')
+                    recent = []
+                    now = time.time()
+                    for row in feed.get('messages', [])[:1000]:
+                        if not isinstance(row, dict) or row.get('senderType') != 'bot' or row.get('id') == pinned:
+                            continue
+                        try:
+                            stamp = datetime.fromisoformat(row['sentAt'].replace('Z', '+00:00')).timestamp()
+                        except (KeyError, AttributeError, ValueError, OverflowError):
+                            continue
+                        if now - 120 <= stamp <= now:
+                            recent.append({k: row.get(k) for k in ('id','title','body','sentAt','senderType')})
+                    batch = dict(messages=recent, sourceConnected=feed.get('sourceConnected') is True)
+                    # Rules may use source metadata, so evaluate the original rows.
+                    ids = {row['id'] for row in recent}
+                    eligible = [row for row in feed['messages'] if isinstance(row,dict) and row.get('id') in ids]
+                    return self.reply(200, dict(revision=revision, feed=batch, policy=policy.web_messages(dict(messages=eligible))))
+                except (OSError, ValueError):
+                    return self.reply(503, {})
             if self.path == '/internal/alarm-identity':
                 if self.client_address[0] != '127.0.0.1':
                     return self.reply(404, {'error': 'not_found'})
