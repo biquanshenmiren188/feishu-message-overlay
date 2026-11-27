@@ -12,8 +12,8 @@ function mountNavigation(){
     if(!link){link=document.createElement('a');link.href=href;link.textContent=label;nav.append(link);}
     if(location.pathname.includes('/alarms/')&&label==='报警设置')link.setAttribute('aria-current','page');
    }
-   const hy=[...nav.children].find(n=>n.textContent.trim()==='HY限额查询'),bot=[...nav.children].find(n=>n.textContent.trim()==='BOT');
-   if(hy&&bot&&[...nav.children].indexOf(hy)>[...nav.children].indexOf(bot))nav.insertBefore(hy,bot);
+   const boros=[...nav.children].find(n=>n.textContent.trim()==='Boros 套利'),bot=[...nav.children].find(n=>n.textContent.trim()==='BOT');
+   if(boros&&bot&&[...nav.children].indexOf(boros)>[...nav.children].indexOf(bot))nav.insertBefore(boros,bot);
    nav.classList.add('radar-seven-nav');
    if(location.pathname.includes('/alarms/'))for(const a of nav.querySelectorAll('a'))if(a.textContent.trim()!=='报警设置')a.removeAttribute('aria-current');
   }
