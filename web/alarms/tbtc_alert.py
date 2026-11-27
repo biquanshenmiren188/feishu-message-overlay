@@ -7,6 +7,7 @@ import time
 from contextlib import closing
 from decimal import Decimal
 from functools import lru_cache
+import site_tasks
 from pathlib import Path
 from store import Conflict
 
@@ -112,7 +113,7 @@ def record_page(store,profile,data):
     price=Decimal(raw).scaleb(-18)
     with store.lock,store.db:
         config=state(store,profile)
-        allowed=bool(config['masterEnabled'] and at>=config['masterSince'] and config['pageEnabled']
+        allowed=bool(at >= site_tasks.since(RULE) and config['masterEnabled'] and at>=config['masterSince'] and config['pageEnabled']
                      and config['target'] and config['target']==data.get('target') and price>=Decimal(config['target']))
         if allowed:
             store.db.execute('INSERT OR IGNORE INTO tbtc_page_history VALUES (?,?,?,?,?)',
@@ -276,12 +277,15 @@ def mint_data(now):
 
 
 def enqueue_mints(store,now):
+    start = site_tasks.since(MINT_RULE)
+    if now < start: return
     rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND (mint_since IS NOT NULL OR large_mint_since IS NOT NULL)').fetchall()
     if not rules:return
     ready,flagged=mint_data(now)
     for (chain,tx),(record,decimals) in flagged.items():
         if not 0<=now-ready[chain]<180:continue
         detected=record.get('flaggedAt',record['time'])
+        if detected < start: continue
         for rule in rules:
             profile=rule['profile']
             large=record['kind']=='matched'
@@ -349,9 +353,12 @@ def qualifies_deposit(row,rule):
 
 
 def enqueue_deposits(store,now):
+    start = site_tasks.since(DEPOSIT_RULE)
+    if now < start: return
     rules=store.db.execute('SELECT profile,deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE master_enabled=1 AND deposit_since IS NOT NULL').fetchall()
     if not rules:return
     for key,row in (deposit_data(now) or {}).items():
+        if row.get('verifiedAt', 0) < start: continue
         for rule in rules:
             if not qualifies_deposit(row,rule):continue
             profile=rule['profile']
@@ -394,6 +401,8 @@ def qualifies_sale(rule,row):
                 and int(row['soldRaw'])>int(Decimal(rule['sale_threshold']).scaleb(18)))
 
 def enqueue_sales(store,now,batch=None):
+    start = site_tasks.since(SALE_RULE)
+    if now < start: return
     rows=sale_data(now) or {}
     if batch and any(r.get('scanBatch')==batch for r in rows.values()):
         store.db.execute('INSERT OR IGNORE INTO tbtc_sale_webhooks VALUES(?,?)',(batch,now))
@@ -401,6 +410,7 @@ def enqueue_sales(store,now,batch=None):
     rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND sale_since IS NOT NULL').fetchall()
     if not rules:return
     for (tx,seller),row in rows.items():
+        if row['time'] < start: continue
         for rule in rules:
             if not qualifies_sale(rule,row):continue
             profile=rule['profile']
@@ -450,12 +460,14 @@ def price_rounds(reader, after, through):
 
 def tick_prices(store):
     now = time.time()
+    start = site_tasks.since(RULE)
+    if now < start: return
     with store.lock, store.db:
         rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
         if ROUND_HISTORY.is_file():
             with closing(sqlite3.connect(ROUND_HISTORY.as_uri()+'?mode=ro',uri=True)) as reader:
-                rounds=price_rounds(reader,min(r['round_cursor'] for r in rules),now)
+                rounds=price_rounds(reader,max(start, min(r['round_cursor'] for r in rules)),now)
             if not rounds:return
             samples=[(captured,Decimal(raw).scaleb(-18),venue,at,mode)
                      for captured,raw,venue,at,mode in rounds if raw is not None and venue and at is not None]
@@ -468,10 +480,10 @@ def tick_prices(store):
             through=now
         for rule in rules:
             if through<=rule['round_cursor']:continue
-            fired=bool(rule['fired'])
+            fired=bool(rule['fired']) and rule['round_cursor'] >= start
             last=rule['last_sample']
             for captured,price,venue,at,mode in samples:
-                if captured<=rule['round_cursor'] or at<rule['master_since']:continue
+                if captured<=rule['round_cursor'] or at<max(start, rule['master_since']):continue
                 reached=price>=Decimal(rule['target'])
                 if reached==fired:continue
                 fired=reached

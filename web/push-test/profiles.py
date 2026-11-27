@@ -300,6 +300,9 @@ class Profiles:
         with ThreadPoolExecutor(max_workers=4, thread_name_prefix='push-plan') as executor:
             while True:
                 try:
+                    if Path('/var/lib/radar-features/web-push.off').exists():
+                        time.sleep(3)
+                        continue
                     source = Path(path)
                     if source.stat().st_size > 2*1024*1024:
                         raise ValueError('feed_oversize')
