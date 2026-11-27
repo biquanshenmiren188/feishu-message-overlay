@@ -45,7 +45,7 @@ test('failed receipt upload survives and is flushed by a later foreground config
  online=true;let pending;
  events.message({data:{type:'configure',token:'a'.repeat(40)},ports:[{postMessage:r=>{ack=r}}],waitUntil:p=>{pending=p}});
  await pending;
- assert.equal(ack.version,'radar-delivery-v6');assert.equal(state.get('outbox').length,0);
+ assert.match(ack.version,/^radar-delivery-v6-/);assert.equal(state.get('outbox').length,0);
  assert.equal(uploads.at(-1).records[0].seq,99);assert.equal(uploads.at(-1).records[1].stage,'foreground-sync');
  assert.ok(!JSON.stringify(uploads).includes('a'.repeat(40)));
 });
