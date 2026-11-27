@@ -7,6 +7,7 @@ import time
 from contextlib import closing
 from decimal import Decimal
 from functools import lru_cache
+import site_tasks
 from pathlib import Path
 from store import Conflict
 
@@ -34,6 +35,9 @@ def initialize(store):
             profile TEXT PRIMARY KEY,target TEXT,revision INTEGER NOT NULL,last_sample TEXT,
             hits INTEGER NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0)""")
         columns={r['name'] for r in store.db.execute('PRAGMA table_info(tbtc_price_alerts)')}
+        if 'master_enabled' not in columns:
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN master_enabled INTEGER NOT NULL DEFAULT 1')
+            store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN master_since REAL NOT NULL DEFAULT 0')
         if 'sale_since' not in columns:
             store.db.execute('ALTER TABLE tbtc_price_alerts ADD COLUMN sale_since REAL')
         if 'sale_threshold' not in columns:
@@ -87,6 +91,8 @@ def state(store, profile):
     with store.lock:
         row = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
         return dict(target=row['target'] if row else None, revision=row['revision'] if row else 0,
+                    masterEnabled=bool(row['master_enabled']) if row else True,
+                    masterSince=row['master_since'] if row else 0,
                     saleEnabled=bool(row and row['sale_since'] is not None),
                     saleThreshold=row['sale_threshold'] if row else '5',
                     pageEnabled=bool(row['page_enabled']) if row else True,
@@ -107,11 +113,13 @@ def record_page(store,profile,data):
     price=Decimal(raw).scaleb(-18)
     with store.lock,store.db:
         config=state(store,profile)
-        if config['pageEnabled'] and config['target'] and config['target']==data.get('target') and price>=Decimal(config['target']):
+        allowed=bool(at >= site_tasks.since(RULE) and config['masterEnabled'] and at>=config['masterSince'] and config['pageEnabled']
+                     and config['target'] and config['target']==data.get('target') and price>=Decimal(config['target']))
+        if allowed:
             store.db.execute('INSERT OR IGNORE INTO tbtc_page_history VALUES (?,?,?,?,?)',
                              (profile,at,venue,config['target'],format(price,'.4f')))
             store.db.execute('DELETE FROM tbtc_page_history WHERE profile=? AND at<?',(profile,time.time()-30*86400))
-    return {'ok':True}
+    return {'ok':True,'allowed':allowed}
 
 
 def history(store,profile,query):
@@ -162,7 +170,32 @@ def mint_threshold(value,label):
         raise ValueError(label+'须大于零，最多 8 位小数')
     return format(Decimal(value).normalize(),'f')
 
+def set_master(store, profile, data):
+    enabled=data.get('masterEnabled')
+    if set(data)!={'revision','masterEnabled'} or type(enabled) is not bool:
+        raise ValueError('总开关参数无效')
+    with store.lock,store.db:
+        old=state(store,profile)
+        if type(data['revision']) is not int or data['revision']!=old['revision']:
+            raise Conflict('设置已更新，请重新打开铃铛')
+        if old['masterEnabled']==enabled:return old
+        now=time.time()
+        store.db.execute("""INSERT INTO tbtc_price_alerts(profile,revision,master_enabled,master_since,round_cursor)
+            VALUES(?,1,?,?,?) ON CONFLICT(profile) DO UPDATE SET revision=revision+1,
+            master_enabled=excluded.master_enabled,master_since=excluded.master_since,
+            round_cursor=excluded.round_cursor,hits=0,fired=0,last_sample=NULL""",(profile,enabled,now,now))
+        for rule in (RULE,SALE_RULE,MINT_RULE,LARGE_RULE,DEPOSIT_RULE):
+            store.cancel(profile,rule)
+        if enabled:
+            for col in ('sale_since','mint_since','large_mint_since','deposit_since'):
+                store.db.execute(f'UPDATE tbtc_price_alerts SET {col}=? WHERE profile=? AND {col} IS NOT NULL',(now,profile))
+        store.db.execute('INSERT INTO tbtc_price_settings_history VALUES(?,?,?,?)',
+                         (profile,now,old['target'],enabled and old['barkEnabled']))
+        return state(store,profile)
+
+
 def configure(store, profile, data):
+    if 'masterEnabled' in data:return set_master(store,profile,data)
     target = data.get('target')
     if 'target' not in data or (target is not None and
             (not isinstance(target,str) or not re.fullmatch(r'[0-9]{1,8}(?:\.[0-9]{1,4})?',target) or Decimal(target)<=0)):
@@ -200,7 +233,7 @@ def configure(store, profile, data):
             store.cancel(profile,RULE)
             changed=time.time()
             store.db.execute('UPDATE tbtc_price_alerts SET hits=0,fired=0,last_sample=NULL,round_cursor=? WHERE profile=?',(changed,profile))
-            store.db.execute('INSERT INTO tbtc_price_settings_history VALUES(?,?,?,?)',(profile,changed,target,bark))
+            store.db.execute('INSERT INTO tbtc_price_settings_history VALUES(?,?,?,?)',(profile,changed,target,bark and old['masterEnabled']))
         if mint!=old['mintEnabled'] or minimum!=old['mintThreshold']:
             store.db.execute('UPDATE tbtc_price_alerts SET mint_threshold=? WHERE profile=?',(minimum,profile))
             store.db.execute('UPDATE tbtc_price_alerts SET mint_since=? WHERE profile=?',(time.time() if mint else None,profile))
@@ -244,12 +277,15 @@ def mint_data(now):
 
 
 def enqueue_mints(store,now):
-    rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE mint_since IS NOT NULL OR large_mint_since IS NOT NULL').fetchall()
+    start = site_tasks.since(MINT_RULE)
+    if now < start: return
+    rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND (mint_since IS NOT NULL OR large_mint_since IS NOT NULL)').fetchall()
     if not rules:return
     ready,flagged=mint_data(now)
     for (chain,tx),(record,decimals) in flagged.items():
         if not 0<=now-ready[chain]<180:continue
         detected=record.get('flaggedAt',record['time'])
+        if detected < start: continue
         for rule in rules:
             profile=rule['profile']
             large=record['kind']=='matched'
@@ -286,7 +322,7 @@ def eligible_amount(record,decimals,rule):
     return meets_mint_threshold(record,decimals,rule['mint_threshold'])
 
 def mint_delivery(store,profile,payload,now,rule_id=MINT_RULE):
-    subscribed=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+    subscribed=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND profile=?',(profile,)).fetchone()
     large=rule_id==LARGE_RULE
     if not subscribed or subscribed['large_mint_since' if large else 'mint_since'] is None:return False
     ready,flagged=mint_data(now)
@@ -317,9 +353,12 @@ def qualifies_deposit(row,rule):
 
 
 def enqueue_deposits(store,now):
-    rules=store.db.execute('SELECT profile,deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE deposit_since IS NOT NULL').fetchall()
+    start = site_tasks.since(DEPOSIT_RULE)
+    if now < start: return
+    rules=store.db.execute('SELECT profile,deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE master_enabled=1 AND deposit_since IS NOT NULL').fetchall()
     if not rules:return
     for key,row in (deposit_data(now) or {}).items():
+        if row.get('verifiedAt', 0) < start: continue
         for rule in rules:
             if not qualifies_deposit(row,rule):continue
             profile=rule['profile']
@@ -335,7 +374,7 @@ def enqueue_deposits(store,now):
 
 
 def deposit_delivery(store,profile,payload,now):
-    rule=store.db.execute('SELECT deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE profile=? AND deposit_since IS NOT NULL',(profile,)).fetchone()
+    rule=store.db.execute('SELECT deposit_since,deposit_threshold FROM tbtc_price_alerts WHERE profile=? AND master_enabled=1 AND deposit_since IS NOT NULL',(profile,)).fetchone()
     if not rule:return False
     rows=deposit_data(now)
     if rows is None:return None
@@ -362,13 +401,16 @@ def qualifies_sale(rule,row):
                 and int(row['soldRaw'])>int(Decimal(rule['sale_threshold']).scaleb(18)))
 
 def enqueue_sales(store,now,batch=None):
+    start = site_tasks.since(SALE_RULE)
+    if now < start: return
     rows=sale_data(now) or {}
     if batch and any(r.get('scanBatch')==batch for r in rows.values()):
         store.db.execute('INSERT OR IGNORE INTO tbtc_sale_webhooks VALUES(?,?)',(batch,now))
         store.db.execute('DELETE FROM tbtc_sale_webhooks WHERE received<?',(now-31*86400,))
-    rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE sale_since IS NOT NULL').fetchall()
+    rules=store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND sale_since IS NOT NULL').fetchall()
     if not rules:return
     for (tx,seller),row in rows.items():
+        if row['time'] < start: continue
         for rule in rules:
             if not qualifies_sale(rule,row):continue
             profile=rule['profile']
@@ -385,7 +427,7 @@ def enqueue_sales(store,now,batch=None):
             for device in devices or [None]:store.event(profile,SALE_RULE,payload,device,now)
 
 def sale_delivery(store,profile,payload,now):
-    rule=store.db.execute('SELECT sale_since,sale_threshold FROM tbtc_price_alerts WHERE profile=?',(profile,)).fetchone()
+    rule=store.db.execute('SELECT sale_since,sale_threshold FROM tbtc_price_alerts WHERE profile=? AND master_enabled=1',(profile,)).fetchone()
     if not rule or rule['sale_since'] is None:return False
     rows=sale_data(now)
     if rows is None:return None
@@ -418,12 +460,14 @@ def price_rounds(reader, after, through):
 
 def tick_prices(store):
     now = time.time()
+    start = site_tasks.since(RULE)
+    if now < start: return
     with store.lock, store.db:
-        rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE target IS NOT NULL AND bark_enabled=1').fetchall()
+        rules = store.db.execute('SELECT * FROM tbtc_price_alerts WHERE master_enabled=1 AND target IS NOT NULL AND bark_enabled=1').fetchall()
         if not rules: return
         if ROUND_HISTORY.is_file():
             with closing(sqlite3.connect(ROUND_HISTORY.as_uri()+'?mode=ro',uri=True)) as reader:
-                rounds=price_rounds(reader,min(r['round_cursor'] for r in rules),now)
+                rounds=price_rounds(reader,max(start, min(r['round_cursor'] for r in rules)),now)
             if not rounds:return
             samples=[(captured,Decimal(raw).scaleb(-18),venue,at,mode)
                      for captured,raw,venue,at,mode in rounds if raw is not None and venue and at is not None]
@@ -436,10 +480,10 @@ def tick_prices(store):
             through=now
         for rule in rules:
             if through<=rule['round_cursor']:continue
-            fired=bool(rule['fired'])
+            fired=bool(rule['fired']) and rule['round_cursor'] >= start
             last=rule['last_sample']
             for captured,price,venue,at,mode in samples:
-                if captured<=rule['round_cursor']:continue
+                if captured<=rule['round_cursor'] or at<max(start, rule['master_since']):continue
                 reached=price>=Decimal(rule['target'])
                 if reached==fired:continue
                 fired=reached
@@ -464,5 +508,5 @@ def tick(store):
 
 
 def valid_delivery(store, profile, payload):
-    row=store.db.execute('SELECT target FROM tbtc_price_alerts WHERE profile=? AND bark_enabled=1',(profile,)).fetchone()
+    row=store.db.execute('SELECT target FROM tbtc_price_alerts WHERE profile=? AND master_enabled=1 AND bark_enabled=1',(profile,)).fetchone()
     return bool(row and row['target'] and row['target']==payload.get('target'))

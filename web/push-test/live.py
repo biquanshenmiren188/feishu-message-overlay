@@ -170,6 +170,16 @@ class Live(Trial):
                 raise ValueError('invalid_feed')
             messages = messages + ([feed['pinned']] if isinstance(feed.get('pinned'), dict) else [])
             s = self.state['live']
+            switch = Path('/var/lib/radar-features/web-push')
+            if switch.with_suffix('.off').exists():
+                return
+            try:
+                resumed = switch.stat().st_mtime
+            except FileNotFoundError:
+                resumed = 0
+            if resumed > s.get('acceptAfter', 0):
+                s.update(acceptAfter=resumed, pending=[])
+                self.save()
             # Only these fields can change before delivery below. Advanced OI
             # enrichment mutates nested history rows, so retain a deep snapshot
             # in that case; avoid serializing the entire plan twice per tick.
