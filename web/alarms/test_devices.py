@@ -130,6 +130,28 @@ class DeviceTests(unittest.TestCase):
         self.assertTrue(self.s.view('a')['rules'][0]['state']['fired'])
         self.s.tick({('binance','future','BTCUSDT'):quote(101,self.now+14)},self.now+14)
         self.assertEqual(len(self.s.view('a')['events']),2)
+    def test_single_device_mode_is_scoped_and_cannot_become_broadcast(self):
+        self.bind(0)
+        foreign = self.change('b',action='bind',key='foreign_device_b',label='另外的方案')['id']
+        for invalid in (None,'',foreign):
+            with self.assertRaises(ValueError):
+                self.change(action='test',deviceId=invalid,testMode='critical-once')
+        with self.assertRaises(ValueError):
+            self.change(action='test',testMode='critical')
+        for i,mode in enumerate(('active','critical-once','critical'),1):
+            selected = self.bind(i)
+            self.change(action='test', deviceId=selected, testMode=mode)
+            event = self.s.claim()
+            with patch('server.build_opener') as make:
+                make.return_value.open.return_value.__enter__.return_value.read.return_value = b'{"code":200}'
+                send_event(self.s,event)
+                body = json.loads(make.return_value.open.call_args.args[0].data)
+                self.assertEqual(body['device_key'],'synthetic_device_'+str(i))
+                self.assertEqual(body['level'],'active' if mode=='active' else 'critical')
+                self.assertEqual(body.get('call'), '1' if mode=='critical' else None)
+                self.assertEqual(body.get('volume'), None if mode=='active' else 5)
+            self.assertIsNone(self.s.claim())
+
     def test_reveal_endpoint_auth_scope_no_store(self):
         self.bind(1);market=Market()
         http=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.s,market,lambda token:token if token in ('a','b') else None))
@@ -139,6 +161,8 @@ class DeviceTests(unittest.TestCase):
             with self.assertRaises(HTTPError):urlopen(url)
             with urlopen(Request(url,headers={'Authorization':'Bearer a'})) as response:
                 self.assertEqual(response.headers['Cache-Control'],'no-store');self.assertEqual(json.load(response)['devices'][0]['key'],'synthetic_device_1')
+            with urlopen(Request(url+'?view=test',headers={'Authorization':'Bearer a'})) as response:
+                self.assertNotIn('key',json.load(response)['devices'][0])
             with urlopen(Request(url,headers={'Authorization':'Bearer b'})) as response:self.assertEqual(json.load(response)['devices'],[])
         finally:http.shutdown();http.server_close();market.pool.shutdown()
 

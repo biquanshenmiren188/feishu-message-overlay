@@ -31,10 +31,14 @@ def enabled_since(key):
         return math.inf if key == 'bot-bark' else 0
 
 
+# The original critical mode used Bark's 30-second call parameter.
+BARK_MODES = ('active', 'critical-once', 'critical')
+
+
 def bark_mode(rule_id):
     key = 'bot-bark' if rule_id == 'bot-bark' else SOURCES.get(rule_id, ('price-alerts',))[0]
     try:
         mode = (ROOT / (key + '.mode')).read_text().strip()
-        return 'critical' if mode == 'critical' else 'active'
+        return mode if mode in BARK_MODES else 'active'
     except FileNotFoundError:
         return 'active' if key == 'bot-bark' else 'critical'

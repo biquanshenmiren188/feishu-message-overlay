@@ -259,6 +259,11 @@ class Store:
                 self.cancel_device(profile, device['fingerprint'])
                 self.db.execute('DELETE FROM devices WHERE profile=? AND id=?', (profile, device['id']))
             elif action == 'test':
+                test_mode = data.get('testMode')
+                if 'testMode' in data and (test_mode not in site_tasks.BARK_MODES or not data.get('deviceId')):
+                    raise ValueError('请选择单台设备和有效的测试模式')
+                if 'deviceId' in data and (not isinstance(data['deviceId'], str) or not data['deviceId']):
+                    raise ValueError('请选择要测试的设备')
                 devices = [self.selected_device(profile, data['deviceId'])] if data.get('deviceId') else self.db.execute('SELECT * FROM devices WHERE profile=?', (profile,)).fetchall()
                 if not devices:
                     raise ValueError('请先绑定 Bark')
@@ -267,7 +272,7 @@ class Store:
                         raise ValueError('部分设备刚发送过测试，请间隔一分钟再试')
                 round_id = secrets.token_hex(16)
                 for device in devices:
-                    self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。接收设备：' + device['label'], group='雷达报警测试', level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/', roundId=round_id), device, now)
+                    self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。接收设备：' + device['label'], group='雷达报警测试', level='critical', testMode=test_mode, url='https://leida.shenmiren.work/radar/robot-push/alarms/', roundId=round_id), device, now)
             else:
                 raise ValueError('不支持的操作')
             self.db.execute('UPDATE profiles SET revision=revision+1 WHERE id=?', (profile,))

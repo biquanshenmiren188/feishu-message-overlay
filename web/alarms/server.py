@@ -38,9 +38,13 @@ def send_event(store, event, market=None):
         return
     payload = json.loads(event['payload'])
     body = {k: payload[k] for k in ('id', 'title', 'body', 'group', 'level', 'url')}
-    body['level'] = site_tasks.bark_mode(event['rule_id'])
+    mode = payload.get('testMode') if event['rule_id'] == 'test' else None
+    mode = mode or site_tasks.bark_mode(event['rule_id'])
+    body['level'] = 'active' if mode == 'active' else 'critical'
     if body['level'] == 'critical':
-        body.update(volume=5, call='1')
+        body['volume'] = 5
+    if mode == 'critical':
+        body['call'] = '1'
     body.update(device_key=store.cipher.decrypt(event['secret'].encode()).decode(), isArchive='1')
     req = Request('https://api.day.app/push', data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
     if event['rule_id']==tbtc_alert.SALE_RULE:
@@ -104,7 +108,8 @@ def make_handler(store, market, auth=authenticate):
                     tbtc_alert.enqueue_sales(store,time.time(),batch)
                 return self.reply(200,{'ok':True})
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel=site_tasks.bark_mode("price-alerts"), ringingSeconds=30 if site_tasks.bark_mode("price-alerts") == "critical" else 0))
+                mode = site_tasks.bark_mode('price-alerts')
+                return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="active" if mode == "active" else "critical", ringingSeconds=30 if mode == "critical" else 0))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
             if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event', BASE + 'devices', BASE + 'tbtc'):
@@ -128,7 +133,7 @@ def make_handler(store, market, auth=authenticate):
                     return self.reply(200,tbtc_alert.configure(store,profile,data))
                 if not post and route.path == BASE + 'devices':
                     with store.lock:
-                        return self.reply(200, dict(devices=store.device_list(profile, reveal=True), revision=store.view(profile)['revision']))
+                        return self.reply(200, dict(devices=store.device_list(profile, reveal=query.get("view") != ["test"]), revision=store.view(profile)['revision']))
                 if not post and route.path == BASE + 'history':
                     return self.reply(200, store.history(profile, query))
                 if not post and route.path == BASE + 'event':
