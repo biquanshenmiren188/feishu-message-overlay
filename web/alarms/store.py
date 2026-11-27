@@ -259,6 +259,11 @@ class Store:
                 self.cancel_device(profile, device['fingerprint'])
                 self.db.execute('DELETE FROM devices WHERE profile=? AND id=?', (profile, device['id']))
             elif action == 'test':
+                test_mode = data.get('testMode')
+                if 'testMode' in data and (test_mode not in site_tasks.BARK_MODES or not data.get('deviceId')):
+                    raise ValueError('请选择单台设备和有效的测试模式')
+                if 'deviceId' in data and (not isinstance(data['deviceId'], str) or not data['deviceId']):
+                    raise ValueError('请选择要测试的设备')
                 devices = [self.selected_device(profile, data['deviceId'])] if data.get('deviceId') else self.db.execute('SELECT * FROM devices WHERE profile=?', (profile,)).fetchall()
                 if not devices:
                     raise ValueError('请先绑定 Bark')
@@ -267,7 +272,7 @@ class Store:
                         raise ValueError('部分设备刚发送过测试，请间隔一分钟再试')
                 round_id = secrets.token_hex(16)
                 for device in devices:
-                    self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。接收设备：' + device['label'], group='雷达报警测试', level='critical', url='https://leida.shenmiren.work/radar/robot-push/alarms/', roundId=round_id), device, now)
+                    self.event(profile, 'test', dict(title='雷达报警测试', body='这是一条手动测试通知。接收设备：' + device['label'], group='雷达报警测试', level='critical', testMode=test_mode, url='https://leida.shenmiren.work/radar/robot-push/alarms/', roundId=round_id), device, now)
             else:
                 raise ValueError('不支持的操作')
             self.db.execute('UPDATE profiles SET revision=revision+1 WHERE id=?', (profile,))
@@ -364,6 +369,9 @@ class Store:
                 return False
             device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            if valid and row['rule_id'] not in site_tasks.SOURCES and row['rule_id'] != 'test':
+                feature = 'bot-bark' if row['rule_id'] == 'bot-bark' else 'price-alerts'
+                valid = row['at'] >= site_tasks.enabled_since(feature)
             if valid and row['rule_id'] in site_tasks.SOURCES:
                 valid = row['at'] >= site_tasks.since(row['rule_id'])
             if valid and row['rule_id'] in site_tasks.SOURCES:
@@ -385,7 +393,7 @@ class Store:
                 if valid is None:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?",(now+5,row['id']))
                     return False
-            elif valid and row['rule_id'] != 'test':
+            elif valid and row['rule_id'] not in ('test', 'bot-bark'):
                 saved = self.db.execute('SELECT config,state FROM rules WHERE id=? AND profile=?', (row['rule_id'], row['profile'])).fetchone()
                 valid = bool(saved)
                 if saved:
@@ -415,7 +423,7 @@ class Store:
             if not valid:
                 self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
                 return False
-            if row['rule_id'] not in ('test','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
+            if row['rule_id'] not in ('test','bot-bark','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
                 last = self.db.execute('SELECT at FROM device_dispatch WHERE rule_id=? AND fingerprint=?', (row['rule_id'], row['fingerprint'])).fetchone()
                 if last and now < last['at'] + REPEAT_SECONDS:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?", (last['at'] + REPEAT_SECONDS, row['id']))

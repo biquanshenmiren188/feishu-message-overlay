@@ -260,7 +260,7 @@ class DesktopRules:
         try:return hashlib.sha256(json.dumps(values,ensure_ascii=False,separators=(',',':')).encode('utf-8')).hexdigest()
         except UnicodeEncodeError:return None
 
-    def web_messages(self):
+    def web_messages(self, feed=None):
         """Read-only, per-code decisions for the current public feed snapshot.
 
         Unknown ids/content are intentionally absent so clients wait for a
@@ -268,7 +268,8 @@ class DesktopRules:
         bounded history, including while their original send time is old.
         """
         with self.lock:
-            feed=json.loads(self.feed.read_text(encoding='utf-8'))
+            if feed is None:
+                feed=json.loads(self.feed.read_text(encoding='utf-8'))
             if not isinstance(feed,dict) or not isinstance(feed.get('messages'),list):raise ValueError('feed_source_unavailable')
             messages=feed['messages'][:1000]
             if feed.get('pinned') is not None:messages=[*messages,feed['pinned']]

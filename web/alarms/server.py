@@ -11,6 +11,8 @@ from urllib.request import Request, build_opener
 from market import Market, NoRedirect
 from store import Store, Conflict
 import tbtc_alert
+import site_tasks
+import bot_bark
 
 BASE = '/radar/alarms-api/'
 ORIGIN = 'https://leida.shenmiren.work'
@@ -36,7 +38,13 @@ def send_event(store, event, market=None):
         return
     payload = json.loads(event['payload'])
     body = {k: payload[k] for k in ('id', 'title', 'body', 'group', 'level', 'url')}
-    body.update(level='critical', volume=5, call='1')
+    mode = payload.get('testMode') if event['rule_id'] == 'test' else None
+    mode = mode or site_tasks.bark_mode(event['rule_id'])
+    body['level'] = 'active' if mode == 'active' else 'critical'
+    if body['level'] == 'critical':
+        body['volume'] = 5
+    if mode == 'critical':
+        body['call'] = '1'
     body.update(device_key=store.cipher.decrypt(event['secret'].encode()).decode(), isArchive='1')
     req = Request('https://api.day.app/push', data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
     if event['rule_id']==tbtc_alert.SALE_RULE:
@@ -100,7 +108,8 @@ def make_handler(store, market, auth=authenticate):
                     tbtc_alert.enqueue_sales(store,time.time(),batch)
                 return self.reply(200,{'ok':True})
             if route.path == BASE + 'health' and not post:
-                return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
+                mode = site_tasks.bark_mode('price-alerts')
+                return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="active" if mode == "active" else "critical", ringingSeconds=30 if mode == "critical" else 0))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
             if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event', BASE + 'devices', BASE + 'tbtc'):
@@ -124,7 +133,7 @@ def make_handler(store, market, auth=authenticate):
                     return self.reply(200,tbtc_alert.configure(store,profile,data))
                 if not post and route.path == BASE + 'devices':
                     with store.lock:
-                        return self.reply(200, dict(devices=store.device_list(profile, reveal=True), revision=store.view(profile)['revision']))
+                        return self.reply(200, dict(devices=store.device_list(profile, reveal=query.get("view") != ["test"]), revision=store.view(profile)['revision']))
                 if not post and route.path == BASE + 'history':
                     return self.reply(200, store.history(profile, query))
                 if not post and route.path == BASE + 'event':
@@ -174,9 +183,10 @@ def main():
     def watch():
         while True:
             try:
-                quotes, _ = market.snapshot()
-                active = store.tick(quotes, time.time())
-                market.poll(active)
+                if time.time() >= site_tasks.enabled_since('price-alerts'):
+                    quotes, _ = market.snapshot()
+                    active = store.tick(quotes, time.time())
+                    market.poll(active)
                 tbtc_alert.tick_chain(store)
             except Exception as exc:
                 print('watch:', type(exc).__name__, flush=True)
@@ -201,6 +211,7 @@ def main():
                 print('delivery:', type(exc).__name__, flush=True)
             time.sleep(.5)
 
+    threading.Thread(target=bot_bark.watch, args=(store,), daemon=True).start()
     threading.Thread(target=watch, daemon=True).start()
     threading.Thread(target=watch_tbtc_prices, daemon=True).start()
     # A slow or failed device must not hold other devices behind its HTTP timeout.
