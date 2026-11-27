@@ -364,6 +364,9 @@ class Store:
                 return False
             device = self.db.execute('SELECT fingerprint FROM devices WHERE profile=? AND fingerprint=?', (row['profile'], row['fingerprint'])).fetchone()
             valid = row['expires'] > now and device and device['fingerprint'] == row['fingerprint']
+            if valid and row['rule_id'] not in site_tasks.SOURCES and row['rule_id'] != 'test':
+                feature = 'bot-bark' if row['rule_id'] == 'bot-bark' else 'price-alerts'
+                valid = row['at'] >= site_tasks.enabled_since(feature)
             if valid and row['rule_id'] in site_tasks.SOURCES:
                 valid = row['at'] >= site_tasks.since(row['rule_id'])
             if valid and row['rule_id'] in site_tasks.SOURCES:
@@ -385,7 +388,7 @@ class Store:
                 if valid is None:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?",(now+5,row['id']))
                     return False
-            elif valid and row['rule_id'] != 'test':
+            elif valid and row['rule_id'] not in ('test', 'bot-bark'):
                 saved = self.db.execute('SELECT config,state FROM rules WHERE id=? AND profile=?', (row['rule_id'], row['profile'])).fetchone()
                 valid = bool(saved)
                 if saved:
@@ -415,7 +418,7 @@ class Store:
             if not valid:
                 self.db.execute("UPDATE events SET status='cancelled',error='发送前条件已失效' WHERE id=?", (row['id'],))
                 return False
-            if row['rule_id'] not in ('test','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
+            if row['rule_id'] not in ('test','bot-bark','tbtc-price','tbtc-mint','tbtc-backed-mint','tbtc-btc-deposit','tbtc-large-sale') and rule['repeat']:
                 last = self.db.execute('SELECT at FROM device_dispatch WHERE rule_id=? AND fingerprint=?', (row['rule_id'], row['fingerprint'])).fetchone()
                 if last and now < last['at'] + REPEAT_SECONDS:
                     self.db.execute("UPDATE events SET status='retry',next_at=? WHERE id=?", (last['at'] + REPEAT_SECONDS, row['id']))

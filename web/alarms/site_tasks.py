@@ -3,9 +3,9 @@ import math
 from pathlib import Path
 
 ROOT = Path('/var/lib/radar-features')
-SOURCES = {'tbtc-price': ('alarm-price', 'quotes'), 'tbtc-large-sale': ('alarm-sale', 'sellers'),
-           'tbtc-btc-deposit': ('alarm-deposit', 'deposits'), 'tbtc-mint': ('alarm-mint', 'supply'),
-           'tbtc-backed-mint': ('alarm-mint', 'supply')}
+SOURCES = {'tbtc-price': ('alarm-price',), 'tbtc-large-sale': ('alarm-sale',),
+           'tbtc-btc-deposit': ('alarm-deposit',), 'tbtc-mint': ('alarm-mint',),
+           'tbtc-backed-mint': ('alarm-mint',)}
 
 
 def since(rule):
@@ -21,3 +21,20 @@ def since(rule):
             return math.inf
     return start
 
+
+def enabled_since(key):
+    if (ROOT / (key + '.off')).exists():
+        return math.inf
+    try:
+        return (ROOT / key).stat().st_mtime
+    except FileNotFoundError:
+        return math.inf if key == 'bot-bark' else 0
+
+
+def bark_mode(rule_id):
+    key = 'bot-bark' if rule_id == 'bot-bark' else SOURCES.get(rule_id, ('price-alerts',))[0]
+    try:
+        mode = (ROOT / (key + '.mode')).read_text().strip()
+        return 'critical' if mode == 'critical' else 'active'
+    except FileNotFoundError:
+        return 'active' if key == 'bot-bark' else 'critical'
