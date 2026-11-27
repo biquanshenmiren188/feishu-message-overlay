@@ -44,8 +44,8 @@ class BotBarkTests(unittest.TestCase):
         bot_bark.enqueue(self.store, 'b', rows, dict(policy, decisions={ident:dict(decision,action='mute')}), now)
 
     def test_modes_and_delivery_isolation(self):
-        for mode in ('active', 'critical'):
-            if mode == 'critical':
+        for mode in ('active', 'critical-once', 'critical'):
+            if mode != 'active':
                 (self.root / 'bot-bark.mode').write_text(mode)
             self.queue(mode)
             event = self.store.claim()
@@ -55,10 +55,10 @@ class BotBarkTests(unittest.TestCase):
                 server.send_event(self.store, event)
                 req = make.return_value.open.call_args.args[0]
                 body = json.loads(req.data)
-                self.assertEqual(body['level'], mode)
+                self.assertEqual(body['level'], 'active' if mode == 'active' else 'critical')
                 self.assertEqual(body['device_key'], 'synthetic_device_a')
                 self.assertEqual('call' in body, mode == 'critical')
-                self.assertEqual('volume' in body, mode == 'critical')
+                self.assertEqual('volume' in body, mode != 'active')
             self.assertIsNone(self.store.claim())
 
     def test_disable_before_dispatch(self):
