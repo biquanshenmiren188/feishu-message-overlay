@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, build_opener
 from market import Market, NoRedirect
 from store import Store, Conflict
+import tbtc_alert
 
 BASE = '/radar/alarms-api/'
 ORIGIN = 'https://leida.shenmiren.work'
@@ -87,7 +88,7 @@ def make_handler(store, market, auth=authenticate):
                 return self.reply(200, dict(ok=True, version=15, alarmContent=True, alarmContentTemplate=True, multiDevice=True, quoteRouting="same-asset-spot-v3", denominationConversion=True, fallbackSelection=True, fallbackMultiSelect=True, authoritativeFeedStatus=True, monitoringMode="per-rule", repeatIntervalSeconds=30, notificationLevel="critical", ringingSeconds=30))
             if self.headers.get('Origin') not in (None, ORIGIN):
                 return self.reply(403, dict(error='来源不匹配'))
-            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event', BASE + 'devices'):
+            if route.path not in (BASE + 'state', BASE + 'catalog', BASE + 'change', BASE + 'history', BASE + 'event', BASE + 'devices', BASE + 'tbtc'):
                 return self.reply(404, dict(error='接口不存在'))
             try:
                 profile = auth(self.headers.get('Authorization', '').removeprefix('Bearer '))
@@ -95,6 +96,13 @@ def make_handler(store, market, auth=authenticate):
                 if not profile:
                     return self.reply(401, dict(error='请先连接推送码'))
                 query = parse_qs(route.query)
+                if route.path == BASE+'tbtc':
+                    if not post: return self.reply(200,tbtc_alert.state(store,profile))
+                    size=int(self.headers.get('Content-Length',0))
+                    if not 0<size<=8192: return self.reply(413,dict(error='请求过大'))
+                    data=json.loads(self.rfile.read(size))
+                    if not isinstance(data,dict): raise ValueError('请求格式错误')
+                    return self.reply(200,tbtc_alert.configure(store,profile,data))
                 if not post and route.path == BASE + 'devices':
                     with store.lock:
                         return self.reply(200, dict(devices=store.device_list(profile, reveal=True), revision=store.view(profile)['revision']))
@@ -141,6 +149,7 @@ def make_handler(store, market, auth=authenticate):
 
 def main():
     store = Store(os.environ.get('RADAR_ALARMS_STATE', '/var/lib/radar-alarms'))
+    tbtc_alert.initialize(store)
     market = Market()
 
     def watch():
@@ -149,6 +158,7 @@ def main():
                 quotes, _ = market.snapshot()
                 active = store.tick(quotes, time.time())
                 market.poll(active)
+                tbtc_alert.tick(store)
             except Exception as exc:
                 print('watch:', type(exc).__name__, flush=True)
             time.sleep(.5)
