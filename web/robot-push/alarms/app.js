@@ -1,4 +1,4 @@
-import {createDeviceManager} from './devices.js?v=20261114-devices1';
+import {createDeviceManager} from './devices.js?v=20261127-levels';
 import {contentDraft} from './content-template.js?v=20261114-template1';
 import {previewContext,renderPreviewBody} from './content-preview.js?v=20261114-preview1';
 import {readSnapshot,saveSnapshot,clearSnapshots} from './snapshot.js?v=20261114-devices1';
@@ -200,10 +200,10 @@ $('#content-form').onsubmit=async e=>{
 const deviceManager=createDeviceManager({api,commit,getState:()=>current,isReady:()=>verified&&!busy&&!pending,toast,onDraft:value=>{draft=value;},onTest:testBark});
 function openDevice(){if(verified&&current)deviceManager.open();}
 $('#bind-device').onclick=openDevice;
-async function testBark(deviceId){
+async function testBark(deviceId,testMode){
  if(!verified||testSubmitting||busy||pending||!current?.device)return;
  testSubmitting=true;const auth=token(),generation=epoch;
- try{if(await commit({action:'test',...(typeof deviceId==='string'?{deviceId}:{})})&&auth===token()&&generation===epoch){showTestResult=true;renderTestResult();toast('测试请求已提交，请查看发送结果');}}
+ try{if(await commit({action:'test',...(typeof deviceId==='string'?{deviceId,testMode}:{})})&&auth===token()&&generation===epoch){showTestResult=true;renderTestResult();toast('测试请求已提交，请查看发送结果');}}
  finally{testSubmitting=false;connected(!!current);await deviceManager.sync();}
 }
 $('#test-bark').onclick=()=>testBark();$('#test-bark-inline').onclick=()=>testBark();
